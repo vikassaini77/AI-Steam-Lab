@@ -16,6 +16,8 @@ import {
   LogOut,
   Shield,
   History,
+  Camera,
+  Activity
 } from 'lucide-react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -29,9 +31,9 @@ import {
 
 const navItems = [
   { icon: Home, label: 'Home', path: '/dashboard' },
-  { icon: FlaskConical, label: 'Experiments', path: '/dashboard/experiments' },
-  { icon: History, label: 'Lab History', path: '/dashboard/history' },
-  { icon: Bot, label: 'AI Tutor', path: '/dashboard/tutor' },
+  { icon: Camera, label: 'Experiments', path: '/dashboard/experiments' },
+  { icon: Activity, label: 'Lab History', path: '/dashboard/history' },
+  { icon: Bot, label: 'AI Tutor', path: '/ai-tutor' },
   { icon: Atom, label: 'Physics Lab', path: '/dashboard/physics' },
   { icon: Trophy, label: 'Challenges', path: '/dashboard/challenges' },
   { icon: Sparkles, label: 'Achievements', path: '/dashboard/achievements' },
@@ -93,7 +95,7 @@ function XpPopup({ notification, onDismiss }: { notification: Notification; onDi
 }
 
 /* ── Avatar component — reads custom_avatar from localStorage ── */
-function UserAvatar({ className = '', textClass = '' }: { className?: string; textClass?: string }) {
+export function UserAvatar({ className = '', textClass = '' }: { className?: string; textClass?: string }) {
   const [avatarSrc, setAvatarSrc] = useState<string | null>(null);
   const [initials, setInitials] = useState('N');
 
@@ -248,8 +250,8 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
           {/* Logo */}
           <div className="flex items-center justify-between p-6 border-b border-white/10">
             <Link to="/" className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-                <span className="text-2xl font-bold text-white">N</span>
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20 overflow-hidden bg-[#0d0d20]">
+                <img src="/logo.png" alt="NeuroLab Logo" className="w-full h-full object-cover" />
               </div>
               <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-400">
                 NeuroLab
@@ -333,8 +335,8 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
           <Menu className="w-6 h-6" />
         </button>
         <span className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 flex items-center justify-center">
-            <span className="text-sm font-bold text-white">N</span>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden bg-[#0d0d20]">
+            <img src="/logo.png" alt="NeuroLab Logo" className="w-full h-full object-cover" />
           </div>
           <span className="font-semibold text-white">NeuroLab</span>
         </span>
@@ -354,7 +356,7 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
 
           <div className="flex items-center gap-4 w-full sm:w-auto self-end sm:self-auto justify-end">
             {/* Search */}
-            <div className="relative w-full sm:w-64 max-w-xs">
+            <div className="relative w-full sm:w-64 max-w-xs z-[100]">
               <Search className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -363,6 +365,42 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
                 onChange={handleSearchChange}
                 className="w-full pl-9 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 transition-all"
               />
+              
+              <AnimatePresence>
+                {globalSearch.trim() && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 5 }}
+                    className="absolute top-full left-0 right-0 mt-2 bg-[#0d0d20] border border-white/10 rounded-xl shadow-2xl overflow-hidden backdrop-blur-xl"
+                  >
+                    {navItems.filter(item => item.label.toLowerCase().includes(globalSearch.toLowerCase())).length > 0 ? (
+                      navItems
+                        .filter(item => item.label.toLowerCase().includes(globalSearch.toLowerCase()))
+                        .map((item, idx) => {
+                          const Icon = item.icon;
+                          return (
+                            <button
+                              key={idx}
+                              onClick={() => {
+                                setGlobalSearch('');
+                                navigate(item.path);
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-left transition-colors border-b border-white/5 last:border-b-0"
+                            >
+                              <Icon className="w-4 h-4 text-cyan-500" />
+                              <span className="text-sm font-medium text-gray-200">{item.label}</span>
+                            </button>
+                          );
+                        })
+                    ) : (
+                      <div className="px-4 py-4 text-center text-sm text-gray-500">
+                        No modules found for "{globalSearch}"
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Notification Bell */}

@@ -1,5 +1,5 @@
 import os
-import json
+import json # trigger reload
 import google.generativeai as genai
 from app.core_backend.database.supabase_db import DatabaseManager
 
@@ -21,27 +21,41 @@ class AITutorService:
 
     async def stream_chat(self, req):
         if not self.model:
-            yield "data: Error: Gemini API Key not found\n\n"
+            yield f"data: {json.dumps({'text': 'Error: GEMINI_API_KEY is missing in backend/.env'})}\n\n"
             return
             
-        # RAG retrieval
-        q_emb = self.generate_embedding(req.message)
-        past_context = self.db.search_memories(q_emb)
-        
-        sys_prompt = "You are a Socratic AI physics tutor. Do not give direct answers."
-        if past_context:
-            sys_prompt += f"\nPast context: {past_context}"
+        try:
+            # RAG retrieval
+            try:
+                q_emb = self.generate_embedding(req.prompt)
+                past_context = self.db.search_memories(q_emb)
+            except Exception as db_err:
+                print(f"Supabase RAG Error: {db_err}")
+                past_context = ""
             
-        response = self.model.generate_content(
-            f"{sys_prompt}\nUser: {req.message}",
-            stream=True
-        )
-        
-        full_text = ""
-        for chunk in response:
-            if chunk.text:
-                full_text += chunk.text
-                yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+            sys_prompt = "You are a Socratic AI physics tutor. Do not give direct answers."
+            if past_context:
+                sys_prompt += f"\nPast context: {past_context}"
                 
-        # Save memory
-        self.db.save_memory(req.session_id, f"Q: {req.message} A: {full_text}", self.generate_embedding(full_text))
+            response = self.model.generate_content(
+                f"{sys_prompt}\nUser: {req.prompt}",
+                stream=True
+            )
+            
+            full_text = ""
+            for chunk in response:
+                if chunk.text:
+                    full_text += chunk.text
+                    import json
+                    yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+                    
+            # Save memory
+            try:
+                session_id = getattr(req, 'session_id', 'local_session')
+                self.db.save_memory(session_id, f"Q: {req.prompt} A: {full_text}", self.generate_embedding(full_text))
+            except Exception as save_err:
+                print(f"Supabase Save Error: {save_err}")
+                
+        except Exception as e:
+            import json
+            yield f"data: {json.dumps({'text': f'**AI Error:** {str(e)}'})}\n\n"

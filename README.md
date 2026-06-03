@@ -1,6 +1,6 @@
 <div align="center">
   <!-- Project Logo Placeholder -->
-  <img src="https://via.placeholder.com/150x150.png?text=NeuroLab+Logo" alt="NeuroLab Logo" width="150"/>
+  <img src="docs/assets/neurolab_logo_1780492496416.png" alt="NeuroLab Logo" width="150"/>
 
   # 🌌 AI STEM Lab Assistant (NeuroLab)
 
@@ -372,13 +372,13 @@ npm run lint
 
 ## 🖼️ 20. Screenshots Section
 
-*(Placeholders for actual application screenshots)*
+*(These are generated mockups representing the final high-fidelity design of the application)*
 
 | Dashboard HUD | AI Tutor Interface |
 | ------------- | ------------------ |
-| <img src="https://via.placeholder.com/400x250.png?text=Dashboard+UI" alt="Dashboard"/> | <img src="https://via.placeholder.com/400x250.png?text=AI+Tutor+Streaming" alt="Tutor"/> |
+| <img src="docs/assets/dashboard_ui_1780492511926.png" alt="Dashboard"/> | <img src="docs/assets/ai_tutor_1780492526373.png" alt="Tutor"/> |
 | **Gamification Badges** | **Physics Simulators** |
-| <img src="https://via.placeholder.com/400x250.png?text=XP+Badges" alt="Gamification"/> | <img src="https://via.placeholder.com/400x250.png?text=Pendulum+Sim" alt="Physics"/> |
+| <img src="docs/assets/xp_badges_1780492540210.png" alt="Gamification"/> | <img src="docs/assets/physics_sim_1780492555272.png" alt="Physics"/> |
 
 ---
 

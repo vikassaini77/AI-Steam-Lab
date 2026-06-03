@@ -6,6 +6,7 @@ import { Zap, Award, Trophy, Flame, Camera, Bot, Play, Pause, ArrowRight, Activi
 import { pushNotification } from "../../lib/notificationStore";
 import { useUserStore } from "../../store/useUserStore";
 import { usePhysicsStore } from "../../store/usePhysicsStore";
+import { UserAvatar } from "./DashboardLayout";
 
 function AchievementsPage() {
   const [activeTab, setActiveTab] = useState<'badges' | 'leaderboard'>('badges');
@@ -375,12 +376,16 @@ function AchievementsPage() {
                     </div>
 
                     {/* Avatar with dynamic colors */}
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-extrabold text-sm shadow-md ${
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-extrabold text-sm shadow-md overflow-hidden ${
                       user.isUser
                         ? 'bg-gradient-to-tr from-cyan-500 to-blue-600'
                         : 'bg-[#1b1b26] border border-white/10 text-gray-300'
                     }`}>
-                      {user.name.charAt(0).toUpperCase()}
+                      {user.isUser ? (
+                        <UserAvatar className="w-full h-full object-cover rounded-full" />
+                      ) : (
+                        user.name.charAt(0).toUpperCase()
+                      )}
                     </div>
 
                     <div>

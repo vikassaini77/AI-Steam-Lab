@@ -31,7 +31,13 @@ import {
   Trash2,
   Check,
   Search,
-  ChevronDown
+  ChevronDown,
+  Cpu,
+  Server,
+  HardDrive,
+  CheckCircle,
+  Github,
+  Mail
 } from 'lucide-react';
 
 interface ProfilePageProps {
@@ -1646,28 +1652,129 @@ export default function ProfilePage({ session }: ProfilePageProps) {
 
             {/* 15. About Platform Tab */}
             {activeTab === 'about' && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-bold text-white">About NeuroLab</h3>
-                  <p className="text-xs text-gray-400 mt-1">Platform details, software releases, and compliance documents.</p>
+              <div className="space-y-8 pb-10">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
+                  <div>
+                    <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4 overflow-hidden">
+                      <img src="/logo.png" alt="NeuroLab Logo" className="w-8 h-8 object-cover" />
+                    </div>
+                    <h3 className="text-2xl font-black text-white">About NeuroLab Technologies</h3>
+                    <p className="text-sm text-gray-400 mt-1 max-w-xl leading-relaxed">
+                      Pioneering the future of interactive STEM education. We blend advanced computer vision, robust physics engines, and generative AI into a seamless learning experience.
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={() => navigate('/terms')} className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-gray-300 hover:text-white transition-colors">
+                      Legal Terms
+                    </button>
+                    <button onClick={() => navigate('/privacy')} className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-gray-300 hover:text-white transition-colors">
+                      Privacy Policy
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-white/[0.01] border border-white/5 rounded-xl space-y-1">
-                    <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Platform Version</span>
-                    <h5 className="text-base font-black text-white">v3.4.15-SaaS</h5>
+                {/* Mission & Vision */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="p-6 bg-gradient-to-br from-cyan-500/5 to-transparent border border-cyan-500/15 rounded-2xl">
+                    <h4 className="text-cyan-400 font-bold mb-2 flex items-center gap-2">
+                      <Globe className="w-4 h-4" /> Our Mission
+                    </h4>
+                    <p className="text-sm text-gray-300 leading-relaxed">
+                      To democratize high-level science education by providing students worldwide with a safe, accessible, and highly advanced virtual laboratory powered by artificial intelligence.
+                    </p>
+                  </div>
+                  <div className="p-6 bg-gradient-to-br from-violet-500/5 to-transparent border border-violet-500/15 rounded-2xl">
+                    <h4 className="text-violet-400 font-bold mb-2 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4" /> Our Vision
+                    </h4>
+                    <p className="text-sm text-gray-300 leading-relaxed">
+                      A future where physical boundaries don't limit practical learning. We envision a world where every student has a personal, highly capable AI tutor and a limitless physics playground.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Platform Specs */}
+                <div>
+                  <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-4">System Information</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                      { label: 'Platform Version', value: 'v3.4.15-SaaS', icon: Cpu },
+                      { label: 'Release Channel', value: 'Stable Production', icon: CheckCircle },
+                      { label: 'Infrastructure', value: 'Supabase Edge', icon: Server },
+                      { label: 'Data Processing', value: 'Local Compute', icon: HardDrive },
+                    ].map((item, i) => (
+                      <div key={i} className="p-4 bg-white/[0.02] border border-white/5 rounded-xl text-center">
+                        <item.icon className="w-5 h-5 text-gray-500 mx-auto mb-2" />
+                        <span className="block text-[10px] text-gray-500 font-bold uppercase tracking-wider">{item.label}</span>
+                        <h5 className="text-sm font-black text-white mt-1">{item.value}</h5>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tech Stack */}
+                <div>
+                  <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-4">Core Architecture</h4>
+                  <div className="p-5 bg-white/[0.02] border border-white/5 rounded-2xl">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {[
+                        { title: 'Frontend Engine', tech: 'React 18 & Vite', color: 'text-cyan-400' },
+                        { title: 'Styling Architecture', tech: 'Tailwind CSS & Framer', color: 'text-blue-400' },
+                        { title: 'Backend & Auth', tech: 'Supabase Postgres', color: 'text-emerald-400' },
+                        { title: 'Physics & Vision', tech: 'Matter.js & TensorFlow', color: 'text-violet-400' },
+                      ].map((stack, i) => (
+                        <div key={i}>
+                          <p className="text-xs text-gray-500 font-medium">{stack.title}</p>
+                          <p className={`text-sm font-bold mt-0.5 ${stack.color}`}>{stack.tech}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Open Source & Community */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="p-6 bg-white/[0.02] border border-white/5 rounded-2xl flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center flex-shrink-0">
+                      <Github className="w-5 h-5 text-gray-300" />
+                    </div>
+                    <div>
+                      <h4 className="text-white font-bold text-sm mb-1">Open Source Core</h4>
+                      <p className="text-xs text-gray-400 leading-relaxed mb-3">
+                        Parts of our physics engine and UI components are available under the MIT license to support the global educational tech community.
+                      </p>
+                      <button 
+                        onClick={() => window.open('https://github.com/vikassaini77/AI-Steam-Lab', '_blank')}
+                        className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 transition-colors"
+                      >
+                        View GitHub Repository &rarr;
+                      </button>
+                    </div>
                   </div>
                   
-                  <div className="p-4 bg-white/[0.01] border border-white/5 rounded-xl space-y-1">
-                    <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Release Channel</span>
-                    <h5 className="text-base font-black text-cyan-400">Stable Production</h5>
+                  <div className="p-6 bg-white/[0.02] border border-white/5 rounded-2xl flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                      <Mail className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div>
+                      <h4 className="text-white font-bold text-sm mb-1">Contact & Support</h4>
+                      <p className="text-xs text-gray-400 leading-relaxed mb-3">
+                        For institutional licensing, press inquiries, or technical support, our team is available 24/7.
+                      </p>
+                      <div className="flex gap-3">
+                        <a href="mailto:support@neurolab.ai" className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
+                          support@neurolab.ai
+                        </a>
+                        <span className="text-gray-600">|</span>
+                        <a href="mailto:press@neurolab.ai" className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
+                          press@neurolab.ai
+                        </a>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="p-4 bg-white/[0.01] border border-white/5 rounded-xl space-y-3 text-xs leading-relaxed text-gray-400">
-                  <h4 className="font-bold text-white">Terms & Disclosures</h4>
-                  <p>All AI tutor responses, simulation formulas, and interactive calibrations are for educational and hobby exploration purposes. Data is processed locally and protected in compliance with global security acts.</p>
-                </div>
               </div>
             )}
           </motion.div>

@@ -70,11 +70,14 @@ function PhysicsLabPageWrapper() {
   // Unified animation clock loop
   useEffect(() => {
     if (isPlaying) {
-      let lastTimestamp = performance.now();
+      let lastTimestamp: number | null = null;
       const loop = (now: number) => {
+        if (lastTimestamp === null) {
+          lastTimestamp = now;
+        }
         const delta = (now - lastTimestamp) / 1000;
         lastTimestamp = now;
-        setTime((prev) => prev + delta * 1.5); // speed coefficient
+        setTime((prev) => prev + delta * 1.0); // 1.0x real-time speed for realistic drops
         animationRef.current = requestAnimationFrame(loop);
       };
       animationRef.current = requestAnimationFrame(loop);
@@ -431,7 +434,7 @@ function PhysicsLabPageWrapper() {
                     
                     {/* Falling Apple */}
                     <div
-                      className="absolute transition-all duration-75 flex flex-col items-center"
+                      className="absolute flex flex-col items-center"
                       style={{ 
                         left: '50%',
                         transform: 'translateX(-50%)',

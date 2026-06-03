@@ -1,265 +1,352 @@
-import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
-import {
-  ShieldAlert, Eye, Lock, Globe, HardDrive, Cpu, ShieldCheck,
-  ChevronDown, Camera, Database, Cookie, UserCheck, Server,
-  Trash2, FileText, Mail, ArrowLeft, ExternalLink
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import {
+  ShieldAlert, ShieldCheck, ArrowLeft, Printer, Download, Menu, X, Camera
+} from 'lucide-react';
 
-/* ─── Accordion Section ────────────────────────── */
-function AccordionSection({
-  icon: Icon, title, number, children, defaultOpen = false
-}: {
-  icon: any; title: string; number: string; children: React.ReactNode; defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="border border-white/10 rounded-xl overflow-hidden bg-white/[0.03] hover:border-white/15 transition-colors"
-    >
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-4 p-5 text-left group"
-      >
-        <div className="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-cyan-500/15 transition-colors">
-          <Icon className="w-4 h-4 text-cyan-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <span className="text-xs text-cyan-400/70 font-semibold">Section {number}</span>
-          <h3 className="text-white font-semibold text-sm">{title}</h3>
-        </div>
-        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-300 flex-shrink-0 ${open ? 'rotate-180' : ''}`} />
-      </button>
-
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="overflow-hidden"
-          >
-            <div className="px-5 pb-5 pt-0 border-t border-white/5 mt-0 text-gray-400 text-sm leading-relaxed space-y-3">
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
+const sections = [
+  { id: 'introduction', title: '1. Introduction & Scope' },
+  { id: 'information-collection', title: '2. Information We Collect' },
+  { id: 'camera-data', title: '3. Camera & Computer Vision Data' },
+  { id: 'how-we-use', title: '4. How We Use Your Information' },
+  { id: 'data-sharing', title: '5. Data Sharing & Disclosure' },
+  { id: 'cookies', title: '6. Cookies & Tracking Technologies' },
+  { id: 'data-security', title: '7. Data Security' },
+  { id: 'data-retention', title: '8. Data Retention & Deletion' },
+  { id: 'your-rights', title: '9. Your Privacy Rights (GDPR/CCPA)' },
+  { id: 'childrens-privacy', title: '10. Children\'s Privacy (COPPA)' },
+  { id: 'international-transfers', title: '11. International Data Transfers' },
+  { id: 'changes', title: '12. Changes to This Policy' },
+  { id: 'contact', title: '13. Contact Us' }
+];
 
 export default function PrivacyPage() {
   const navigate = useNavigate();
+  const [activeSection, setActiveSection] = useState('introduction');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + 150;
+      
+      for (const section of sections) {
+        const element = document.getElementById(section.id);
+        if (element) {
+          const { top, bottom } = element.getBoundingClientRect();
+          const absoluteTop = top + window.scrollY;
+          const absoluteBottom = bottom + window.scrollY;
+          
+          if (scrollPosition >= absoluteTop && scrollPosition < absoluteBottom) {
+            setActiveSection(section.id);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToSection = (id: string) => {
+    setIsSidebarOpen(false);
+    const element = document.getElementById(id);
+    if (element) {
+      window.scrollTo({
+        top: element.offsetTop - 100,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   return (
-    <div className="min-h-screen bg-[#070714] text-white relative overflow-hidden">
-      {/* Background */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-cyan-500/6 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-blue-500/6 rounded-full blur-3xl" />
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: 'linear-gradient(rgba(6,182,212,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(6,182,212,0.4) 1px, transparent 1px)',
-          backgroundSize: '60px 60px'
-        }} />
+    <div className="min-h-screen bg-[#070714] text-gray-300 relative font-sans selection:bg-emerald-500/30 selection:text-emerald-100">
+      {/* Background styling for corporate look */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-[#0a0a1a] to-transparent border-b border-white/5" />
       </div>
 
-      <div className="relative z-10 max-w-4xl mx-auto px-6 py-16">
-
-        {/* Back */}
-        <button onClick={() => navigate('/')} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm mb-10 group">
-          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-          Back to Home
-        </button>
-
-        {/* Header */}
-        <div className="text-center space-y-4 mb-12">
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 mb-2"
+      {/* Header Bar */}
+      <header className="fixed top-0 left-0 right-0 h-16 bg-[#070714]/90 backdrop-blur-xl border-b border-white/10 z-40 flex items-center justify-between px-4 lg:px-8">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setIsSidebarOpen(true)} 
+            className="lg:hidden p-2 text-gray-400 hover:text-white transition-colors"
           >
-            <ShieldAlert className="w-7 h-7" />
-          </motion.div>
-          <h1 className="text-4xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-400">
-            Privacy Policy
-          </h1>
-          <p className="text-gray-400 text-sm">Last Updated: May 31, 2026 · Version 2.0</p>
-
-          {/* Camera highlight banner */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="inline-flex items-center gap-3 px-5 py-3 bg-emerald-500/10 border border-emerald-500/25 rounded-2xl text-sm"
-          >
-            <Camera className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-            <span className="text-emerald-300 font-semibold">We do not store camera footage without your explicit permission.</span>
-          </motion.div>
+            <Menu className="w-5 h-5" />
+          </button>
+          <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm font-semibold group">
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+            <span className="hidden sm:inline">Back to NeuroLab</span>
+          </button>
         </div>
-
-        {/* Trust badges row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-10">
-          {[
-            { icon: '🔒', label: 'E2E Encrypted', sub: 'All data in transit' },
-            { icon: '🛡️', label: 'GDPR Aligned', sub: 'EU data rights' },
-            { icon: '📵', label: 'No Ads', sub: 'Zero ad tracking' },
-            { icon: '✅', label: 'COPPA Safe', sub: 'Student protected' },
-          ].map((b) => (
-            <div key={b.label} className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-center">
-              <div className="text-xl mb-1">{b.icon}</div>
-              <div className="text-white text-xs font-bold">{b.label}</div>
-              <div className="text-gray-500 text-[10px]">{b.sub}</div>
-            </div>
-          ))}
+        
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-px bg-white/10 mx-2 hidden sm:block" />
+          <button onClick={handlePrint} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-white/5">
+            <Printer className="w-4 h-4" />
+            <span className="hidden sm:inline">Print</span>
+          </button>
+          <button onClick={handlePrint} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-white/5">
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Download PDF</span>
+          </button>
         </div>
+      </header>
 
-        {/* Sections */}
-        <div className="space-y-3 mb-10">
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
 
-          <AccordionSection icon={Database} title="Data We Collect" number="1" defaultOpen={true}>
-            <p>We collect only what is necessary to provide the NeuroLab AI service:</p>
-            <ul className="list-disc list-inside space-y-1.5 mt-2">
-              <li><strong className="text-white">Account Information:</strong> Name, email, username, country, education level, and STEM interests provided at registration.</li>
-              <li><strong className="text-white">Usage Data:</strong> Pages visited, features used, session duration, and experiment completions.</li>
-              <li><strong className="text-white">Learning Progress:</strong> Completed experiments, quiz scores, achievement badges, and AI tutor interaction logs.</li>
-              <li><strong className="text-white">Device Information:</strong> Browser type, OS, and screen resolution for compatibility optimization.</li>
-            </ul>
-            <p className="mt-2 text-xs text-gray-500">We do not collect Social Security numbers, financial data, or biometric identifiers.</p>
-          </AccordionSection>
+      <div className="relative z-10 max-w-7xl mx-auto flex pt-16">
+        
+        {/* Navigation Sidebar */}
+        <aside className={`
+          fixed lg:sticky top-16 left-0 h-[calc(100vh-4rem)] w-72 bg-[#0a0a1a] lg:bg-transparent
+          border-r border-white/10 lg:border-none z-50 transform transition-transform duration-300 ease-in-out
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          overflow-y-auto py-8 px-6 no-scrollbar
+        `}>
+          <div className="flex justify-between items-center mb-6 lg:hidden">
+            <h3 className="text-white font-bold text-sm uppercase tracking-wider">Contents</h3>
+            <button onClick={() => setIsSidebarOpen(false)} className="text-gray-400 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <nav className="space-y-1">
+            {sections.map((section) => (
+              <button
+                key={section.id}
+                onClick={() => scrollToSection(section.id)}
+                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-200 flex items-center gap-3
+                  ${activeSection === section.id 
+                    ? 'bg-emerald-500/10 text-emerald-400 font-semibold border border-emerald-500/20' 
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                  }
+                `}
+              >
+                {section.title}
+              </button>
+            ))}
+          </nav>
+        </aside>
 
-          <AccordionSection icon={Camera} title="Camera Data Usage" number="2">
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg mb-3">
-              <p className="text-emerald-300 font-semibold text-sm">🔒 Core Commitment: We do not store, record, or transmit camera footage without your explicit, opt-in permission.</p>
+        {/* Main Content Area */}
+        <main className="flex-1 max-w-4xl px-6 py-12 lg:px-12 lg:py-16 bg-[#070714] min-h-screen">
+          
+          <div className="mb-16 border-b border-white/10 pb-12">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-6">
+              <ShieldCheck className="w-4 h-4" /> Global Privacy Policy
             </div>
-            <p>When you use the Live Lab camera feature:</p>
-            <ul className="list-disc list-inside space-y-1.5 mt-2">
-              <li>Video frames are processed <strong className="text-white">100% locally</strong> in your browser using the WebRTC and MediaStream APIs.</li>
-              <li>AI object detection runs on your device hardware — no frames are sent to our servers.</li>
-              <li>Camera access is requested explicitly with a clear permission dialog before activation.</li>
-              <li>You may revoke camera access at any time through browser settings.</li>
-              <li>Physical experiment tracking data (angles, velocities, positions) is numerical only — never video.</li>
-            </ul>
-          </AccordionSection>
-
-          <AccordionSection icon={FileText} title="Experiment & Learning Data" number="3">
-            <p>Physics simulation results, quiz answers, and AI tutor conversations are stored securely to power your learning analytics dashboard. This data is:</p>
-            <ul className="list-disc list-inside space-y-1.5 mt-2">
-              <li>Encrypted at rest using AES-256 encryption</li>
-              <li>Linked to your account and never shared publicly without consent</li>
-              <li>Used to generate personalized recommendations and achievements</li>
-              <li>Never sold to third parties or used for advertising</li>
-            </ul>
-          </AccordionSection>
-
-          <AccordionSection icon={Cookie} title="Cookies & Local Storage" number="4">
-            <p>We use cookies and local storage for the following purposes:</p>
-            <ul className="list-disc list-inside space-y-1.5 mt-2">
-              <li><strong className="text-white">Essential Cookies:</strong> Authentication tokens, session management, and security headers. Required for the platform to function.</li>
-              <li><strong className="text-white">Analytics Cookies:</strong> Anonymized usage patterns to improve platform performance (opt-out available).</li>
-              <li><strong className="text-white">Preference Cookies:</strong> Theme settings, dashboard layout, and AI tutor voice preferences (optional).</li>
-            </ul>
-            <p className="mt-2">Cookie preferences can be managed through the cookie banner or browser settings.</p>
-          </AccordionSection>
-
-          <AccordionSection icon={UserCheck} title="Account Information & Authentication" number="5">
-            <p>Your account credentials are protected by:</p>
-            <ul className="list-disc list-inside space-y-1.5 mt-2">
-              <li>Passwords hashed using bcrypt with salt rounds — never stored in plaintext</li>
-              <li>OAuth tokens from Google/GitHub/Microsoft are handled by their respective secure systems</li>
-              <li>JWT sessions expire automatically for security</li>
-              <li>Two-factor authentication available for additional protection</li>
-            </ul>
-          </AccordionSection>
-
-          <AccordionSection icon={Cpu} title="Third-Party Services" number="6">
-            <p>We integrate with trusted third-party services:</p>
-            <ul className="list-disc list-inside space-y-1.5 mt-2">
-              <li><strong className="text-white">Supabase:</strong> Backend database and authentication infrastructure (SOC 2 compliant)</li>
-              <li><strong className="text-white">Google OAuth:</strong> Optional sign-in provider</li>
-              <li><strong className="text-white">GitHub OAuth:</strong> Optional sign-in provider for developers</li>
-            </ul>
-            <p className="mt-2">These services have their own privacy policies. We do not grant them access to your NeuroLab AI learning data.</p>
-          </AccordionSection>
-
-          <AccordionSection icon={Trash2} title="Data Retention & Deletion" number="7">
-            <p>We retain your data for as long as your account is active. Upon account deletion:</p>
-            <ul className="list-disc list-inside space-y-1.5 mt-2">
-              <li>Personal information is deleted within <strong className="text-white">30 days</strong></li>
-              <li>Anonymized, aggregated analytics data may be retained for platform improvement</li>
-              <li>Backup copies are purged within <strong className="text-white">90 days</strong></li>
-              <li>You may request immediate deletion by contacting privacy@neurolab.ai</li>
-            </ul>
-          </AccordionSection>
-
-          <AccordionSection icon={ShieldCheck} title="Your Rights" number="8">
-            <p>You have the following rights regarding your personal data:</p>
-            <ul className="list-disc list-inside space-y-1.5 mt-2">
-              <li><strong className="text-white">Access:</strong> Request a copy of all data we hold about you</li>
-              <li><strong className="text-white">Correction:</strong> Update inaccurate personal information</li>
-              <li><strong className="text-white">Deletion:</strong> Request complete account and data deletion</li>
-              <li><strong className="text-white">Portability:</strong> Export your learning data in JSON format</li>
-              <li><strong className="text-white">Restriction:</strong> Limit how we process your data</li>
-              <li><strong className="text-white">Objection:</strong> Opt out of non-essential data processing</li>
-            </ul>
-          </AccordionSection>
-
-          <AccordionSection icon={Lock} title="Security Measures" number="9">
-            <p>NeuroLab AI implements enterprise-grade security:</p>
-            <ul className="list-disc list-inside space-y-1.5 mt-2">
-              <li>TLS 1.3 encryption for all data in transit</li>
-              <li>AES-256 encryption for data at rest</li>
-              <li>Regular security audits and penetration testing</li>
-              <li>CAPTCHA and rate limiting to prevent automated attacks</li>
-              <li>Suspicious activity detection and login alerts</li>
-              <li>99.9% uptime SLA with redundant infrastructure</li>
-            </ul>
-          </AccordionSection>
-
-          <AccordionSection icon={Mail} title="Contact & Data Requests" number="10">
-            <p>For privacy concerns, data requests, or questions about this policy:</p>
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center gap-2 text-cyan-400">
-                <Mail className="w-4 h-4" />
-                <span>privacy@neurolab.ai</span>
+            <h1 className="text-4xl md:text-5xl font-black text-white mb-6 leading-tight tracking-tight">
+              NeuroLab AI Privacy Policy
+            </h1>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm text-gray-400">
+              <div>
+                <p><strong className="text-gray-300">Last Updated:</strong> June 3, 2026</p>
+                <p><strong className="text-gray-300">Effective Date:</strong> June 10, 2026</p>
               </div>
-              <div className="flex items-center gap-2 text-cyan-400">
-                <Globe className="w-4 h-4" />
-                <span>neurolab.ai/privacy-request</span>
+              <div>
+                <p><strong className="text-gray-300">Version:</strong> 3.1.0 (Compliance Matrix)</p>
+                <p><strong className="text-gray-300">Entity:</strong> NeuroLab Technologies Inc.</p>
               </div>
             </div>
-            <p className="mt-3 text-xs text-gray-500">We respond to all verified data requests within <strong className="text-gray-400">72 hours</strong>.</p>
-          </AccordionSection>
-        </div>
+            
+            <div className="mt-8 p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl flex items-start gap-4">
+              <Camera className="w-6 h-6 text-emerald-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-emerald-300 font-bold mb-1">Our Core Camera Promise</h4>
+                <p className="text-sm text-gray-400 leading-relaxed">
+                  We do not store camera footage. All computer vision processing and AI object detection for our Live Lab runs entirely locally on your device hardware. Your physical environment remains private absolutely.
+                </p>
+              </div>
+            </div>
+          </div>
 
-        {/* Core statement */}
-        <div className="p-6 bg-gradient-to-r from-cyan-500/10 to-blue-600/10 border border-cyan-500/20 rounded-2xl text-center mb-8">
-          <h4 className="text-cyan-400 font-black uppercase tracking-widest text-sm mb-2">🔒 Our Core Camera Promise</h4>
-          <p className="text-gray-300 max-w-2xl mx-auto leading-relaxed">
-            "We do not store camera footage without permission. All computer vision processing and AI object detection runs locally on your device hardware, protecting your privacy absolutely."
-          </p>
-        </div>
+          <div className="prose prose-invert prose-emerald max-w-none space-y-10">
+            
+            <section id="introduction" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">1.</span> Introduction & Scope
+              </h2>
+              <p className="leading-relaxed">
+                NeuroLab Technologies Inc. ("NeuroLab", "we", "us", or "our") respects your privacy and is deeply committed to protecting your personal data. This Privacy Policy describes how we collect, use, process, and disclose your information, including personal data, in conjunction with your access to and use of the NeuroLab AI platform and services (the "Services").
+              </p>
+              <p className="leading-relaxed mt-4">
+                This policy applies to all visitors, registered users, students, educators, and institutional administrators. By accessing or using the Services, you acknowledge that you have read and understand this Privacy Policy.
+              </p>
+            </section>
 
-        {/* Nav buttons */}
-        <div className="flex flex-wrap justify-center gap-3">
-          <button onClick={() => navigate('/terms')} className="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-medium text-gray-300 hover:text-white hover:bg-white/8 transition-all flex items-center gap-2">
-            <FileText className="w-4 h-4" />
-            Terms & Conditions
-          </button>
-          <button onClick={() => navigate('/trust')} className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white text-sm font-semibold shadow-lg shadow-cyan-500/20 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4" />
-            Trust Center
-          </button>
-          <button onClick={() => navigate('/security')} className="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm font-medium text-gray-300 hover:text-white hover:bg-white/8 transition-all flex items-center gap-2">
-            <Lock className="w-4 h-4" />
-            Security Center
-          </button>
-        </div>
+            <section id="information-collection" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">2.</span> Information We Collect
+              </h2>
+              <h3 className="text-lg font-semibold text-gray-200 mt-6 mb-2">2.1 Information You Provide to Us</h3>
+              <ul className="space-y-3 list-none pl-0">
+                <li className="pl-4 border-l-2 border-emerald-500/30"><strong className="text-gray-200">Account Data:</strong> Name, email address, username, password (hashed), country, education level, and STEM interests.</li>
+                <li className="pl-4 border-l-2 border-emerald-500/30"><strong className="text-gray-200">Profile Data:</strong> Avatar images, biographical information, and other preferences you set in your account profile.</li>
+                <li className="pl-4 border-l-2 border-emerald-500/30"><strong className="text-gray-200">Communications:</strong> Support requests, feedback, or any other correspondence you send to us.</li>
+              </ul>
+              
+              <h3 className="text-lg font-semibold text-gray-200 mt-6 mb-2">2.2 Information Collected Automatically</h3>
+              <p className="leading-relaxed">
+                When you use our Services, we automatically collect certain information about your device and interaction with the platform:
+              </p>
+              <ul className="space-y-3 list-none pl-0 mt-3">
+                <li className="pl-4 border-l-2 border-white/10"><strong className="text-gray-200">Usage Data:</strong> Pages visited, features accessed, session duration, experiment completion rates, and AI Tutor query histories.</li>
+                <li className="pl-4 border-l-2 border-white/10"><strong className="text-gray-200">Device Information:</strong> IP address, browser type, operating system, device identifiers, and screen resolution.</li>
+              </ul>
+            </section>
+
+            <section id="camera-data" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">3.</span> Camera & Computer Vision Data
+              </h2>
+              <p className="leading-relaxed">
+                The NeuroLab "Live Lab" feature requires access to your device's camera to track physical experiments (e.g., pendulums, projectiles) in real-time.
+              </p>
+              <p className="leading-relaxed mt-4">
+                <strong>Local Processing:</strong> Video frames are processed entirely locally within your browser using WebRTC and MediaStream APIs. The object detection AI models execute on your device's hardware.
+              </p>
+              <p className="leading-relaxed mt-4">
+                <strong>No Video Transmission:</strong> We NEVER transmit, record, or store video feeds or images on our servers. The only data transmitted to our servers are the numerical outputs of the local computer vision processing (e.g., X/Y coordinates, velocity vectors, and timestamp metrics) necessary to render your experiment data charts and provide AI tutoring.
+              </p>
+            </section>
+
+            <section id="how-we-use" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">4.</span> How We Use Your Information
+              </h2>
+              <p className="leading-relaxed mb-4">We use the information we collect for the following business and commercial purposes:</p>
+              <ul className="space-y-2 list-disc pl-5 marker:text-emerald-500">
+                <li>To provide, maintain, and improve the NeuroLab AI platform.</li>
+                <li>To personalize your learning experience and tailor the AI Tutor's responses to your educational level.</li>
+                <li>To process payments and manage your premium subscriptions.</li>
+                <li>To send administrative notices, technical updates, security alerts, and support messages.</li>
+                <li>To analyze usage trends and develop new educational features.</li>
+                <li>To protect the safety and security of our users and the integrity of our Services.</li>
+              </ul>
+            </section>
+
+            <section id="data-sharing" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">5.</span> Data Sharing & Disclosure
+              </h2>
+              <p className="leading-relaxed">
+                NeuroLab does NOT sell your personal data to third parties. We may share your information only in the following limited circumstances:
+              </p>
+              <ul className="space-y-3 list-none pl-0 mt-4">
+                <li className="pl-4 border-l-2 border-white/10"><strong className="text-gray-200">Service Providers:</strong> We share data with trusted vendors who perform services on our behalf (e.g., cloud hosting via AWS/Supabase, payment processing via Stripe), subject to strict data processing agreements.</li>
+                <li className="pl-4 border-l-2 border-white/10"><strong className="text-gray-200">Educational Institutions:</strong> If you use NeuroLab through a school or enterprise account, your administrators may have access to your learning progress and usage data.</li>
+                <li className="pl-4 border-l-2 border-white/10"><strong className="text-gray-200">Legal Compliance:</strong> We may disclose data if required by law, subpoena, or other legal process, or if we believe disclosure is necessary to protect our rights, your safety, or the safety of others.</li>
+              </ul>
+            </section>
+
+            <section id="cookies" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">6.</span> Cookies & Tracking Technologies
+              </h2>
+              <p className="leading-relaxed">
+                We use cookies, web beacons, local storage, and similar tracking technologies to collect information about your browsing activities. We use:
+              </p>
+              <ul className="space-y-2 list-disc pl-5 mt-4 marker:text-emerald-500">
+                <li><strong>Essential Cookies:</strong> Required for core functionality like authentication and security.</li>
+                <li><strong>Functional Cookies:</strong> Remember your preferences, such as theme settings and avatar choices.</li>
+                <li><strong>Analytics Cookies:</strong> Help us understand how visitors interact with our platform.</li>
+              </ul>
+              <p className="leading-relaxed mt-4">
+                You can instruct your browser to refuse all cookies or to indicate when a cookie is being sent. However, if you do not accept essential cookies, you may not be able to use some portions of our Services.
+              </p>
+            </section>
+
+            <section id="data-security" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">7.</span> Data Security
+              </h2>
+              <p className="leading-relaxed">
+                We implement robust technical and organizational measures to protect your data, including AES-256 encryption for data at rest, TLS 1.3 for data in transit, continuous network monitoring, and strict access controls for our personnel. However, no method of transmission over the Internet or method of electronic storage is 100% secure. While we strive to use commercially acceptable means to protect your personal information, we cannot guarantee its absolute security.
+              </p>
+            </section>
+
+            <section id="data-retention" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">8.</span> Data Retention & Deletion
+              </h2>
+              <p className="leading-relaxed">
+                We retain your personal information for as long as your account is active or as needed to provide you the Services. If you wish to cancel your account or request that we no longer use your information, you may do so via your Account Settings or by contacting us. Upon deletion request, your identifiable data will be permanently deleted from our primary servers within 30 days, and from our secure backups within 90 days.
+              </p>
+            </section>
+
+            <section id="your-rights" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">9.</span> Your Privacy Rights (GDPR/CCPA)
+              </h2>
+              <p className="leading-relaxed mb-4">Depending on your location (e.g., the EEA, UK, or California), you may have certain rights regarding your personal data:</p>
+              <ul className="space-y-2 list-disc pl-5 marker:text-emerald-500">
+                <li><strong>Right to Access:</strong> Request copies of your personal data.</li>
+                <li><strong>Right to Rectification:</strong> Request correction of inaccurate data.</li>
+                <li><strong>Right to Erasure (Right to be Forgotten):</strong> Request deletion of your personal data.</li>
+                <li><strong>Right to Restrict Processing:</strong> Request limitation of how we process your data.</li>
+                <li><strong>Right to Data Portability:</strong> Request transfer of your data to another organization.</li>
+              </ul>
+              <p className="leading-relaxed mt-4">To exercise these rights, please submit a request to privacy@neurolab.ai.</p>
+            </section>
+
+            <section id="childrens-privacy" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">10.</span> Children's Privacy (COPPA Compliance)
+              </h2>
+              <p className="leading-relaxed">
+                NeuroLab is designed to be safe for students. We strictly adhere to the Children's Online Privacy Protection Act (COPPA). We do not knowingly collect personal information from children under 13 without verifiable parental consent or authorization from their educational institution. If we become aware that we have collected personal data from a child under 13 without appropriate consent, we will take steps to remove that information and terminate the child's account immediately.
+              </p>
+            </section>
+
+            <section id="international-transfers" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">11.</span> International Data Transfers
+              </h2>
+              <p className="leading-relaxed">
+                NeuroLab operates globally. Your information may be transferred to, and maintained on, computers located outside of your state, province, country, or other governmental jurisdiction where the data protection laws may differ from those of your jurisdiction. By using the Services, you consent to the transfer of your information to the United States and other regions where we operate, subject to standard contractual clauses or other legally adequate transfer mechanisms.
+              </p>
+            </section>
+
+            <section id="changes" className="scroll-mt-24">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">12.</span> Changes to This Policy
+              </h2>
+              <p className="leading-relaxed">
+                We may update our Privacy Policy from time to time to reflect changes in our practices or for other operational, legal, or regulatory reasons. We will notify you of any material changes by posting the new Privacy Policy on this page and updating the "Effective Date." We may also provide notice via email or a prominent alert within the platform.
+              </p>
+            </section>
+
+            <section id="contact" className="scroll-mt-24 mb-32">
+              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
+                <span className="text-emerald-500">13.</span> Contact Us
+              </h2>
+              <p className="leading-relaxed mb-6">
+                If you have any questions or concerns about this Privacy Policy or our data practices, please contact our Data Protection Officer:
+              </p>
+              <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                <p className="text-white font-semibold mb-2">NeuroLab Technologies Inc.</p>
+                <p className="text-gray-400 text-sm mb-1">Attn: Data Protection Officer</p>
+                <p className="text-gray-400 text-sm mb-1">100 Tech Innovation Way, Suite 400</p>
+                <p className="text-gray-400 text-sm mb-4">San Francisco, CA 94105, USA</p>
+                <p className="text-emerald-400 text-sm font-medium">Email: privacy@neurolab.ai</p>
+              </div>
+            </section>
+          </div>
+          
+        </main>
       </div>
     </div>
   );

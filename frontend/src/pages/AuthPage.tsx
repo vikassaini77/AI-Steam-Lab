@@ -265,8 +265,7 @@ function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (e
     password: '', confirmPassword: '', country: '', education: '', stemInterest: '',
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [agreeTerms, setAgreeTerms] = useState(false);
-  const [agreePrivacy, setAgreePrivacy] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -284,15 +283,17 @@ function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (e
     if (!formData.email.includes('@')) errors.email = 'Valid email required';
     if (formData.password.length < 8) errors.password = 'Password must be at least 8 characters';
     if (formData.password !== formData.confirmPassword) errors.confirmPassword = 'Passwords do not match';
-    if (!agreeTerms) errors.terms = 'You must agree to Terms & Conditions';
-    if (!agreePrivacy) errors.privacy = 'You must agree to Privacy Policy';
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleInitialSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+    setShowTerms(true);
+  };
+
+  const handleFinalSignup = async () => {
     setError(null);
     setLoading(true);
     try {
@@ -313,6 +314,7 @@ function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (e
       onVerify(formData.email);
     } catch (err: any) {
       setError(err.message || 'Could not create account. Please try again.');
+      setShowTerms(false); // Go back to form to show error
     } finally {
       setLoading(false);
     }
@@ -340,10 +342,53 @@ function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (e
       exit={{ opacity: 0, x: -20 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="text-center mb-6">
-        <h1 className="text-2xl font-bold text-white mb-1.5">Create your account</h1>
-        <p className="text-gray-400 text-sm">Join thousands of STEM learners worldwide</p>
-      </div>
+      {showTerms ? (
+        <div className="text-left">
+          <div className="text-center mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center mx-auto mb-4">
+              <ShieldCheck className="w-7 h-7 text-cyan-400" />
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-1.5">Review & Accept Terms</h1>
+            <p className="text-gray-400 text-sm">Please accept our terms to finish creating your account.</p>
+          </div>
+
+          <div className="h-64 overflow-y-auto pr-2 mb-6 custom-scrollbar text-xs text-gray-400 space-y-4 bg-white/[0.02] border border-white/10 rounded-xl p-4">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">1. Acceptance of Terms</h3>
+            <p>By creating an account, you agree to NeuroLab's Terms of Service and Privacy Policy. You must be at least 13 years old to use the platform.</p>
+            
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">2. Data Privacy & Camera Usage</h3>
+            <p>NeuroLab utilizes your device's camera for the Live Lab physical experiment tracker. <strong>All video processing happens locally on your device.</strong> We do not record, store, or transmit your camera feed.</p>
+            
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">3. AI Limitations</h3>
+            <p>Our AI Tutor is an educational tool. While we strive for accuracy, AI-generated content may occasionally contain errors. It should not replace professional guidance or substitute for verifiable academic research.</p>
+
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">4. Acceptable Use</h3>
+            <p>You agree not to misuse the platform, attempt to breach security measures, scrape data, or use our services for malicious purposes.</p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={handleFinalSignup}
+              disabled={loading}
+              className="w-full py-3.5 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white font-semibold flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20"
+            >
+              {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'I Accept & Create Account'}
+            </button>
+            <button
+              onClick={() => setShowTerms(false)}
+              disabled={loading}
+              className="w-full py-3 bg-white/5 border border-white/10 rounded-xl text-gray-300 font-medium hover:bg-white/10 transition-colors"
+            >
+              Decline & Go Back
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-white mb-1.5">Create your account</h1>
+            <p className="text-gray-400 text-sm">Join thousands of STEM learners worldwide</p>
+          </div>
 
       {/* Social Providers */}
       <div className="grid grid-cols-2 gap-3 mb-5">
@@ -357,7 +402,7 @@ function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (e
         <div className="flex-1 h-px bg-white/8" />
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleInitialSubmit} className="space-y-4">
         {/* Name Row */}
         <div className="grid grid-cols-2 gap-3">
           <InputField label="First Name" icon={User} value={formData.firstName} onChange={update('firstName')} placeholder="Alex" required error={fieldErrors.firstName} success={!!formData.firstName && !fieldErrors.firstName} />
@@ -468,38 +513,7 @@ function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (e
           </div>
         </div>
 
-        {/* Agreements */}
-        <div className="space-y-2.5">
-          <label className="flex items-start gap-2.5 cursor-pointer">
-            <div
-              onClick={() => setAgreeTerms(!agreeTerms)}
-              className={`mt-0.5 w-4 h-4 rounded border transition-all flex items-center justify-center flex-shrink-0 ${agreeTerms ? 'bg-cyan-500 border-cyan-500' : 'border-white/20 bg-white/5'}`}
-            >
-              {agreeTerms && <Check className="w-2.5 h-2.5 text-black" />}
-            </div>
-            <span className="text-xs text-gray-400 leading-relaxed">
-              I agree to the{' '}
-              <a href="/terms" target="_blank" className="text-cyan-400 hover:underline">Terms & Conditions</a>
-              {' '}of NeuroLab AI
-            </span>
-          </label>
-          {fieldErrors.terms && <p className="text-xs text-red-400 ml-6 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{fieldErrors.terms}</p>}
 
-          <label className="flex items-start gap-2.5 cursor-pointer">
-            <div
-              onClick={() => setAgreePrivacy(!agreePrivacy)}
-              className={`mt-0.5 w-4 h-4 rounded border transition-all flex items-center justify-center flex-shrink-0 ${agreePrivacy ? 'bg-cyan-500 border-cyan-500' : 'border-white/20 bg-white/5'}`}
-            >
-              {agreePrivacy && <Check className="w-2.5 h-2.5 text-black" />}
-            </div>
-            <span className="text-xs text-gray-400 leading-relaxed">
-              I have read and accept the{' '}
-              <a href="/privacy" target="_blank" className="text-cyan-400 hover:underline">Privacy Policy</a>
-              {' '}including camera data usage
-            </span>
-          </label>
-          {fieldErrors.privacy && <p className="text-xs text-red-400 ml-6 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{fieldErrors.privacy}</p>}
-        </div>
 
         {error && (
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-start gap-2">
@@ -533,6 +547,8 @@ function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (e
           Sign in
         </button>
       </p>
+      </>
+      )}
     </motion.div>
   );
 }
@@ -894,8 +910,8 @@ function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
 function Logo() {
   return (
     <div className="flex items-center gap-3 mb-8 justify-center">
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
-        <span className="text-xl font-black text-white">N</span>
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/30 overflow-hidden bg-[#070714]">
+        <img src="/logo.png" alt="NeuroLab Logo" className="w-full h-full object-cover" />
       </div>
       <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-400">
         NeuroLab AI

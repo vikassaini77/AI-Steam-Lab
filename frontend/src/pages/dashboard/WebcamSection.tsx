@@ -192,6 +192,7 @@ const translations = {
 
 export default function WebcamSection() {
   const navigate = useNavigate();
+  const { botVoiceURI } = useChatStore();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Accessibility State Options
@@ -286,13 +287,22 @@ export default function WebcamSection() {
       
       const utterance = new SpeechSynthesisUtterance(clean);
       
-      // Select appropriate voice based on selected language
+      // Select appropriate voice based on selected language and AI voice setting
       if (window.speechSynthesis.getVoices().length > 0) {
         const voices = window.speechSynthesis.getVoices();
         let targetVoice = null;
-        if (currentLang === 'hi') targetVoice = voices.find(v => v.lang.includes('hi') || v.lang.includes('IN'));
-        else if (currentLang === 'es') targetVoice = voices.find(v => v.lang.includes('es') || v.lang.includes('ES'));
-        else if (currentLang === 'fr') targetVoice = voices.find(v => v.lang.includes('fr') || v.lang.includes('FR'));
+        
+        // If a specific voice is selected in AI Tutor Settings, prioritize it
+        if (botVoiceURI) {
+          targetVoice = voices.find(v => v.voiceURI === botVoiceURI);
+        }
+        
+        // Fallback to language-based voice if not specifically configured
+        if (!targetVoice) {
+          if (currentLang === 'hi') targetVoice = voices.find(v => v.lang.includes('hi') || v.lang.includes('IN'));
+          else if (currentLang === 'es') targetVoice = voices.find(v => v.lang.includes('es') || v.lang.includes('ES'));
+          else if (currentLang === 'fr') targetVoice = voices.find(v => v.lang.includes('fr') || v.lang.includes('FR'));
+        }
         
         if (targetVoice) utterance.voice = targetVoice;
       }

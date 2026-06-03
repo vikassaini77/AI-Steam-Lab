@@ -62,9 +62,9 @@ export default function FeaturesPage() {
 
       <div className="relative z-10 max-w-5xl mx-auto px-6 py-16">
         {/* Back */}
-        <button onClick={() => navigate('/')} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm mb-10 group">
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm mb-10 group">
           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-          Back to Home
+          Back
         </button>
 
         {/* Header */}
@@ -120,3 +120,5 @@ export default function FeaturesPage() {
     </div>
   );
 }
+
+

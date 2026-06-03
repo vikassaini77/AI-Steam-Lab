@@ -96,8 +96,8 @@ export default function Footer() {
             className="md:col-span-1"
           >
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/25">
-                <span className="text-xl font-black text-white">N</span>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/25 overflow-hidden bg-[#050511]">
+                <img src="/logo.png" alt="NeuroLab Logo" className="w-full h-full object-cover" />
               </div>
               <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-400">
                 NeuroLab AI

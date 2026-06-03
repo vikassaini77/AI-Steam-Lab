@@ -1,34 +1,32 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useRef, useEffect } from 'react';
-import { Send, Mic, Sparkles, User, Volume2, VolumeX } from 'lucide-react';
-
-interface Message {
-  id: number;
-  text: string;
-  sender: 'user' | 'ai';
-  timestamp: Date;
-}
+import { Send, Mic, Sparkles, Plus, Square, Download, Share, CheckCircle2, RefreshCw, Edit2, Check, X, Volume2 } from 'lucide-react';
+import { useChatStore } from '../../lib/chatStore';
+import type { Message } from '../../lib/chatStore';
 
 export default function AITutorPanel() {
-  const [voiceEnabled, setVoiceEnabled] = useState<boolean>(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 1,
-      text: "Hello! I'm Professor Nova, your AI STEM mentor. I can help you understand the physics of pendulum motion, explain complex concepts, and verify your lab experiments in real time. What would you like to explore today?",
-      sender: 'ai',
-      timestamp: new Date(),
-    },
-    {
-      id: 2,
-      text: "I've synchronized with your Live Lab. Toggling the webcam lets us calibrate physical motion. Would you like me to guide you through a Newton's Laws of Motion experiment?",
-      sender: 'ai',
-      timestamp: new Date(),
-    },
-  ]);
+  const { chats = [], activeChatId, addMessage, updateMessage, createNewChat, setMessages, botName, botVoiceURI } = useChatStore();
+  const currentChat = chats.find(c => c.id === activeChatId);
+  const messages = currentChat?.messages || [];
+
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [showCopied, setShowCopied] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [editInput, setEditInput] = useState('');
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const recognitionRef = useRef<any>(null);
+
+  // Initialize new chat if none exists
+  useEffect(() => {
+    if (!activeChatId) {
+      createNewChat();
+    }
+  }, [activeChatId, createNewChat]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -38,74 +36,169 @@ export default function AITutorPanel() {
     scrollToBottom();
   }, [messages]);
 
-  const speakText = (text: string) => {
-    if (!voiceEnabled) return;
-    try {
-      window.speechSynthesis.cancel();
-      // Clean LaTeX & math markers for clean TTS output
-      const clean = text.replace(/[\$\#\*\_]/g, '').replace(/\\pi/g, 'pi').replace(/\\sqrt/g, 'square root of ');
-      const utterance = new SpeechSynthesisUtterance(clean);
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.error('Speech synthesis error:', e);
+  // Setup Speech Recognition
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = true;
+        recognitionRef.current.interimResults = true;
+
+        recognitionRef.current.onresult = (event: any) => {
+          let currentTranscript = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+              currentTranscript += event.results[i][0].transcript + ' ';
+            } else {
+              currentTranscript += event.results[i][0].transcript;
+            }
+          }
+          setInput((prev) => prev + currentTranscript);
+        };
+
+        recognitionRef.current.onerror = (event: any) => {
+          console.error('Speech recognition error', event.error);
+          setIsListening(false);
+        };
+
+        recognitionRef.current.onend = () => {
+          setIsListening(false);
+        };
+      }
+    }
+  }, []);
+
+  const toggleListen = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      if (recognitionRef.current) {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } else {
+        alert("Microphone dictation is not supported in this browser.");
+      }
     }
   };
 
-  useEffect(() => {
-    const handleTopic = (e: Event) => {
-      const topic = (e as CustomEvent).detail;
-      setInput("Tell me more about: " + topic);
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 50);
-    };
-    window.addEventListener('ai-tutor-select-topic', handleTopic);
-    return () => window.removeEventListener('ai-tutor-select-topic', handleTopic);
-  }, []);
-
-  // Speak welcome message if voice is activated
-  useEffect(() => {
-    if (voiceEnabled && messages.length > 0) {
-      speakText(messages[messages.length - 1].text);
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
-  }, [voiceEnabled]);
+    setIsTyping(false);
+  };
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
+  const handleDownload = () => {
+    if (!currentChat) return;
+    let content = `# ${currentChat.title}\n\n`;
+    messages.forEach(m => {
+      content += `### ${m.sender === 'user' ? 'You' : botName}\n${m.text}\n\n`;
+    });
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentChat.title.replace(/\s+/g, '_')}_transcript.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-    const userPrompt = input;
-    const userMessage: Message = {
-      id: messages.length + 1,
-      text: userPrompt,
-      sender: 'user',
-      timestamp: new Date(),
-    };
+  const handleShare = () => {
+    if (!currentChat) return;
+    let content = `Chat with ${botName}:\n\n`;
+    messages.forEach(m => {
+      content += `${m.sender === 'user' ? 'You' : botName}: ${m.text}\n\n`;
+    });
+    navigator.clipboard.writeText(content).then(() => {
+      setShowCopied(true);
+      setTimeout(() => setShowCopied(false), 2000);
+    });
+  };
 
-    // Update messages local state
-    setMessages((prev) => [...prev, userMessage]);
-    setInput('');
+  const handleSpeak = (text: string) => {
+    window.speechSynthesis.cancel();
+    // Clean markdown bold/italic asterisks before speaking
+    const cleanText = text.replace(/[*#]/g, '');
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    
+    if (botVoiceURI) {
+      const voices = window.speechSynthesis.getVoices();
+      const selectedVoice = voices.find(v => v.voiceURI === botVoiceURI);
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+      }
+    }
+    
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleSend = async (regenerateMessageId?: number, editMessagePayload?: { id: number, newText: string }) => {
+    if (!activeChatId) return;
+
+    let userPrompt = input;
+    let historyToUse = messages;
+    let targetAiMessageId: number | null = null;
+
+    if (editMessagePayload) {
+      const index = messages.findIndex(m => m.id === editMessagePayload.id);
+      if (index === -1) return;
+      userPrompt = editMessagePayload.newText;
+      
+      const truncated = messages.slice(0, index);
+      setMessages(activeChatId, truncated);
+      historyToUse = truncated;
+      
+      const userMessage: Message = {
+        id: Date.now(),
+        text: userPrompt,
+        sender: 'user',
+        timestamp: new Date().toISOString(),
+      };
+      addMessage(activeChatId, userMessage);
+    } else if (typeof regenerateMessageId === 'number') {
+      const index = messages.findIndex(m => m.id === regenerateMessageId);
+      if (index === -1) return;
+      for (let i = index - 1; i >= 0; i--) {
+        if (messages[i].sender === 'user') {
+          userPrompt = messages[i].text;
+          break;
+        }
+      }
+      historyToUse = messages.slice(0, index);
+      targetAiMessageId = regenerateMessageId;
+      updateMessage(activeChatId, targetAiMessageId, ""); // clear text
+    } else {
+      if (!input.trim()) return;
+      if (isListening) toggleListen();
+
+      const userMessage: Message = {
+        id: Date.now(),
+        text: userPrompt,
+        sender: 'user',
+        timestamp: new Date().toISOString(),
+      };
+      addMessage(activeChatId, userMessage);
+      setInput('');
+    }
+
     setIsTyping(true);
+    abortControllerRef.current = new AbortController();
 
     try {
-      // 1. Format chat history into standard API expected role/content structure
-      // We map "ai" -> "assistant" and "user" -> "user"
-      const formattedHistory = messages.map(msg => ({
+      const formattedHistory = historyToUse.map(msg => ({
         role: msg.sender === 'ai' ? 'assistant' : 'user',
         content: msg.text
       }));
 
-      // 2. Fetch active physical laboratory experiment measurements if any
       let experimentState = null;
       try {
         const stored = localStorage.getItem('neurolab_experiment_state');
-        if (stored) {
-          experimentState = JSON.parse(stored);
-        }
-      } catch (err) {
-        console.error('Error reading physical lab context state:', err);
-      }
+        if (stored) experimentState = JSON.parse(stored);
+      } catch (err) {}
 
-      // 3. Resolve FastAPI endpoint dynamically (supports Vite dev port 5173 & FastAPI built port 8000)
       const apiHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? `${window.location.protocol}//${window.location.hostname}:8000`
         : window.location.origin;
@@ -119,18 +212,24 @@ export default function AITutorPanel() {
           prompt: userPrompt,
           history: formattedHistory,
           experiment_state: experimentState
-        })
+        }),
+        signal: abortControllerRef.current.signal
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-      const aiMessageId = Date.now();
-      setMessages((prev) => [
-        ...prev,
-        { id: aiMessageId, text: '', sender: 'ai', timestamp: new Date() }
-      ]);
+      const aiMessageId = targetAiMessageId || (Date.now() + 1);
+      
+      if (!targetAiMessageId) {
+        const initialAiMessage: Message = {
+          id: aiMessageId,
+          text: '',
+          sender: 'ai',
+          timestamp: new Date().toISOString()
+        };
+        addMessage(activeChatId, initialAiMessage);
+      }
+      
       setIsTyping(false);
 
       const reader = response.body?.getReader();
@@ -143,7 +242,7 @@ export default function AITutorPanel() {
           if (done) break;
           
           const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\\n');
+          const lines = chunk.split('\n');
           
           for (const line of lines) {
             if (line.startsWith('data: ')) {
@@ -151,177 +250,294 @@ export default function AITutorPanel() {
                 const data = JSON.parse(line.substring(6));
                 if (data.text) {
                   fullText += data.text;
-                  setMessages((prev) =>
-                    prev.map((m) => (m.id === aiMessageId ? { ...m, text: fullText } : m))
-                  );
+                  updateMessage(activeChatId, aiMessageId, fullText);
                 }
-              } catch (e) {
-                // Ignore chunk parse errors
-              }
+              } catch (e) {}
             }
           }
         }
-        speakText(fullText);
       }
 
-    } catch (error) {
-      console.error('Tutor chat API connection failed:', error);
-      
-      // Dynamic mathematical fallback response to guarantee flawless continuity
-      const fallbackMessage: Message = {
-        id: messages.length + 2,
-        text: "I'm running in offline mode because I couldn't reach the FastAPI server. Just a quick reminder: Simple Harmonic Motion follows $T = 2\\pi\\sqrt{L/g}$. Please verify the server is running on port 8000!",
-        sender: 'ai',
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, fallbackMessage]);
-      speakText(fallbackMessage.text);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Stream aborted');
+      } else {
+        console.error('Tutor chat API connection failed:', error);
+        addMessage(activeChatId, {
+          id: Date.now() + 2,
+          text: "I'm running in offline mode because I couldn't reach the backend server. Make sure FastAPI is running on port 8000!",
+          sender: 'ai',
+          timestamp: new Date().toISOString(),
+        });
+      }
     } finally {
       setIsTyping(false);
+      abortControllerRef.current = null;
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
+  };
+
   return (
-    <div className="h-[calc(100vh-200px)] flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="relative w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 to-violet-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-            <Sparkles className="w-5 h-5 text-white animate-pulse" />
-            <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0d0d20] shadow-md animate-pulse" />
-          </div>
-          <div>
-            <h3 className="text-white font-semibold flex items-center gap-2">
-              Professor Nova
-            </h3>
-            <p className="text-green-400 text-xs font-semibold flex items-center gap-1">
-              Online - Ready to help
-            </p>
-          </div>
+    <div className="flex-1 flex flex-col h-full bg-transparent relative overflow-hidden">
+      
+      {/* Top Bar (Optional Model Selector & Actions) */}
+      <div className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-10 bg-gradient-to-b from-[#070714] to-transparent">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-gray-300 font-semibold text-lg ml-12">
+          {botName} <span className="text-gray-500 text-sm font-normal">v2.5</span>
         </div>
-        
-        {/* TTS Voice Activator Toggle */}
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => {
-            setVoiceEnabled(!voiceEnabled);
-            if (voiceEnabled) window.speechSynthesis.cancel();
-          }}
-          className={`p-2.5 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-bold ${
-            voiceEnabled 
-              ? 'bg-cyan-500/20 border-cyan-500/35 text-cyan-400 shadow-md shadow-cyan-500/10' 
-              : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
-          }`}
-          title={voiceEnabled ? "Mute Professor Nova" : "Enable Voice explanations"}
-        >
-          {voiceEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-          <span>Voice Output</span>
-        </motion.button>
+        <div className="flex items-center gap-2">
+          {messages.length > 0 && (
+            <>
+              <button 
+                onClick={handleDownload}
+                className="p-2 text-gray-400 hover:text-cyan-400 hover:bg-white/5 rounded-lg transition-colors"
+                title="Download Chat"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+              <button 
+                onClick={handleShare}
+                className="p-2 text-gray-400 hover:text-cyan-400 hover:bg-white/5 rounded-lg transition-colors relative"
+                title="Share Chat"
+              >
+                {showCopied ? <CheckCircle2 className="w-5 h-5 text-green-400" /> : <Share className="w-5 h-5" />}
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-        <AnimatePresence>
-          {messages.map((message) => (
-            <motion.div
-              key={message.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex gap-3 ${message.sender === 'user' ? 'flex-row-reverse' : ''}`}
-            >
-              <div
-                className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  message.sender === 'ai'
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-500'
-                    : 'bg-gradient-to-r from-violet-500 to-purple-500'
-                }`}
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto w-full pt-16 pb-32">
+        <div className="max-w-3xl mx-auto px-4 flex flex-col space-y-6">
+          <AnimatePresence>
+            {messages.map((message) => (
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`flex gap-4 w-full ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                {message.sender === 'ai' ? (
-                  <Sparkles className="w-4 h-4 text-white" />
-                ) : (
-                  <User className="w-4 h-4 text-white" />
+                {message.sender === 'ai' && (
+                  <div className="w-8 h-8 rounded-full border border-white/10 flex flex-shrink-0 items-center justify-center bg-white">
+                    <Sparkles className="w-5 h-5 text-black" />
+                  </div>
                 )}
-              </div>
-              <div
-                className={`flex-1 p-4 rounded-xl max-w-[85%] ${
-                  message.sender === 'ai'
-                    ? 'bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20'
-                    : 'bg-gradient-to-br from-violet-500/10 to-purple-500/10 border border-violet-500/20 ml-auto'
-                }`}
-              >
-                <p className="text-sm text-gray-200 leading-relaxed">{message.text}</p>
-                <p className="text-xs text-gray-500 mt-2">
-                  {message.timestamp.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+                <div
+                  className={`text-[15px] leading-relaxed max-w-[85%] ${
+                    message.sender === 'user'
+                      ? 'bg-[#12121a]/80 border border-white/5 shadow-lg shadow-cyan-900/10 text-gray-100 px-5 py-2.5 rounded-3xl group'
+                      : 'text-gray-100 py-1 group'
+                  }`}
+                >
+                  {editingMessageId === message.id ? (
+                    <div className="flex flex-col gap-2 min-w-[250px]">
+                      <textarea
+                        value={editInput}
+                        onChange={(e) => setEditInput(e.target.value)}
+                        className="w-full bg-black/40 text-white rounded-lg p-2 text-sm focus:outline-none border border-cyan-500/30 resize-none min-h-[80px]"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button 
+                          onClick={() => setEditingMessageId(null)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 hover:bg-white/10 text-gray-300 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button 
+                          onClick={() => {
+                            setEditingMessageId(null);
+                            handleSend(undefined, { id: message.id, newText: editInput });
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-cyan-500 text-black hover:bg-cyan-400 transition-colors"
+                        >
+                          Save & Submit
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <p className="whitespace-pre-wrap">{message.text}</p>
+                      
+                      {message.sender === 'user' && (
+                        <div className="absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={() => {
+                              setEditingMessageId(message.id);
+                              setEditInput(message.text);
+                            }}
+                            className="p-1.5 bg-black/40 hover:bg-black/60 rounded-full border border-white/5 text-gray-400 hover:text-cyan-400 transition-colors shadow-sm"
+                            title="Edit message"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {message.sender === 'ai' && (
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity mt-2 flex gap-2">
+                      <button 
+                        onClick={() => handleSend(message.id)}
+                        className="flex items-center gap-1.5 px-2 py-1 bg-white/5 hover:bg-white/10 rounded-md text-[10px] text-gray-400 hover:text-cyan-400 font-medium transition-colors border border-white/5"
+                        title="Regenerate response"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Regenerate
+                      </button>
+                      <button 
+                        onClick={() => handleSpeak(message.text)}
+                        className="flex items-center gap-1.5 px-2 py-1 bg-white/5 hover:bg-white/10 rounded-md text-[10px] text-gray-400 hover:text-cyan-400 font-medium transition-colors border border-white/5"
+                        title="Read aloud"
+                      >
+                        <Volume2 className="w-3 h-3" />
+                        Read Aloud
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
 
-        {isTyping && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex gap-3"
-          >
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-500 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
+          {messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center min-h-[50vh] w-full max-w-2xl mx-auto px-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5 }}
+                className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center mb-6 shadow-lg shadow-cyan-500/20"
+              >
+                <Sparkles className="w-8 h-8 text-white" />
+              </motion.div>
+              <motion.h2 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="text-3xl font-bold text-white mb-10 text-center"
+              >
+                How can I help you today?
+              </motion.h2>
+
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full"
+              >
+                {[
+                  { title: 'Explain Quantum Computing', desc: 'Break down qubits and superposition simply' },
+                  { title: 'Help debug my Python code', desc: 'Find logic errors in my data science script' },
+                  { title: 'Brainstorm project ideas', desc: 'For my final year Machine Learning project' },
+                  { title: 'Review my resume', desc: 'For an AI Engineering internship role' }
+                ].map((topic, i) => (
+                  <button
+                    key={i}
+                    onClick={() => {
+                      const fullText = `${topic.title}: ${topic.desc}`;
+                      setInput(fullText);
+                      if (inputRef.current) {
+                        inputRef.current.focus();
+                      }
+                    }}
+                    className="flex flex-col text-left p-4 rounded-xl bg-[#12121a]/50 border border-white/5 hover:bg-[#12121a] hover:border-cyan-500/30 transition-all group"
+                  >
+                    <span className="text-sm font-medium text-gray-200 group-hover:text-cyan-400">{topic.title}</span>
+                    <span className="text-xs text-gray-500 mt-1">{topic.desc}</span>
+                  </button>
+                ))}
+              </motion.div>
             </div>
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-              <div className="flex gap-1">
+          )}
+
+          {isTyping && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex gap-4 w-full justify-start"
+            >
+              <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center bg-white">
+                <Sparkles className="w-5 h-5 text-black" />
+              </div>
+              <div className="flex items-center gap-1.5 h-8">
                 {[0, 1, 2].map((i) => (
                   <motion.div
                     key={i}
-                    animate={{ y: [0, -5, 0] }}
-                    transition={{
-                      duration: 0.6,
-                      repeat: Infinity,
-                      delay: i * 0.2,
-                    }}
-                    className="w-2 h-2 rounded-full bg-cyan-400"
+                    animate={{ scale: [1, 1.2, 1], opacity: [0.3, 1, 0.3] }}
+                    transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
+                    className="w-2 h-2 rounded-full bg-gray-500"
                   />
                 ))}
               </div>
-            </div>
-          </motion.div>
-        )}
-        <div ref={messagesEndRef} />
+            </motion.div>
+          )}
+          <div ref={messagesEndRef} className="h-4" />
+        </div>
       </div>
 
-      {/* Input */}
-      <div className="p-4 border-t border-white/10">
-        <div className="flex gap-3">
-          <div className="flex-1 relative">
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Ask me anything about STEM..."
-              className="w-full pl-4 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
-            />
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-cyan-400 transition-colors"
+      {/* Input Area */}
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#070714] via-[#070714] to-transparent pt-6 pb-4 px-4 w-full">
+        <div className="max-w-3xl mx-auto w-full relative">
+          <div className="bg-[#12121a]/90 backdrop-blur-md rounded-[24px] pl-4 pr-2 py-2 flex items-end shadow-[0_0_15px_rgba(0,255,255,0.05)] border border-white/10">
+            <button 
+              onClick={() => pushNotification('File attachments will be supported in v3.0.', 'info')}
+              className="p-2 mr-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0 mb-1"
             >
-              <Mic className="w-5 h-5" />
-            </motion.button>
+              <Plus className="w-5 h-5" />
+            </button>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask me anything..."
+              rows={1}
+              className="flex-1 max-h-[200px] bg-transparent text-white placeholder-gray-400 resize-none focus:outline-none py-3 text-[15px] scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
+              style={{ minHeight: '44px' }}
+            />
+            <div className="flex gap-1 ml-2 mb-1 flex-shrink-0">
+              {isTyping ? (
+                <button
+                  onClick={handleStop}
+                  className="w-8 h-8 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center hover:bg-red-500/30 transition-colors shadow-md"
+                >
+                  <Square className="w-3.5 h-3.5 fill-current" />
+                </button>
+              ) : input.trim() ? (
+                <button
+                  onClick={() => handleSend()}
+                  className="w-8 h-8 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 text-white flex items-center justify-center hover:opacity-90 transition-opacity shadow-md shadow-cyan-500/20"
+                >
+                  <Send className="w-4 h-4 ml-0.5" />
+                </button>
+              ) : (
+                <button 
+                  onClick={toggleListen}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                    isListening ? 'bg-red-500/20 text-red-500 animate-pulse' : 'text-gray-400 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <Mic className="w-5 h-5" />
+                </button>
+              )}
+            </div>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={handleSend}
-            disabled={!input.trim()}
-            className="w-12 h-12 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:shadow-lg hover:shadow-cyan-500/20 text-white flex items-center justify-center flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send className="w-5 h-5" />
-          </motion.button>
+          <p className="text-center text-xs text-gray-500 mt-3 font-medium">
+            {botName} can make mistakes. Check important information.
+          </p>
         </div>
       </div>
     </div>

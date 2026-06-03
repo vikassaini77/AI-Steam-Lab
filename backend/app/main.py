@@ -2,6 +2,8 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import sentry_sdk
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -70,3 +72,7 @@ app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 @limiter.limit("10/minute")
 def health_check(request: Request):
     return {"status": "ok", "message": "NeuroLab AI is securely running."}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

@@ -96,9 +96,9 @@ export default function SecurityPage() {
       {!isDashboard && (
         <>
           {/* Back */}
-          <button onClick={() => navigate('/')} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm group">
+          <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm group">
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-            Back to Home
+            Back
           </button>
 
           {/* Header */}
@@ -345,10 +345,10 @@ export default function SecurityPage() {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
-            onClick={() => navigate('/')}
+            onClick={() => navigate(-1)}
             className="px-6 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold text-gray-300 hover:text-white transition-all flex items-center gap-2"
           >
-            Back to Home
+            Back
           </motion.button>
           <motion.button
             whileHover={{ scale: 1.03 }}
@@ -391,3 +391,5 @@ export default function SecurityPage() {
     </div>
   );
 }
+
+
