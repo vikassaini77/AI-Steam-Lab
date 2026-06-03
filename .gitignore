@@ -1,0 +1,28 @@
+# General
+.DS_Store
+*.log
+
+# Node & Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+npm-debug.log*
+
+# Python & Backend
+backend/venv/
+backend/env/
+backend/__pycache__/
+backend/*.pyc
+backend/.env
+backend/.pytest_cache/
+backend/app/database/local_stem_db.json
+
+# IDE
+.vscode/
+.idea/
+*.swp

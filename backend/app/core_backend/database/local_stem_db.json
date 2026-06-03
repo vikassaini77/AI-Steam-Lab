@@ -1,0 +1,4816 @@
+{
+    "users": {},
+    "experiments": [
+        {
+            "id": "exp_pendulum_live_01",
+            "name": "Live Pendulum Oscillation",
+            "date": "2026-05-30",
+            "metrics": {
+                "subject": "Physics",
+                "tier": "Intermediate",
+                "tracking_method": "OpenCV HSV Blob",
+                "target_color": "Red",
+                "accuracy": "99.4%",
+                "fps": "60 FPS",
+                "velocity_peak": "2.84 m/s",
+                "displacement_max": "1.25 m",
+                "gravity_verified": "9.81 m/s\u00b2",
+                "sync_percentage": "99.4%",
+                "pe_max": "4.86 J",
+                "ke_max": "4.62 J",
+                "roundtable": "**Professor Nova**: Simple Harmonic Motion is fully confirmed. Potential Energy peaks at angular limits $E_p = mgh$, while Kinetic Energy peaks at the vertical axis $E_k = \\frac{1}{2}mv^2$. Total mechanical energy remains beautifully constant.\n\n**Galileo**: Intriguing! If we ran this exact pendulum on Mars, the oscillation period $T = 2\\pi\\sqrt{L/g}$ would double because Martian gravity is only $3.71\\text{ m/s}^2$!\n\n**Dr. Telemetry**: The coordinate resolution shows low tracking noise. The client-side absolute difference filter ($r - g > 18$) kept the bounding box locked even during rapid shadow swings."
+            }
+        },
+        {
+            "id": "exp_projectile_live_02",
+            "name": "Parabolic Projectile Launch",
+            "date": "2026-05-31",
+            "metrics": {
+                "subject": "Physics",
+                "tier": "Advanced",
+                "tracking_method": "YOLOv8 Target Tracker",
+                "target_color": "Green",
+                "accuracy": "98.7%",
+                "fps": "58 FPS",
+                "velocity_peak": "8.50 m/s",
+                "displacement_max": "3.40 m",
+                "gravity_verified": "9.80 m/s\u00b2",
+                "sync_percentage": "98.9%",
+                "pe_max": "12.40 J",
+                "ke_max": "18.20 J",
+                "roundtable": "**Professor Nova**: The launch vector conforms beautifully to Newton's equations of motion. Decomposing the velocity vector gives us the vertical parameter $v_y(t) = v_0 \\sin\\theta - gt$ and horizontal parameter $v_x(t) = v_0 \\cos\\theta$.\n\n**Galileo**: Splendid trajectory! In a lunar vacuum, the projectile would form a mathematically perfect parabola. Here, air resistance slightly skews the symmetry, yielding a classical aerodynamic glide.\n\n**Dr. Telemetry**: The YOLOv8 model maintained a $98.7\\%$ tracking confidence. No coordinate filtering glitches were observed during the deceleration phase."
+            }
+        },
+        {
+            "id": "exp_1780457529",
+            "name": "Free Fall Drop",
+            "metrics": {
+                "parameters": {
+                    "height": 50.0,
+                    "mass": 1.0,
+                    "gravity": 9.81
+                },
+                "time_of_flight": 3.193,
+                "final_velocity": -31.321,
+                "series": [
+                    {
+                        "time": 0.0,
+                        "height": 50.0,
+                        "velocity": -0.0,
+                        "kinetic_energy": 0.0,
+                        "potential_energy": 490.5,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.017,
+                        "height": 49.999,
+                        "velocity": -0.164,
+                        "kinetic_energy": 0.013,
+                        "potential_energy": 490.487,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.033,
+                        "height": 49.995,
+                        "velocity": -0.327,
+                        "kinetic_energy": 0.053,
+                        "potential_energy": 490.447,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.05,
+                        "height": 49.988,
+                        "velocity": -0.491,
+                        "kinetic_energy": 0.12,
+                        "potential_energy": 490.38,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.067,
+                        "height": 49.978,
+                        "velocity": -0.654,
+                        "kinetic_energy": 0.214,
+                        "potential_energy": 490.286,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.083,
+                        "height": 49.966,
+                        "velocity": -0.818,
+                        "kinetic_energy": 0.334,
+                        "potential_energy": 490.166,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.1,
+                        "height": 49.951,
+                        "velocity": -0.981,
+                        "kinetic_energy": 0.481,
+                        "potential_energy": 490.019,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.117,
+                        "height": 49.933,
+                        "velocity": -1.145,
+                        "kinetic_energy": 0.655,
+                        "potential_energy": 489.845,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.133,
+                        "height": 49.913,
+                        "velocity": -1.308,
+                        "kinetic_energy": 0.855,
+                        "potential_energy": 489.645,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.15,
+                        "height": 49.89,
+                        "velocity": -1.472,
+                        "kinetic_energy": 1.083,
+                        "potential_energy": 489.417,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.167,
+                        "height": 49.864,
+                        "velocity": -1.635,
+                        "kinetic_energy": 1.337,
+                        "potential_energy": 489.163,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.183,
+                        "height": 49.835,
+                        "velocity": -1.798,
+                        "kinetic_energy": 1.617,
+                        "potential_energy": 488.883,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.2,
+                        "height": 49.804,
+                        "velocity": -1.962,
+                        "kinetic_energy": 1.925,
+                        "potential_energy": 488.575,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.217,
+                        "height": 49.77,
+                        "velocity": -2.126,
+                        "kinetic_energy": 2.259,
+                        "potential_energy": 488.241,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.233,
+                        "height": 49.733,
+                        "velocity": -2.289,
+                        "kinetic_energy": 2.62,
+                        "potential_energy": 487.88,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.25,
+                        "height": 49.693,
+                        "velocity": -2.453,
+                        "kinetic_energy": 3.007,
+                        "potential_energy": 487.493,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.267,
+                        "height": 49.651,
+                        "velocity": -2.616,
+                        "kinetic_energy": 3.422,
+                        "potential_energy": 487.078,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.283,
+                        "height": 49.606,
+                        "velocity": -2.78,
+                        "kinetic_energy": 3.863,
+                        "potential_energy": 486.637,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.3,
+                        "height": 49.559,
+                        "velocity": -2.943,
+                        "kinetic_energy": 4.331,
+                        "potential_energy": 486.169,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.317,
+                        "height": 49.508,
+                        "velocity": -3.107,
+                        "kinetic_energy": 4.825,
+                        "potential_energy": 485.675,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.333,
+                        "height": 49.455,
+                        "velocity": -3.27,
+                        "kinetic_energy": 5.346,
+                        "potential_energy": 485.154,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.35,
+                        "height": 49.399,
+                        "velocity": -3.433,
+                        "kinetic_energy": 5.894,
+                        "potential_energy": 484.606,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.367,
+                        "height": 49.341,
+                        "velocity": -3.597,
+                        "kinetic_energy": 6.469,
+                        "potential_energy": 484.031,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.383,
+                        "height": 49.279,
+                        "velocity": -3.76,
+                        "kinetic_energy": 7.071,
+                        "potential_energy": 483.429,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.4,
+                        "height": 49.215,
+                        "velocity": -3.924,
+                        "kinetic_energy": 7.699,
+                        "potential_energy": 482.801,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.417,
+                        "height": 49.148,
+                        "velocity": -4.088,
+                        "kinetic_energy": 8.354,
+                        "potential_energy": 482.146,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.433,
+                        "height": 49.079,
+                        "velocity": -4.251,
+                        "kinetic_energy": 9.036,
+                        "potential_energy": 481.464,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.45,
+                        "height": 49.007,
+                        "velocity": -4.415,
+                        "kinetic_energy": 9.744,
+                        "potential_energy": 480.756,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.467,
+                        "height": 48.932,
+                        "velocity": -4.578,
+                        "kinetic_energy": 10.479,
+                        "potential_energy": 480.021,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.483,
+                        "height": 48.854,
+                        "velocity": -4.742,
+                        "kinetic_energy": 11.241,
+                        "potential_energy": 479.259,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.5,
+                        "height": 48.774,
+                        "velocity": -4.905,
+                        "kinetic_energy": 12.03,
+                        "potential_energy": 478.47,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.517,
+                        "height": 48.691,
+                        "velocity": -5.068,
+                        "kinetic_energy": 12.845,
+                        "potential_energy": 477.655,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.533,
+                        "height": 48.605,
+                        "velocity": -5.232,
+                        "kinetic_energy": 13.687,
+                        "potential_energy": 476.813,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.55,
+                        "height": 48.516,
+                        "velocity": -5.396,
+                        "kinetic_energy": 14.556,
+                        "potential_energy": 475.944,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.567,
+                        "height": 48.425,
+                        "velocity": -5.559,
+                        "kinetic_energy": 15.451,
+                        "potential_energy": 475.049,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.583,
+                        "height": 48.331,
+                        "velocity": -5.723,
+                        "kinetic_energy": 16.374,
+                        "potential_energy": 474.126,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.6,
+                        "height": 48.234,
+                        "velocity": -5.886,
+                        "kinetic_energy": 17.322,
+                        "potential_energy": 473.178,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.617,
+                        "height": 48.135,
+                        "velocity": -6.05,
+                        "kinetic_energy": 18.298,
+                        "potential_energy": 472.202,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.633,
+                        "height": 48.033,
+                        "velocity": -6.213,
+                        "kinetic_energy": 19.301,
+                        "potential_energy": 471.199,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.65,
+                        "height": 47.928,
+                        "velocity": -6.377,
+                        "kinetic_energy": 20.33,
+                        "potential_energy": 470.17,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.667,
+                        "height": 47.82,
+                        "velocity": -6.54,
+                        "kinetic_energy": 21.386,
+                        "potential_energy": 469.114,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.683,
+                        "height": 47.71,
+                        "velocity": -6.704,
+                        "kinetic_energy": 22.468,
+                        "potential_energy": 468.032,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.7,
+                        "height": 47.597,
+                        "velocity": -6.867,
+                        "kinetic_energy": 23.578,
+                        "potential_energy": 466.922,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.717,
+                        "height": 47.481,
+                        "velocity": -7.031,
+                        "kinetic_energy": 24.714,
+                        "potential_energy": 465.786,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.733,
+                        "height": 47.362,
+                        "velocity": -7.194,
+                        "kinetic_energy": 25.877,
+                        "potential_energy": 464.623,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.75,
+                        "height": 47.241,
+                        "velocity": -7.357,
+                        "kinetic_energy": 27.066,
+                        "potential_energy": 463.434,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.767,
+                        "height": 47.117,
+                        "velocity": -7.521,
+                        "kinetic_energy": 28.283,
+                        "potential_energy": 462.217,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.783,
+                        "height": 46.99,
+                        "velocity": -7.684,
+                        "kinetic_energy": 29.526,
+                        "potential_energy": 460.974,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.8,
+                        "height": 46.861,
+                        "velocity": -7.848,
+                        "kinetic_energy": 30.796,
+                        "potential_energy": 459.704,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.817,
+                        "height": 46.729,
+                        "velocity": -8.011,
+                        "kinetic_energy": 32.092,
+                        "potential_energy": 458.408,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.833,
+                        "height": 46.594,
+                        "velocity": -8.175,
+                        "kinetic_energy": 33.415,
+                        "potential_energy": 457.085,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.85,
+                        "height": 46.456,
+                        "velocity": -8.338,
+                        "kinetic_energy": 34.765,
+                        "potential_energy": 455.735,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.867,
+                        "height": 46.316,
+                        "velocity": -8.502,
+                        "kinetic_energy": 36.142,
+                        "potential_energy": 454.358,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.883,
+                        "height": 46.173,
+                        "velocity": -8.665,
+                        "kinetic_energy": 37.545,
+                        "potential_energy": 452.955,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.9,
+                        "height": 46.027,
+                        "velocity": -8.829,
+                        "kinetic_energy": 38.976,
+                        "potential_energy": 451.524,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.917,
+                        "height": 45.878,
+                        "velocity": -8.992,
+                        "kinetic_energy": 40.433,
+                        "potential_energy": 450.067,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.933,
+                        "height": 45.727,
+                        "velocity": -9.156,
+                        "kinetic_energy": 41.916,
+                        "potential_energy": 448.584,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.95,
+                        "height": 45.573,
+                        "velocity": -9.319,
+                        "kinetic_energy": 43.427,
+                        "potential_energy": 447.073,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.967,
+                        "height": 45.417,
+                        "velocity": -9.483,
+                        "kinetic_energy": 44.964,
+                        "potential_energy": 445.536,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.983,
+                        "height": 45.257,
+                        "velocity": -9.646,
+                        "kinetic_energy": 46.527,
+                        "potential_energy": 443.973,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.0,
+                        "height": 45.095,
+                        "velocity": -9.81,
+                        "kinetic_energy": 48.118,
+                        "potential_energy": 442.382,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.017,
+                        "height": 44.93,
+                        "velocity": -9.973,
+                        "kinetic_energy": 49.735,
+                        "potential_energy": 440.765,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.033,
+                        "height": 44.763,
+                        "velocity": -10.137,
+                        "kinetic_energy": 51.379,
+                        "potential_energy": 439.121,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.05,
+                        "height": 44.592,
+                        "velocity": -10.301,
+                        "kinetic_energy": 53.05,
+                        "potential_energy": 437.45,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.067,
+                        "height": 44.419,
+                        "velocity": -10.464,
+                        "kinetic_energy": 54.748,
+                        "potential_energy": 435.752,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.083,
+                        "height": 44.243,
+                        "velocity": -10.627,
+                        "kinetic_energy": 56.472,
+                        "potential_energy": 434.028,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.1,
+                        "height": 44.065,
+                        "velocity": -10.791,
+                        "kinetic_energy": 58.223,
+                        "potential_energy": 432.277,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.117,
+                        "height": 43.884,
+                        "velocity": -10.955,
+                        "kinetic_energy": 60.001,
+                        "potential_energy": 430.499,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.133,
+                        "height": 43.7,
+                        "velocity": -11.118,
+                        "kinetic_energy": 61.805,
+                        "potential_energy": 428.695,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.15,
+                        "height": 43.513,
+                        "velocity": -11.281,
+                        "kinetic_energy": 63.636,
+                        "potential_energy": 426.864,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.167,
+                        "height": 43.324,
+                        "velocity": -11.445,
+                        "kinetic_energy": 65.494,
+                        "potential_energy": 425.006,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.183,
+                        "height": 43.132,
+                        "velocity": -11.609,
+                        "kinetic_energy": 67.379,
+                        "potential_energy": 423.121,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.2,
+                        "height": 42.937,
+                        "velocity": -11.772,
+                        "kinetic_energy": 69.29,
+                        "potential_energy": 421.21,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.217,
+                        "height": 42.739,
+                        "velocity": -11.935,
+                        "kinetic_energy": 71.228,
+                        "potential_energy": 419.272,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.233,
+                        "height": 42.539,
+                        "velocity": -12.099,
+                        "kinetic_energy": 73.193,
+                        "potential_energy": 417.307,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.25,
+                        "height": 42.336,
+                        "velocity": -12.263,
+                        "kinetic_energy": 75.184,
+                        "potential_energy": 415.316,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.267,
+                        "height": 42.13,
+                        "velocity": -12.426,
+                        "kinetic_energy": 77.203,
+                        "potential_energy": 413.297,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.283,
+                        "height": 41.922,
+                        "velocity": -12.589,
+                        "kinetic_energy": 79.248,
+                        "potential_energy": 411.252,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.3,
+                        "height": 41.711,
+                        "velocity": -12.753,
+                        "kinetic_energy": 81.32,
+                        "potential_energy": 409.18,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.317,
+                        "height": 41.497,
+                        "velocity": -12.917,
+                        "kinetic_energy": 83.418,
+                        "potential_energy": 407.082,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.333,
+                        "height": 41.28,
+                        "velocity": -13.08,
+                        "kinetic_energy": 85.543,
+                        "potential_energy": 404.957,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.35,
+                        "height": 41.061,
+                        "velocity": -13.244,
+                        "kinetic_energy": 87.695,
+                        "potential_energy": 402.805,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.367,
+                        "height": 40.839,
+                        "velocity": -13.407,
+                        "kinetic_energy": 89.874,
+                        "potential_energy": 400.626,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.383,
+                        "height": 40.614,
+                        "velocity": -13.571,
+                        "kinetic_energy": 92.079,
+                        "potential_energy": 398.421,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.4,
+                        "height": 40.386,
+                        "velocity": -13.734,
+                        "kinetic_energy": 94.311,
+                        "potential_energy": 396.189,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.417,
+                        "height": 40.156,
+                        "velocity": -13.898,
+                        "kinetic_energy": 96.57,
+                        "potential_energy": 393.93,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.433,
+                        "height": 39.923,
+                        "velocity": -14.061,
+                        "kinetic_energy": 98.856,
+                        "potential_energy": 391.644,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.45,
+                        "height": 39.687,
+                        "velocity": -14.225,
+                        "kinetic_energy": 101.168,
+                        "potential_energy": 389.332,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.467,
+                        "height": 39.449,
+                        "velocity": -14.388,
+                        "kinetic_energy": 103.507,
+                        "potential_energy": 386.993,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.483,
+                        "height": 39.208,
+                        "velocity": -14.552,
+                        "kinetic_energy": 105.873,
+                        "potential_energy": 384.627,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.5,
+                        "height": 38.964,
+                        "velocity": -14.715,
+                        "kinetic_energy": 108.266,
+                        "potential_energy": 382.234,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.517,
+                        "height": 38.717,
+                        "velocity": -14.879,
+                        "kinetic_energy": 110.685,
+                        "potential_energy": 379.815,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.533,
+                        "height": 38.468,
+                        "velocity": -15.042,
+                        "kinetic_energy": 113.131,
+                        "potential_energy": 377.369,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.55,
+                        "height": 38.216,
+                        "velocity": -15.206,
+                        "kinetic_energy": 115.604,
+                        "potential_energy": 374.896,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.567,
+                        "height": 37.961,
+                        "velocity": -15.369,
+                        "kinetic_energy": 118.103,
+                        "potential_energy": 372.397,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.583,
+                        "height": 37.703,
+                        "velocity": -15.533,
+                        "kinetic_energy": 120.629,
+                        "potential_energy": 369.871,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.6,
+                        "height": 37.443,
+                        "velocity": -15.696,
+                        "kinetic_energy": 123.182,
+                        "potential_energy": 367.318,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.617,
+                        "height": 37.18,
+                        "velocity": -15.86,
+                        "kinetic_energy": 125.762,
+                        "potential_energy": 364.738,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.633,
+                        "height": 36.915,
+                        "velocity": -16.023,
+                        "kinetic_energy": 128.368,
+                        "potential_energy": 362.132,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.65,
+                        "height": 36.646,
+                        "velocity": -16.186,
+                        "kinetic_energy": 131.001,
+                        "potential_energy": 359.499,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.667,
+                        "height": 36.375,
+                        "velocity": -16.35,
+                        "kinetic_energy": 133.661,
+                        "potential_energy": 356.839,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.683,
+                        "height": 36.101,
+                        "velocity": -16.514,
+                        "kinetic_energy": 136.348,
+                        "potential_energy": 354.152,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.7,
+                        "height": 35.825,
+                        "velocity": -16.677,
+                        "kinetic_energy": 139.061,
+                        "potential_energy": 351.439,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.717,
+                        "height": 35.545,
+                        "velocity": -16.84,
+                        "kinetic_energy": 141.801,
+                        "potential_energy": 348.699,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.733,
+                        "height": 35.263,
+                        "velocity": -17.004,
+                        "kinetic_energy": 144.568,
+                        "potential_energy": 345.932,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.75,
+                        "height": 34.978,
+                        "velocity": -17.168,
+                        "kinetic_energy": 147.362,
+                        "potential_energy": 343.138,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.767,
+                        "height": 34.691,
+                        "velocity": -17.331,
+                        "kinetic_energy": 150.182,
+                        "potential_energy": 340.318,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.783,
+                        "height": 34.401,
+                        "velocity": -17.494,
+                        "kinetic_energy": 153.029,
+                        "potential_energy": 337.471,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.8,
+                        "height": 34.108,
+                        "velocity": -17.658,
+                        "kinetic_energy": 155.902,
+                        "potential_energy": 334.598,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.817,
+                        "height": 33.812,
+                        "velocity": -17.822,
+                        "kinetic_energy": 158.803,
+                        "potential_energy": 331.697,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.833,
+                        "height": 33.514,
+                        "velocity": -17.985,
+                        "kinetic_energy": 161.73,
+                        "potential_energy": 328.77,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.85,
+                        "height": 33.213,
+                        "velocity": -18.148,
+                        "kinetic_energy": 164.684,
+                        "potential_energy": 325.816,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.867,
+                        "height": 32.909,
+                        "velocity": -18.312,
+                        "kinetic_energy": 167.665,
+                        "potential_energy": 322.835,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.883,
+                        "height": 32.602,
+                        "velocity": -18.476,
+                        "kinetic_energy": 170.672,
+                        "potential_energy": 319.828,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.9,
+                        "height": 32.293,
+                        "velocity": -18.639,
+                        "kinetic_energy": 173.706,
+                        "potential_energy": 316.794,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.917,
+                        "height": 31.981,
+                        "velocity": -18.803,
+                        "kinetic_energy": 176.767,
+                        "potential_energy": 313.733,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.933,
+                        "height": 31.666,
+                        "velocity": -18.966,
+                        "kinetic_energy": 179.855,
+                        "potential_energy": 310.645,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.95,
+                        "height": 31.349,
+                        "velocity": -19.13,
+                        "kinetic_energy": 182.969,
+                        "potential_energy": 307.531,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.967,
+                        "height": 31.029,
+                        "velocity": -19.293,
+                        "kinetic_energy": 186.11,
+                        "potential_energy": 304.39,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.983,
+                        "height": 30.706,
+                        "velocity": -19.457,
+                        "kinetic_energy": 189.278,
+                        "potential_energy": 301.222,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.0,
+                        "height": 30.38,
+                        "velocity": -19.62,
+                        "kinetic_energy": 192.472,
+                        "potential_energy": 298.028,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.017,
+                        "height": 30.052,
+                        "velocity": -19.784,
+                        "kinetic_energy": 195.693,
+                        "potential_energy": 294.807,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.033,
+                        "height": 29.721,
+                        "velocity": -19.947,
+                        "kinetic_energy": 198.941,
+                        "potential_energy": 291.559,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.05,
+                        "height": 29.387,
+                        "velocity": -20.11,
+                        "kinetic_energy": 202.216,
+                        "potential_energy": 288.284,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.067,
+                        "height": 29.05,
+                        "velocity": -20.274,
+                        "kinetic_energy": 205.518,
+                        "potential_energy": 284.982,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.083,
+                        "height": 28.711,
+                        "velocity": -20.438,
+                        "kinetic_energy": 208.846,
+                        "potential_energy": 281.654,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.1,
+                        "height": 28.369,
+                        "velocity": -20.601,
+                        "kinetic_energy": 212.201,
+                        "potential_energy": 278.299,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.117,
+                        "height": 28.024,
+                        "velocity": -20.765,
+                        "kinetic_energy": 215.582,
+                        "potential_energy": 274.918,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.133,
+                        "height": 27.677,
+                        "velocity": -20.928,
+                        "kinetic_energy": 218.991,
+                        "potential_energy": 271.509,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.15,
+                        "height": 27.327,
+                        "velocity": -21.091,
+                        "kinetic_energy": 222.426,
+                        "potential_energy": 268.074,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.167,
+                        "height": 26.974,
+                        "velocity": -21.255,
+                        "kinetic_energy": 225.888,
+                        "potential_energy": 264.612,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.183,
+                        "height": 26.618,
+                        "velocity": -21.418,
+                        "kinetic_energy": 229.376,
+                        "potential_energy": 261.124,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.2,
+                        "height": 26.26,
+                        "velocity": -21.582,
+                        "kinetic_energy": 232.891,
+                        "potential_energy": 257.609,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.217,
+                        "height": 25.899,
+                        "velocity": -21.746,
+                        "kinetic_energy": 236.433,
+                        "potential_energy": 254.067,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.233,
+                        "height": 25.535,
+                        "velocity": -21.909,
+                        "kinetic_energy": 240.002,
+                        "potential_energy": 250.498,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.25,
+                        "height": 25.168,
+                        "velocity": -22.073,
+                        "kinetic_energy": 243.598,
+                        "potential_energy": 246.902,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.267,
+                        "height": 24.799,
+                        "velocity": -22.236,
+                        "kinetic_energy": 247.22,
+                        "potential_energy": 243.28,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.283,
+                        "height": 24.427,
+                        "velocity": -22.399,
+                        "kinetic_energy": 250.869,
+                        "potential_energy": 239.631,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.3,
+                        "height": 24.053,
+                        "velocity": -22.563,
+                        "kinetic_energy": 254.544,
+                        "potential_energy": 235.956,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.317,
+                        "height": 23.675,
+                        "velocity": -22.726,
+                        "kinetic_energy": 258.247,
+                        "potential_energy": 232.253,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.333,
+                        "height": 23.295,
+                        "velocity": -22.89,
+                        "kinetic_energy": 261.976,
+                        "potential_energy": 228.524,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.35,
+                        "height": 22.912,
+                        "velocity": -23.054,
+                        "kinetic_energy": 265.732,
+                        "potential_energy": 224.768,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.367,
+                        "height": 22.527,
+                        "velocity": -23.217,
+                        "kinetic_energy": 269.515,
+                        "potential_energy": 220.985,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.383,
+                        "height": 22.138,
+                        "velocity": -23.381,
+                        "kinetic_energy": 273.324,
+                        "potential_energy": 217.176,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.4,
+                        "height": 21.747,
+                        "velocity": -23.544,
+                        "kinetic_energy": 277.16,
+                        "potential_energy": 213.34,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.417,
+                        "height": 21.353,
+                        "velocity": -23.707,
+                        "kinetic_energy": 281.023,
+                        "potential_energy": 209.477,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.433,
+                        "height": 20.957,
+                        "velocity": -23.871,
+                        "kinetic_energy": 284.912,
+                        "potential_energy": 205.588,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.45,
+                        "height": 20.558,
+                        "velocity": -24.035,
+                        "kinetic_energy": 288.829,
+                        "potential_energy": 201.671,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.467,
+                        "height": 20.156,
+                        "velocity": -24.198,
+                        "kinetic_energy": 292.772,
+                        "potential_energy": 197.728,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.483,
+                        "height": 19.751,
+                        "velocity": -24.362,
+                        "kinetic_energy": 296.741,
+                        "potential_energy": 193.759,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.5,
+                        "height": 19.344,
+                        "velocity": -24.525,
+                        "kinetic_energy": 300.738,
+                        "potential_energy": 189.762,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.517,
+                        "height": 18.934,
+                        "velocity": -24.689,
+                        "kinetic_energy": 304.761,
+                        "potential_energy": 185.739,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.533,
+                        "height": 18.521,
+                        "velocity": -24.852,
+                        "kinetic_energy": 308.811,
+                        "potential_energy": 181.689,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.55,
+                        "height": 18.105,
+                        "velocity": -25.015,
+                        "kinetic_energy": 312.888,
+                        "potential_energy": 177.612,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.567,
+                        "height": 17.687,
+                        "velocity": -25.179,
+                        "kinetic_energy": 316.991,
+                        "potential_energy": 173.509,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.583,
+                        "height": 17.266,
+                        "velocity": -25.343,
+                        "kinetic_energy": 321.121,
+                        "potential_energy": 169.379,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.6,
+                        "height": 16.842,
+                        "velocity": -25.506,
+                        "kinetic_energy": 325.278,
+                        "potential_energy": 165.222,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.617,
+                        "height": 16.416,
+                        "velocity": -25.67,
+                        "kinetic_energy": 329.462,
+                        "potential_energy": 161.038,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.633,
+                        "height": 15.987,
+                        "velocity": -25.833,
+                        "kinetic_energy": 333.672,
+                        "potential_energy": 156.828,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.65,
+                        "height": 15.555,
+                        "velocity": -25.997,
+                        "kinetic_energy": 337.909,
+                        "potential_energy": 152.591,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.667,
+                        "height": 15.12,
+                        "velocity": -26.16,
+                        "kinetic_energy": 342.173,
+                        "potential_energy": 148.327,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.683,
+                        "height": 14.683,
+                        "velocity": -26.323,
+                        "kinetic_energy": 346.463,
+                        "potential_energy": 144.037,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.7,
+                        "height": 14.243,
+                        "velocity": -26.487,
+                        "kinetic_energy": 350.781,
+                        "potential_energy": 139.719,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.717,
+                        "height": 13.8,
+                        "velocity": -26.651,
+                        "kinetic_energy": 355.125,
+                        "potential_energy": 135.375,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.733,
+                        "height": 13.354,
+                        "velocity": -26.814,
+                        "kinetic_energy": 359.495,
+                        "potential_energy": 131.005,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.75,
+                        "height": 12.906,
+                        "velocity": -26.978,
+                        "kinetic_energy": 363.893,
+                        "potential_energy": 126.607,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.767,
+                        "height": 12.455,
+                        "velocity": -27.141,
+                        "kinetic_energy": 368.317,
+                        "potential_energy": 122.183,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.783,
+                        "height": 12.001,
+                        "velocity": -27.305,
+                        "kinetic_energy": 372.768,
+                        "potential_energy": 117.732,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.8,
+                        "height": 11.545,
+                        "velocity": -27.468,
+                        "kinetic_energy": 377.246,
+                        "potential_energy": 113.254,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.817,
+                        "height": 11.086,
+                        "velocity": -27.631,
+                        "kinetic_energy": 381.75,
+                        "potential_energy": 108.75,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.833,
+                        "height": 10.624,
+                        "velocity": -27.795,
+                        "kinetic_energy": 386.281,
+                        "potential_energy": 104.219,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.85,
+                        "height": 10.159,
+                        "velocity": -27.959,
+                        "kinetic_energy": 390.839,
+                        "potential_energy": 99.661,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.867,
+                        "height": 9.692,
+                        "velocity": -28.122,
+                        "kinetic_energy": 395.423,
+                        "potential_energy": 95.077,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.883,
+                        "height": 9.222,
+                        "velocity": -28.286,
+                        "kinetic_energy": 400.035,
+                        "potential_energy": 90.465,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.9,
+                        "height": 8.749,
+                        "velocity": -28.449,
+                        "kinetic_energy": 404.673,
+                        "potential_energy": 85.827,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.917,
+                        "height": 8.273,
+                        "velocity": -28.613,
+                        "kinetic_energy": 409.338,
+                        "potential_energy": 81.162,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.933,
+                        "height": 7.795,
+                        "velocity": -28.776,
+                        "kinetic_energy": 414.029,
+                        "potential_energy": 76.471,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.95,
+                        "height": 7.314,
+                        "velocity": -28.94,
+                        "kinetic_energy": 418.747,
+                        "potential_energy": 71.753,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.967,
+                        "height": 6.831,
+                        "velocity": -29.103,
+                        "kinetic_energy": 423.492,
+                        "potential_energy": 67.008,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.983,
+                        "height": 6.344,
+                        "velocity": -29.267,
+                        "kinetic_energy": 428.264,
+                        "potential_energy": 62.236,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.0,
+                        "height": 5.855,
+                        "velocity": -29.43,
+                        "kinetic_energy": 433.062,
+                        "potential_energy": 57.438,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.017,
+                        "height": 5.363,
+                        "velocity": -29.594,
+                        "kinetic_energy": 437.888,
+                        "potential_energy": 52.612,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.033,
+                        "height": 4.869,
+                        "velocity": -29.757,
+                        "kinetic_energy": 442.74,
+                        "potential_energy": 47.76,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.05,
+                        "height": 4.371,
+                        "velocity": -29.921,
+                        "kinetic_energy": 447.618,
+                        "potential_energy": 42.882,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.067,
+                        "height": 3.871,
+                        "velocity": -30.084,
+                        "kinetic_energy": 452.524,
+                        "potential_energy": 37.976,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.083,
+                        "height": 3.368,
+                        "velocity": -30.248,
+                        "kinetic_energy": 457.456,
+                        "potential_energy": 33.044,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.1,
+                        "height": 2.863,
+                        "velocity": -30.411,
+                        "kinetic_energy": 462.414,
+                        "potential_energy": 28.086,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.117,
+                        "height": 2.355,
+                        "velocity": -30.575,
+                        "kinetic_energy": 467.4,
+                        "potential_energy": 23.1,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.133,
+                        "height": 1.844,
+                        "velocity": -30.738,
+                        "kinetic_energy": 472.412,
+                        "potential_energy": 18.088,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.15,
+                        "height": 1.33,
+                        "velocity": -30.902,
+                        "kinetic_energy": 477.451,
+                        "potential_energy": 13.049,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.167,
+                        "height": 0.814,
+                        "velocity": -31.065,
+                        "kinetic_energy": 482.517,
+                        "potential_energy": 7.983,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.183,
+                        "height": 0.295,
+                        "velocity": -31.229,
+                        "kinetic_energy": 487.61,
+                        "potential_energy": 2.89,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.193,
+                        "height": 0.0,
+                        "velocity": -31.321,
+                        "kinetic_energy": 490.5,
+                        "potential_energy": 0.0,
+                        "total_energy": 490.5
+                    }
+                ]
+            },
+            "date": "2026-06-03"
+        },
+        {
+            "id": "exp_1780457683",
+            "name": "Free Fall Drop",
+            "metrics": {
+                "parameters": {
+                    "height": 50.0,
+                    "mass": 1.0,
+                    "gravity": 9.81
+                },
+                "time_of_flight": 3.193,
+                "final_velocity": -31.321,
+                "series": [
+                    {
+                        "time": 0.0,
+                        "height": 50.0,
+                        "velocity": -0.0,
+                        "kinetic_energy": 0.0,
+                        "potential_energy": 490.5,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.017,
+                        "height": 49.999,
+                        "velocity": -0.164,
+                        "kinetic_energy": 0.013,
+                        "potential_energy": 490.487,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.033,
+                        "height": 49.995,
+                        "velocity": -0.327,
+                        "kinetic_energy": 0.053,
+                        "potential_energy": 490.447,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.05,
+                        "height": 49.988,
+                        "velocity": -0.491,
+                        "kinetic_energy": 0.12,
+                        "potential_energy": 490.38,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.067,
+                        "height": 49.978,
+                        "velocity": -0.654,
+                        "kinetic_energy": 0.214,
+                        "potential_energy": 490.286,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.083,
+                        "height": 49.966,
+                        "velocity": -0.818,
+                        "kinetic_energy": 0.334,
+                        "potential_energy": 490.166,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.1,
+                        "height": 49.951,
+                        "velocity": -0.981,
+                        "kinetic_energy": 0.481,
+                        "potential_energy": 490.019,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.117,
+                        "height": 49.933,
+                        "velocity": -1.145,
+                        "kinetic_energy": 0.655,
+                        "potential_energy": 489.845,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.133,
+                        "height": 49.913,
+                        "velocity": -1.308,
+                        "kinetic_energy": 0.855,
+                        "potential_energy": 489.645,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.15,
+                        "height": 49.89,
+                        "velocity": -1.472,
+                        "kinetic_energy": 1.083,
+                        "potential_energy": 489.417,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.167,
+                        "height": 49.864,
+                        "velocity": -1.635,
+                        "kinetic_energy": 1.337,
+                        "potential_energy": 489.163,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.183,
+                        "height": 49.835,
+                        "velocity": -1.798,
+                        "kinetic_energy": 1.617,
+                        "potential_energy": 488.883,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.2,
+                        "height": 49.804,
+                        "velocity": -1.962,
+                        "kinetic_energy": 1.925,
+                        "potential_energy": 488.575,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.217,
+                        "height": 49.77,
+                        "velocity": -2.126,
+                        "kinetic_energy": 2.259,
+                        "potential_energy": 488.241,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.233,
+                        "height": 49.733,
+                        "velocity": -2.289,
+                        "kinetic_energy": 2.62,
+                        "potential_energy": 487.88,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.25,
+                        "height": 49.693,
+                        "velocity": -2.453,
+                        "kinetic_energy": 3.007,
+                        "potential_energy": 487.493,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.267,
+                        "height": 49.651,
+                        "velocity": -2.616,
+                        "kinetic_energy": 3.422,
+                        "potential_energy": 487.078,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.283,
+                        "height": 49.606,
+                        "velocity": -2.78,
+                        "kinetic_energy": 3.863,
+                        "potential_energy": 486.637,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.3,
+                        "height": 49.559,
+                        "velocity": -2.943,
+                        "kinetic_energy": 4.331,
+                        "potential_energy": 486.169,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.317,
+                        "height": 49.508,
+                        "velocity": -3.107,
+                        "kinetic_energy": 4.825,
+                        "potential_energy": 485.675,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.333,
+                        "height": 49.455,
+                        "velocity": -3.27,
+                        "kinetic_energy": 5.346,
+                        "potential_energy": 485.154,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.35,
+                        "height": 49.399,
+                        "velocity": -3.433,
+                        "kinetic_energy": 5.894,
+                        "potential_energy": 484.606,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.367,
+                        "height": 49.341,
+                        "velocity": -3.597,
+                        "kinetic_energy": 6.469,
+                        "potential_energy": 484.031,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.383,
+                        "height": 49.279,
+                        "velocity": -3.76,
+                        "kinetic_energy": 7.071,
+                        "potential_energy": 483.429,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.4,
+                        "height": 49.215,
+                        "velocity": -3.924,
+                        "kinetic_energy": 7.699,
+                        "potential_energy": 482.801,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.417,
+                        "height": 49.148,
+                        "velocity": -4.088,
+                        "kinetic_energy": 8.354,
+                        "potential_energy": 482.146,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.433,
+                        "height": 49.079,
+                        "velocity": -4.251,
+                        "kinetic_energy": 9.036,
+                        "potential_energy": 481.464,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.45,
+                        "height": 49.007,
+                        "velocity": -4.415,
+                        "kinetic_energy": 9.744,
+                        "potential_energy": 480.756,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.467,
+                        "height": 48.932,
+                        "velocity": -4.578,
+                        "kinetic_energy": 10.479,
+                        "potential_energy": 480.021,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.483,
+                        "height": 48.854,
+                        "velocity": -4.742,
+                        "kinetic_energy": 11.241,
+                        "potential_energy": 479.259,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.5,
+                        "height": 48.774,
+                        "velocity": -4.905,
+                        "kinetic_energy": 12.03,
+                        "potential_energy": 478.47,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.517,
+                        "height": 48.691,
+                        "velocity": -5.068,
+                        "kinetic_energy": 12.845,
+                        "potential_energy": 477.655,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.533,
+                        "height": 48.605,
+                        "velocity": -5.232,
+                        "kinetic_energy": 13.687,
+                        "potential_energy": 476.813,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.55,
+                        "height": 48.516,
+                        "velocity": -5.396,
+                        "kinetic_energy": 14.556,
+                        "potential_energy": 475.944,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.567,
+                        "height": 48.425,
+                        "velocity": -5.559,
+                        "kinetic_energy": 15.451,
+                        "potential_energy": 475.049,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.583,
+                        "height": 48.331,
+                        "velocity": -5.723,
+                        "kinetic_energy": 16.374,
+                        "potential_energy": 474.126,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.6,
+                        "height": 48.234,
+                        "velocity": -5.886,
+                        "kinetic_energy": 17.322,
+                        "potential_energy": 473.178,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.617,
+                        "height": 48.135,
+                        "velocity": -6.05,
+                        "kinetic_energy": 18.298,
+                        "potential_energy": 472.202,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.633,
+                        "height": 48.033,
+                        "velocity": -6.213,
+                        "kinetic_energy": 19.301,
+                        "potential_energy": 471.199,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.65,
+                        "height": 47.928,
+                        "velocity": -6.377,
+                        "kinetic_energy": 20.33,
+                        "potential_energy": 470.17,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.667,
+                        "height": 47.82,
+                        "velocity": -6.54,
+                        "kinetic_energy": 21.386,
+                        "potential_energy": 469.114,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.683,
+                        "height": 47.71,
+                        "velocity": -6.704,
+                        "kinetic_energy": 22.468,
+                        "potential_energy": 468.032,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.7,
+                        "height": 47.597,
+                        "velocity": -6.867,
+                        "kinetic_energy": 23.578,
+                        "potential_energy": 466.922,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.717,
+                        "height": 47.481,
+                        "velocity": -7.031,
+                        "kinetic_energy": 24.714,
+                        "potential_energy": 465.786,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.733,
+                        "height": 47.362,
+                        "velocity": -7.194,
+                        "kinetic_energy": 25.877,
+                        "potential_energy": 464.623,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.75,
+                        "height": 47.241,
+                        "velocity": -7.357,
+                        "kinetic_energy": 27.066,
+                        "potential_energy": 463.434,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.767,
+                        "height": 47.117,
+                        "velocity": -7.521,
+                        "kinetic_energy": 28.283,
+                        "potential_energy": 462.217,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.783,
+                        "height": 46.99,
+                        "velocity": -7.684,
+                        "kinetic_energy": 29.526,
+                        "potential_energy": 460.974,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.8,
+                        "height": 46.861,
+                        "velocity": -7.848,
+                        "kinetic_energy": 30.796,
+                        "potential_energy": 459.704,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.817,
+                        "height": 46.729,
+                        "velocity": -8.011,
+                        "kinetic_energy": 32.092,
+                        "potential_energy": 458.408,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.833,
+                        "height": 46.594,
+                        "velocity": -8.175,
+                        "kinetic_energy": 33.415,
+                        "potential_energy": 457.085,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.85,
+                        "height": 46.456,
+                        "velocity": -8.338,
+                        "kinetic_energy": 34.765,
+                        "potential_energy": 455.735,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.867,
+                        "height": 46.316,
+                        "velocity": -8.502,
+                        "kinetic_energy": 36.142,
+                        "potential_energy": 454.358,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.883,
+                        "height": 46.173,
+                        "velocity": -8.665,
+                        "kinetic_energy": 37.545,
+                        "potential_energy": 452.955,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.9,
+                        "height": 46.027,
+                        "velocity": -8.829,
+                        "kinetic_energy": 38.976,
+                        "potential_energy": 451.524,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.917,
+                        "height": 45.878,
+                        "velocity": -8.992,
+                        "kinetic_energy": 40.433,
+                        "potential_energy": 450.067,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.933,
+                        "height": 45.727,
+                        "velocity": -9.156,
+                        "kinetic_energy": 41.916,
+                        "potential_energy": 448.584,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.95,
+                        "height": 45.573,
+                        "velocity": -9.319,
+                        "kinetic_energy": 43.427,
+                        "potential_energy": 447.073,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.967,
+                        "height": 45.417,
+                        "velocity": -9.483,
+                        "kinetic_energy": 44.964,
+                        "potential_energy": 445.536,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.983,
+                        "height": 45.257,
+                        "velocity": -9.646,
+                        "kinetic_energy": 46.527,
+                        "potential_energy": 443.973,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.0,
+                        "height": 45.095,
+                        "velocity": -9.81,
+                        "kinetic_energy": 48.118,
+                        "potential_energy": 442.382,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.017,
+                        "height": 44.93,
+                        "velocity": -9.973,
+                        "kinetic_energy": 49.735,
+                        "potential_energy": 440.765,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.033,
+                        "height": 44.763,
+                        "velocity": -10.137,
+                        "kinetic_energy": 51.379,
+                        "potential_energy": 439.121,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.05,
+                        "height": 44.592,
+                        "velocity": -10.301,
+                        "kinetic_energy": 53.05,
+                        "potential_energy": 437.45,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.067,
+                        "height": 44.419,
+                        "velocity": -10.464,
+                        "kinetic_energy": 54.748,
+                        "potential_energy": 435.752,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.083,
+                        "height": 44.243,
+                        "velocity": -10.627,
+                        "kinetic_energy": 56.472,
+                        "potential_energy": 434.028,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.1,
+                        "height": 44.065,
+                        "velocity": -10.791,
+                        "kinetic_energy": 58.223,
+                        "potential_energy": 432.277,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.117,
+                        "height": 43.884,
+                        "velocity": -10.955,
+                        "kinetic_energy": 60.001,
+                        "potential_energy": 430.499,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.133,
+                        "height": 43.7,
+                        "velocity": -11.118,
+                        "kinetic_energy": 61.805,
+                        "potential_energy": 428.695,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.15,
+                        "height": 43.513,
+                        "velocity": -11.281,
+                        "kinetic_energy": 63.636,
+                        "potential_energy": 426.864,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.167,
+                        "height": 43.324,
+                        "velocity": -11.445,
+                        "kinetic_energy": 65.494,
+                        "potential_energy": 425.006,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.183,
+                        "height": 43.132,
+                        "velocity": -11.609,
+                        "kinetic_energy": 67.379,
+                        "potential_energy": 423.121,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.2,
+                        "height": 42.937,
+                        "velocity": -11.772,
+                        "kinetic_energy": 69.29,
+                        "potential_energy": 421.21,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.217,
+                        "height": 42.739,
+                        "velocity": -11.935,
+                        "kinetic_energy": 71.228,
+                        "potential_energy": 419.272,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.233,
+                        "height": 42.539,
+                        "velocity": -12.099,
+                        "kinetic_energy": 73.193,
+                        "potential_energy": 417.307,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.25,
+                        "height": 42.336,
+                        "velocity": -12.263,
+                        "kinetic_energy": 75.184,
+                        "potential_energy": 415.316,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.267,
+                        "height": 42.13,
+                        "velocity": -12.426,
+                        "kinetic_energy": 77.203,
+                        "potential_energy": 413.297,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.283,
+                        "height": 41.922,
+                        "velocity": -12.589,
+                        "kinetic_energy": 79.248,
+                        "potential_energy": 411.252,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.3,
+                        "height": 41.711,
+                        "velocity": -12.753,
+                        "kinetic_energy": 81.32,
+                        "potential_energy": 409.18,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.317,
+                        "height": 41.497,
+                        "velocity": -12.917,
+                        "kinetic_energy": 83.418,
+                        "potential_energy": 407.082,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.333,
+                        "height": 41.28,
+                        "velocity": -13.08,
+                        "kinetic_energy": 85.543,
+                        "potential_energy": 404.957,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.35,
+                        "height": 41.061,
+                        "velocity": -13.244,
+                        "kinetic_energy": 87.695,
+                        "potential_energy": 402.805,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.367,
+                        "height": 40.839,
+                        "velocity": -13.407,
+                        "kinetic_energy": 89.874,
+                        "potential_energy": 400.626,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.383,
+                        "height": 40.614,
+                        "velocity": -13.571,
+                        "kinetic_energy": 92.079,
+                        "potential_energy": 398.421,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.4,
+                        "height": 40.386,
+                        "velocity": -13.734,
+                        "kinetic_energy": 94.311,
+                        "potential_energy": 396.189,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.417,
+                        "height": 40.156,
+                        "velocity": -13.898,
+                        "kinetic_energy": 96.57,
+                        "potential_energy": 393.93,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.433,
+                        "height": 39.923,
+                        "velocity": -14.061,
+                        "kinetic_energy": 98.856,
+                        "potential_energy": 391.644,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.45,
+                        "height": 39.687,
+                        "velocity": -14.225,
+                        "kinetic_energy": 101.168,
+                        "potential_energy": 389.332,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.467,
+                        "height": 39.449,
+                        "velocity": -14.388,
+                        "kinetic_energy": 103.507,
+                        "potential_energy": 386.993,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.483,
+                        "height": 39.208,
+                        "velocity": -14.552,
+                        "kinetic_energy": 105.873,
+                        "potential_energy": 384.627,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.5,
+                        "height": 38.964,
+                        "velocity": -14.715,
+                        "kinetic_energy": 108.266,
+                        "potential_energy": 382.234,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.517,
+                        "height": 38.717,
+                        "velocity": -14.879,
+                        "kinetic_energy": 110.685,
+                        "potential_energy": 379.815,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.533,
+                        "height": 38.468,
+                        "velocity": -15.042,
+                        "kinetic_energy": 113.131,
+                        "potential_energy": 377.369,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.55,
+                        "height": 38.216,
+                        "velocity": -15.206,
+                        "kinetic_energy": 115.604,
+                        "potential_energy": 374.896,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.567,
+                        "height": 37.961,
+                        "velocity": -15.369,
+                        "kinetic_energy": 118.103,
+                        "potential_energy": 372.397,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.583,
+                        "height": 37.703,
+                        "velocity": -15.533,
+                        "kinetic_energy": 120.629,
+                        "potential_energy": 369.871,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.6,
+                        "height": 37.443,
+                        "velocity": -15.696,
+                        "kinetic_energy": 123.182,
+                        "potential_energy": 367.318,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.617,
+                        "height": 37.18,
+                        "velocity": -15.86,
+                        "kinetic_energy": 125.762,
+                        "potential_energy": 364.738,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.633,
+                        "height": 36.915,
+                        "velocity": -16.023,
+                        "kinetic_energy": 128.368,
+                        "potential_energy": 362.132,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.65,
+                        "height": 36.646,
+                        "velocity": -16.186,
+                        "kinetic_energy": 131.001,
+                        "potential_energy": 359.499,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.667,
+                        "height": 36.375,
+                        "velocity": -16.35,
+                        "kinetic_energy": 133.661,
+                        "potential_energy": 356.839,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.683,
+                        "height": 36.101,
+                        "velocity": -16.514,
+                        "kinetic_energy": 136.348,
+                        "potential_energy": 354.152,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.7,
+                        "height": 35.825,
+                        "velocity": -16.677,
+                        "kinetic_energy": 139.061,
+                        "potential_energy": 351.439,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.717,
+                        "height": 35.545,
+                        "velocity": -16.84,
+                        "kinetic_energy": 141.801,
+                        "potential_energy": 348.699,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.733,
+                        "height": 35.263,
+                        "velocity": -17.004,
+                        "kinetic_energy": 144.568,
+                        "potential_energy": 345.932,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.75,
+                        "height": 34.978,
+                        "velocity": -17.168,
+                        "kinetic_energy": 147.362,
+                        "potential_energy": 343.138,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.767,
+                        "height": 34.691,
+                        "velocity": -17.331,
+                        "kinetic_energy": 150.182,
+                        "potential_energy": 340.318,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.783,
+                        "height": 34.401,
+                        "velocity": -17.494,
+                        "kinetic_energy": 153.029,
+                        "potential_energy": 337.471,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.8,
+                        "height": 34.108,
+                        "velocity": -17.658,
+                        "kinetic_energy": 155.902,
+                        "potential_energy": 334.598,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.817,
+                        "height": 33.812,
+                        "velocity": -17.822,
+                        "kinetic_energy": 158.803,
+                        "potential_energy": 331.697,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.833,
+                        "height": 33.514,
+                        "velocity": -17.985,
+                        "kinetic_energy": 161.73,
+                        "potential_energy": 328.77,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.85,
+                        "height": 33.213,
+                        "velocity": -18.148,
+                        "kinetic_energy": 164.684,
+                        "potential_energy": 325.816,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.867,
+                        "height": 32.909,
+                        "velocity": -18.312,
+                        "kinetic_energy": 167.665,
+                        "potential_energy": 322.835,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.883,
+                        "height": 32.602,
+                        "velocity": -18.476,
+                        "kinetic_energy": 170.672,
+                        "potential_energy": 319.828,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.9,
+                        "height": 32.293,
+                        "velocity": -18.639,
+                        "kinetic_energy": 173.706,
+                        "potential_energy": 316.794,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.917,
+                        "height": 31.981,
+                        "velocity": -18.803,
+                        "kinetic_energy": 176.767,
+                        "potential_energy": 313.733,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.933,
+                        "height": 31.666,
+                        "velocity": -18.966,
+                        "kinetic_energy": 179.855,
+                        "potential_energy": 310.645,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.95,
+                        "height": 31.349,
+                        "velocity": -19.13,
+                        "kinetic_energy": 182.969,
+                        "potential_energy": 307.531,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.967,
+                        "height": 31.029,
+                        "velocity": -19.293,
+                        "kinetic_energy": 186.11,
+                        "potential_energy": 304.39,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.983,
+                        "height": 30.706,
+                        "velocity": -19.457,
+                        "kinetic_energy": 189.278,
+                        "potential_energy": 301.222,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.0,
+                        "height": 30.38,
+                        "velocity": -19.62,
+                        "kinetic_energy": 192.472,
+                        "potential_energy": 298.028,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.017,
+                        "height": 30.052,
+                        "velocity": -19.784,
+                        "kinetic_energy": 195.693,
+                        "potential_energy": 294.807,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.033,
+                        "height": 29.721,
+                        "velocity": -19.947,
+                        "kinetic_energy": 198.941,
+                        "potential_energy": 291.559,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.05,
+                        "height": 29.387,
+                        "velocity": -20.11,
+                        "kinetic_energy": 202.216,
+                        "potential_energy": 288.284,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.067,
+                        "height": 29.05,
+                        "velocity": -20.274,
+                        "kinetic_energy": 205.518,
+                        "potential_energy": 284.982,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.083,
+                        "height": 28.711,
+                        "velocity": -20.438,
+                        "kinetic_energy": 208.846,
+                        "potential_energy": 281.654,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.1,
+                        "height": 28.369,
+                        "velocity": -20.601,
+                        "kinetic_energy": 212.201,
+                        "potential_energy": 278.299,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.117,
+                        "height": 28.024,
+                        "velocity": -20.765,
+                        "kinetic_energy": 215.582,
+                        "potential_energy": 274.918,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.133,
+                        "height": 27.677,
+                        "velocity": -20.928,
+                        "kinetic_energy": 218.991,
+                        "potential_energy": 271.509,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.15,
+                        "height": 27.327,
+                        "velocity": -21.091,
+                        "kinetic_energy": 222.426,
+                        "potential_energy": 268.074,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.167,
+                        "height": 26.974,
+                        "velocity": -21.255,
+                        "kinetic_energy": 225.888,
+                        "potential_energy": 264.612,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.183,
+                        "height": 26.618,
+                        "velocity": -21.418,
+                        "kinetic_energy": 229.376,
+                        "potential_energy": 261.124,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.2,
+                        "height": 26.26,
+                        "velocity": -21.582,
+                        "kinetic_energy": 232.891,
+                        "potential_energy": 257.609,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.217,
+                        "height": 25.899,
+                        "velocity": -21.746,
+                        "kinetic_energy": 236.433,
+                        "potential_energy": 254.067,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.233,
+                        "height": 25.535,
+                        "velocity": -21.909,
+                        "kinetic_energy": 240.002,
+                        "potential_energy": 250.498,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.25,
+                        "height": 25.168,
+                        "velocity": -22.073,
+                        "kinetic_energy": 243.598,
+                        "potential_energy": 246.902,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.267,
+                        "height": 24.799,
+                        "velocity": -22.236,
+                        "kinetic_energy": 247.22,
+                        "potential_energy": 243.28,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.283,
+                        "height": 24.427,
+                        "velocity": -22.399,
+                        "kinetic_energy": 250.869,
+                        "potential_energy": 239.631,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.3,
+                        "height": 24.053,
+                        "velocity": -22.563,
+                        "kinetic_energy": 254.544,
+                        "potential_energy": 235.956,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.317,
+                        "height": 23.675,
+                        "velocity": -22.726,
+                        "kinetic_energy": 258.247,
+                        "potential_energy": 232.253,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.333,
+                        "height": 23.295,
+                        "velocity": -22.89,
+                        "kinetic_energy": 261.976,
+                        "potential_energy": 228.524,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.35,
+                        "height": 22.912,
+                        "velocity": -23.054,
+                        "kinetic_energy": 265.732,
+                        "potential_energy": 224.768,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.367,
+                        "height": 22.527,
+                        "velocity": -23.217,
+                        "kinetic_energy": 269.515,
+                        "potential_energy": 220.985,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.383,
+                        "height": 22.138,
+                        "velocity": -23.381,
+                        "kinetic_energy": 273.324,
+                        "potential_energy": 217.176,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.4,
+                        "height": 21.747,
+                        "velocity": -23.544,
+                        "kinetic_energy": 277.16,
+                        "potential_energy": 213.34,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.417,
+                        "height": 21.353,
+                        "velocity": -23.707,
+                        "kinetic_energy": 281.023,
+                        "potential_energy": 209.477,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.433,
+                        "height": 20.957,
+                        "velocity": -23.871,
+                        "kinetic_energy": 284.912,
+                        "potential_energy": 205.588,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.45,
+                        "height": 20.558,
+                        "velocity": -24.035,
+                        "kinetic_energy": 288.829,
+                        "potential_energy": 201.671,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.467,
+                        "height": 20.156,
+                        "velocity": -24.198,
+                        "kinetic_energy": 292.772,
+                        "potential_energy": 197.728,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.483,
+                        "height": 19.751,
+                        "velocity": -24.362,
+                        "kinetic_energy": 296.741,
+                        "potential_energy": 193.759,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.5,
+                        "height": 19.344,
+                        "velocity": -24.525,
+                        "kinetic_energy": 300.738,
+                        "potential_energy": 189.762,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.517,
+                        "height": 18.934,
+                        "velocity": -24.689,
+                        "kinetic_energy": 304.761,
+                        "potential_energy": 185.739,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.533,
+                        "height": 18.521,
+                        "velocity": -24.852,
+                        "kinetic_energy": 308.811,
+                        "potential_energy": 181.689,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.55,
+                        "height": 18.105,
+                        "velocity": -25.015,
+                        "kinetic_energy": 312.888,
+                        "potential_energy": 177.612,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.567,
+                        "height": 17.687,
+                        "velocity": -25.179,
+                        "kinetic_energy": 316.991,
+                        "potential_energy": 173.509,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.583,
+                        "height": 17.266,
+                        "velocity": -25.343,
+                        "kinetic_energy": 321.121,
+                        "potential_energy": 169.379,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.6,
+                        "height": 16.842,
+                        "velocity": -25.506,
+                        "kinetic_energy": 325.278,
+                        "potential_energy": 165.222,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.617,
+                        "height": 16.416,
+                        "velocity": -25.67,
+                        "kinetic_energy": 329.462,
+                        "potential_energy": 161.038,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.633,
+                        "height": 15.987,
+                        "velocity": -25.833,
+                        "kinetic_energy": 333.672,
+                        "potential_energy": 156.828,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.65,
+                        "height": 15.555,
+                        "velocity": -25.997,
+                        "kinetic_energy": 337.909,
+                        "potential_energy": 152.591,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.667,
+                        "height": 15.12,
+                        "velocity": -26.16,
+                        "kinetic_energy": 342.173,
+                        "potential_energy": 148.327,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.683,
+                        "height": 14.683,
+                        "velocity": -26.323,
+                        "kinetic_energy": 346.463,
+                        "potential_energy": 144.037,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.7,
+                        "height": 14.243,
+                        "velocity": -26.487,
+                        "kinetic_energy": 350.781,
+                        "potential_energy": 139.719,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.717,
+                        "height": 13.8,
+                        "velocity": -26.651,
+                        "kinetic_energy": 355.125,
+                        "potential_energy": 135.375,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.733,
+                        "height": 13.354,
+                        "velocity": -26.814,
+                        "kinetic_energy": 359.495,
+                        "potential_energy": 131.005,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.75,
+                        "height": 12.906,
+                        "velocity": -26.978,
+                        "kinetic_energy": 363.893,
+                        "potential_energy": 126.607,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.767,
+                        "height": 12.455,
+                        "velocity": -27.141,
+                        "kinetic_energy": 368.317,
+                        "potential_energy": 122.183,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.783,
+                        "height": 12.001,
+                        "velocity": -27.305,
+                        "kinetic_energy": 372.768,
+                        "potential_energy": 117.732,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.8,
+                        "height": 11.545,
+                        "velocity": -27.468,
+                        "kinetic_energy": 377.246,
+                        "potential_energy": 113.254,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.817,
+                        "height": 11.086,
+                        "velocity": -27.631,
+                        "kinetic_energy": 381.75,
+                        "potential_energy": 108.75,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.833,
+                        "height": 10.624,
+                        "velocity": -27.795,
+                        "kinetic_energy": 386.281,
+                        "potential_energy": 104.219,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.85,
+                        "height": 10.159,
+                        "velocity": -27.959,
+                        "kinetic_energy": 390.839,
+                        "potential_energy": 99.661,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.867,
+                        "height": 9.692,
+                        "velocity": -28.122,
+                        "kinetic_energy": 395.423,
+                        "potential_energy": 95.077,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.883,
+                        "height": 9.222,
+                        "velocity": -28.286,
+                        "kinetic_energy": 400.035,
+                        "potential_energy": 90.465,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.9,
+                        "height": 8.749,
+                        "velocity": -28.449,
+                        "kinetic_energy": 404.673,
+                        "potential_energy": 85.827,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.917,
+                        "height": 8.273,
+                        "velocity": -28.613,
+                        "kinetic_energy": 409.338,
+                        "potential_energy": 81.162,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.933,
+                        "height": 7.795,
+                        "velocity": -28.776,
+                        "kinetic_energy": 414.029,
+                        "potential_energy": 76.471,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.95,
+                        "height": 7.314,
+                        "velocity": -28.94,
+                        "kinetic_energy": 418.747,
+                        "potential_energy": 71.753,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.967,
+                        "height": 6.831,
+                        "velocity": -29.103,
+                        "kinetic_energy": 423.492,
+                        "potential_energy": 67.008,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.983,
+                        "height": 6.344,
+                        "velocity": -29.267,
+                        "kinetic_energy": 428.264,
+                        "potential_energy": 62.236,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.0,
+                        "height": 5.855,
+                        "velocity": -29.43,
+                        "kinetic_energy": 433.062,
+                        "potential_energy": 57.438,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.017,
+                        "height": 5.363,
+                        "velocity": -29.594,
+                        "kinetic_energy": 437.888,
+                        "potential_energy": 52.612,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.033,
+                        "height": 4.869,
+                        "velocity": -29.757,
+                        "kinetic_energy": 442.74,
+                        "potential_energy": 47.76,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.05,
+                        "height": 4.371,
+                        "velocity": -29.921,
+                        "kinetic_energy": 447.618,
+                        "potential_energy": 42.882,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.067,
+                        "height": 3.871,
+                        "velocity": -30.084,
+                        "kinetic_energy": 452.524,
+                        "potential_energy": 37.976,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.083,
+                        "height": 3.368,
+                        "velocity": -30.248,
+                        "kinetic_energy": 457.456,
+                        "potential_energy": 33.044,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.1,
+                        "height": 2.863,
+                        "velocity": -30.411,
+                        "kinetic_energy": 462.414,
+                        "potential_energy": 28.086,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.117,
+                        "height": 2.355,
+                        "velocity": -30.575,
+                        "kinetic_energy": 467.4,
+                        "potential_energy": 23.1,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.133,
+                        "height": 1.844,
+                        "velocity": -30.738,
+                        "kinetic_energy": 472.412,
+                        "potential_energy": 18.088,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.15,
+                        "height": 1.33,
+                        "velocity": -30.902,
+                        "kinetic_energy": 477.451,
+                        "potential_energy": 13.049,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.167,
+                        "height": 0.814,
+                        "velocity": -31.065,
+                        "kinetic_energy": 482.517,
+                        "potential_energy": 7.983,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.183,
+                        "height": 0.295,
+                        "velocity": -31.229,
+                        "kinetic_energy": 487.61,
+                        "potential_energy": 2.89,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.193,
+                        "height": 0.0,
+                        "velocity": -31.321,
+                        "kinetic_energy": 490.5,
+                        "potential_energy": 0.0,
+                        "total_energy": 490.5
+                    }
+                ]
+            },
+            "date": "2026-06-03"
+        },
+        {
+            "id": "exp_1780458168",
+            "name": "Free Fall Drop",
+            "metrics": {
+                "parameters": {
+                    "height": 50.0,
+                    "mass": 1.0,
+                    "gravity": 9.81
+                },
+                "time_of_flight": 3.193,
+                "final_velocity": -31.321,
+                "series": [
+                    {
+                        "time": 0.0,
+                        "height": 50.0,
+                        "velocity": -0.0,
+                        "kinetic_energy": 0.0,
+                        "potential_energy": 490.5,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.017,
+                        "height": 49.999,
+                        "velocity": -0.164,
+                        "kinetic_energy": 0.013,
+                        "potential_energy": 490.487,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.033,
+                        "height": 49.995,
+                        "velocity": -0.327,
+                        "kinetic_energy": 0.053,
+                        "potential_energy": 490.447,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.05,
+                        "height": 49.988,
+                        "velocity": -0.491,
+                        "kinetic_energy": 0.12,
+                        "potential_energy": 490.38,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.067,
+                        "height": 49.978,
+                        "velocity": -0.654,
+                        "kinetic_energy": 0.214,
+                        "potential_energy": 490.286,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.083,
+                        "height": 49.966,
+                        "velocity": -0.818,
+                        "kinetic_energy": 0.334,
+                        "potential_energy": 490.166,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.1,
+                        "height": 49.951,
+                        "velocity": -0.981,
+                        "kinetic_energy": 0.481,
+                        "potential_energy": 490.019,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.117,
+                        "height": 49.933,
+                        "velocity": -1.145,
+                        "kinetic_energy": 0.655,
+                        "potential_energy": 489.845,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.133,
+                        "height": 49.913,
+                        "velocity": -1.308,
+                        "kinetic_energy": 0.855,
+                        "potential_energy": 489.645,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.15,
+                        "height": 49.89,
+                        "velocity": -1.472,
+                        "kinetic_energy": 1.083,
+                        "potential_energy": 489.417,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.167,
+                        "height": 49.864,
+                        "velocity": -1.635,
+                        "kinetic_energy": 1.337,
+                        "potential_energy": 489.163,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.183,
+                        "height": 49.835,
+                        "velocity": -1.798,
+                        "kinetic_energy": 1.617,
+                        "potential_energy": 488.883,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.2,
+                        "height": 49.804,
+                        "velocity": -1.962,
+                        "kinetic_energy": 1.925,
+                        "potential_energy": 488.575,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.217,
+                        "height": 49.77,
+                        "velocity": -2.126,
+                        "kinetic_energy": 2.259,
+                        "potential_energy": 488.241,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.233,
+                        "height": 49.733,
+                        "velocity": -2.289,
+                        "kinetic_energy": 2.62,
+                        "potential_energy": 487.88,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.25,
+                        "height": 49.693,
+                        "velocity": -2.453,
+                        "kinetic_energy": 3.007,
+                        "potential_energy": 487.493,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.267,
+                        "height": 49.651,
+                        "velocity": -2.616,
+                        "kinetic_energy": 3.422,
+                        "potential_energy": 487.078,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.283,
+                        "height": 49.606,
+                        "velocity": -2.78,
+                        "kinetic_energy": 3.863,
+                        "potential_energy": 486.637,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.3,
+                        "height": 49.559,
+                        "velocity": -2.943,
+                        "kinetic_energy": 4.331,
+                        "potential_energy": 486.169,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.317,
+                        "height": 49.508,
+                        "velocity": -3.107,
+                        "kinetic_energy": 4.825,
+                        "potential_energy": 485.675,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.333,
+                        "height": 49.455,
+                        "velocity": -3.27,
+                        "kinetic_energy": 5.346,
+                        "potential_energy": 485.154,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.35,
+                        "height": 49.399,
+                        "velocity": -3.433,
+                        "kinetic_energy": 5.894,
+                        "potential_energy": 484.606,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.367,
+                        "height": 49.341,
+                        "velocity": -3.597,
+                        "kinetic_energy": 6.469,
+                        "potential_energy": 484.031,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.383,
+                        "height": 49.279,
+                        "velocity": -3.76,
+                        "kinetic_energy": 7.071,
+                        "potential_energy": 483.429,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.4,
+                        "height": 49.215,
+                        "velocity": -3.924,
+                        "kinetic_energy": 7.699,
+                        "potential_energy": 482.801,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.417,
+                        "height": 49.148,
+                        "velocity": -4.088,
+                        "kinetic_energy": 8.354,
+                        "potential_energy": 482.146,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.433,
+                        "height": 49.079,
+                        "velocity": -4.251,
+                        "kinetic_energy": 9.036,
+                        "potential_energy": 481.464,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.45,
+                        "height": 49.007,
+                        "velocity": -4.415,
+                        "kinetic_energy": 9.744,
+                        "potential_energy": 480.756,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.467,
+                        "height": 48.932,
+                        "velocity": -4.578,
+                        "kinetic_energy": 10.479,
+                        "potential_energy": 480.021,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.483,
+                        "height": 48.854,
+                        "velocity": -4.742,
+                        "kinetic_energy": 11.241,
+                        "potential_energy": 479.259,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.5,
+                        "height": 48.774,
+                        "velocity": -4.905,
+                        "kinetic_energy": 12.03,
+                        "potential_energy": 478.47,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.517,
+                        "height": 48.691,
+                        "velocity": -5.068,
+                        "kinetic_energy": 12.845,
+                        "potential_energy": 477.655,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.533,
+                        "height": 48.605,
+                        "velocity": -5.232,
+                        "kinetic_energy": 13.687,
+                        "potential_energy": 476.813,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.55,
+                        "height": 48.516,
+                        "velocity": -5.396,
+                        "kinetic_energy": 14.556,
+                        "potential_energy": 475.944,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.567,
+                        "height": 48.425,
+                        "velocity": -5.559,
+                        "kinetic_energy": 15.451,
+                        "potential_energy": 475.049,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.583,
+                        "height": 48.331,
+                        "velocity": -5.723,
+                        "kinetic_energy": 16.374,
+                        "potential_energy": 474.126,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.6,
+                        "height": 48.234,
+                        "velocity": -5.886,
+                        "kinetic_energy": 17.322,
+                        "potential_energy": 473.178,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.617,
+                        "height": 48.135,
+                        "velocity": -6.05,
+                        "kinetic_energy": 18.298,
+                        "potential_energy": 472.202,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.633,
+                        "height": 48.033,
+                        "velocity": -6.213,
+                        "kinetic_energy": 19.301,
+                        "potential_energy": 471.199,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.65,
+                        "height": 47.928,
+                        "velocity": -6.377,
+                        "kinetic_energy": 20.33,
+                        "potential_energy": 470.17,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.667,
+                        "height": 47.82,
+                        "velocity": -6.54,
+                        "kinetic_energy": 21.386,
+                        "potential_energy": 469.114,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.683,
+                        "height": 47.71,
+                        "velocity": -6.704,
+                        "kinetic_energy": 22.468,
+                        "potential_energy": 468.032,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.7,
+                        "height": 47.597,
+                        "velocity": -6.867,
+                        "kinetic_energy": 23.578,
+                        "potential_energy": 466.922,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.717,
+                        "height": 47.481,
+                        "velocity": -7.031,
+                        "kinetic_energy": 24.714,
+                        "potential_energy": 465.786,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.733,
+                        "height": 47.362,
+                        "velocity": -7.194,
+                        "kinetic_energy": 25.877,
+                        "potential_energy": 464.623,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.75,
+                        "height": 47.241,
+                        "velocity": -7.357,
+                        "kinetic_energy": 27.066,
+                        "potential_energy": 463.434,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.767,
+                        "height": 47.117,
+                        "velocity": -7.521,
+                        "kinetic_energy": 28.283,
+                        "potential_energy": 462.217,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.783,
+                        "height": 46.99,
+                        "velocity": -7.684,
+                        "kinetic_energy": 29.526,
+                        "potential_energy": 460.974,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.8,
+                        "height": 46.861,
+                        "velocity": -7.848,
+                        "kinetic_energy": 30.796,
+                        "potential_energy": 459.704,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.817,
+                        "height": 46.729,
+                        "velocity": -8.011,
+                        "kinetic_energy": 32.092,
+                        "potential_energy": 458.408,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.833,
+                        "height": 46.594,
+                        "velocity": -8.175,
+                        "kinetic_energy": 33.415,
+                        "potential_energy": 457.085,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.85,
+                        "height": 46.456,
+                        "velocity": -8.338,
+                        "kinetic_energy": 34.765,
+                        "potential_energy": 455.735,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.867,
+                        "height": 46.316,
+                        "velocity": -8.502,
+                        "kinetic_energy": 36.142,
+                        "potential_energy": 454.358,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.883,
+                        "height": 46.173,
+                        "velocity": -8.665,
+                        "kinetic_energy": 37.545,
+                        "potential_energy": 452.955,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.9,
+                        "height": 46.027,
+                        "velocity": -8.829,
+                        "kinetic_energy": 38.976,
+                        "potential_energy": 451.524,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.917,
+                        "height": 45.878,
+                        "velocity": -8.992,
+                        "kinetic_energy": 40.433,
+                        "potential_energy": 450.067,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.933,
+                        "height": 45.727,
+                        "velocity": -9.156,
+                        "kinetic_energy": 41.916,
+                        "potential_energy": 448.584,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.95,
+                        "height": 45.573,
+                        "velocity": -9.319,
+                        "kinetic_energy": 43.427,
+                        "potential_energy": 447.073,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.967,
+                        "height": 45.417,
+                        "velocity": -9.483,
+                        "kinetic_energy": 44.964,
+                        "potential_energy": 445.536,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 0.983,
+                        "height": 45.257,
+                        "velocity": -9.646,
+                        "kinetic_energy": 46.527,
+                        "potential_energy": 443.973,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.0,
+                        "height": 45.095,
+                        "velocity": -9.81,
+                        "kinetic_energy": 48.118,
+                        "potential_energy": 442.382,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.017,
+                        "height": 44.93,
+                        "velocity": -9.973,
+                        "kinetic_energy": 49.735,
+                        "potential_energy": 440.765,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.033,
+                        "height": 44.763,
+                        "velocity": -10.137,
+                        "kinetic_energy": 51.379,
+                        "potential_energy": 439.121,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.05,
+                        "height": 44.592,
+                        "velocity": -10.301,
+                        "kinetic_energy": 53.05,
+                        "potential_energy": 437.45,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.067,
+                        "height": 44.419,
+                        "velocity": -10.464,
+                        "kinetic_energy": 54.748,
+                        "potential_energy": 435.752,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.083,
+                        "height": 44.243,
+                        "velocity": -10.627,
+                        "kinetic_energy": 56.472,
+                        "potential_energy": 434.028,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.1,
+                        "height": 44.065,
+                        "velocity": -10.791,
+                        "kinetic_energy": 58.223,
+                        "potential_energy": 432.277,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.117,
+                        "height": 43.884,
+                        "velocity": -10.955,
+                        "kinetic_energy": 60.001,
+                        "potential_energy": 430.499,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.133,
+                        "height": 43.7,
+                        "velocity": -11.118,
+                        "kinetic_energy": 61.805,
+                        "potential_energy": 428.695,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.15,
+                        "height": 43.513,
+                        "velocity": -11.281,
+                        "kinetic_energy": 63.636,
+                        "potential_energy": 426.864,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.167,
+                        "height": 43.324,
+                        "velocity": -11.445,
+                        "kinetic_energy": 65.494,
+                        "potential_energy": 425.006,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.183,
+                        "height": 43.132,
+                        "velocity": -11.609,
+                        "kinetic_energy": 67.379,
+                        "potential_energy": 423.121,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.2,
+                        "height": 42.937,
+                        "velocity": -11.772,
+                        "kinetic_energy": 69.29,
+                        "potential_energy": 421.21,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.217,
+                        "height": 42.739,
+                        "velocity": -11.935,
+                        "kinetic_energy": 71.228,
+                        "potential_energy": 419.272,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.233,
+                        "height": 42.539,
+                        "velocity": -12.099,
+                        "kinetic_energy": 73.193,
+                        "potential_energy": 417.307,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.25,
+                        "height": 42.336,
+                        "velocity": -12.263,
+                        "kinetic_energy": 75.184,
+                        "potential_energy": 415.316,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.267,
+                        "height": 42.13,
+                        "velocity": -12.426,
+                        "kinetic_energy": 77.203,
+                        "potential_energy": 413.297,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.283,
+                        "height": 41.922,
+                        "velocity": -12.589,
+                        "kinetic_energy": 79.248,
+                        "potential_energy": 411.252,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.3,
+                        "height": 41.711,
+                        "velocity": -12.753,
+                        "kinetic_energy": 81.32,
+                        "potential_energy": 409.18,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.317,
+                        "height": 41.497,
+                        "velocity": -12.917,
+                        "kinetic_energy": 83.418,
+                        "potential_energy": 407.082,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.333,
+                        "height": 41.28,
+                        "velocity": -13.08,
+                        "kinetic_energy": 85.543,
+                        "potential_energy": 404.957,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.35,
+                        "height": 41.061,
+                        "velocity": -13.244,
+                        "kinetic_energy": 87.695,
+                        "potential_energy": 402.805,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.367,
+                        "height": 40.839,
+                        "velocity": -13.407,
+                        "kinetic_energy": 89.874,
+                        "potential_energy": 400.626,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.383,
+                        "height": 40.614,
+                        "velocity": -13.571,
+                        "kinetic_energy": 92.079,
+                        "potential_energy": 398.421,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.4,
+                        "height": 40.386,
+                        "velocity": -13.734,
+                        "kinetic_energy": 94.311,
+                        "potential_energy": 396.189,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.417,
+                        "height": 40.156,
+                        "velocity": -13.898,
+                        "kinetic_energy": 96.57,
+                        "potential_energy": 393.93,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.433,
+                        "height": 39.923,
+                        "velocity": -14.061,
+                        "kinetic_energy": 98.856,
+                        "potential_energy": 391.644,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.45,
+                        "height": 39.687,
+                        "velocity": -14.225,
+                        "kinetic_energy": 101.168,
+                        "potential_energy": 389.332,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.467,
+                        "height": 39.449,
+                        "velocity": -14.388,
+                        "kinetic_energy": 103.507,
+                        "potential_energy": 386.993,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.483,
+                        "height": 39.208,
+                        "velocity": -14.552,
+                        "kinetic_energy": 105.873,
+                        "potential_energy": 384.627,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.5,
+                        "height": 38.964,
+                        "velocity": -14.715,
+                        "kinetic_energy": 108.266,
+                        "potential_energy": 382.234,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.517,
+                        "height": 38.717,
+                        "velocity": -14.879,
+                        "kinetic_energy": 110.685,
+                        "potential_energy": 379.815,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.533,
+                        "height": 38.468,
+                        "velocity": -15.042,
+                        "kinetic_energy": 113.131,
+                        "potential_energy": 377.369,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.55,
+                        "height": 38.216,
+                        "velocity": -15.206,
+                        "kinetic_energy": 115.604,
+                        "potential_energy": 374.896,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.567,
+                        "height": 37.961,
+                        "velocity": -15.369,
+                        "kinetic_energy": 118.103,
+                        "potential_energy": 372.397,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.583,
+                        "height": 37.703,
+                        "velocity": -15.533,
+                        "kinetic_energy": 120.629,
+                        "potential_energy": 369.871,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.6,
+                        "height": 37.443,
+                        "velocity": -15.696,
+                        "kinetic_energy": 123.182,
+                        "potential_energy": 367.318,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.617,
+                        "height": 37.18,
+                        "velocity": -15.86,
+                        "kinetic_energy": 125.762,
+                        "potential_energy": 364.738,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.633,
+                        "height": 36.915,
+                        "velocity": -16.023,
+                        "kinetic_energy": 128.368,
+                        "potential_energy": 362.132,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.65,
+                        "height": 36.646,
+                        "velocity": -16.186,
+                        "kinetic_energy": 131.001,
+                        "potential_energy": 359.499,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.667,
+                        "height": 36.375,
+                        "velocity": -16.35,
+                        "kinetic_energy": 133.661,
+                        "potential_energy": 356.839,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.683,
+                        "height": 36.101,
+                        "velocity": -16.514,
+                        "kinetic_energy": 136.348,
+                        "potential_energy": 354.152,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.7,
+                        "height": 35.825,
+                        "velocity": -16.677,
+                        "kinetic_energy": 139.061,
+                        "potential_energy": 351.439,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.717,
+                        "height": 35.545,
+                        "velocity": -16.84,
+                        "kinetic_energy": 141.801,
+                        "potential_energy": 348.699,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.733,
+                        "height": 35.263,
+                        "velocity": -17.004,
+                        "kinetic_energy": 144.568,
+                        "potential_energy": 345.932,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.75,
+                        "height": 34.978,
+                        "velocity": -17.168,
+                        "kinetic_energy": 147.362,
+                        "potential_energy": 343.138,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.767,
+                        "height": 34.691,
+                        "velocity": -17.331,
+                        "kinetic_energy": 150.182,
+                        "potential_energy": 340.318,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.783,
+                        "height": 34.401,
+                        "velocity": -17.494,
+                        "kinetic_energy": 153.029,
+                        "potential_energy": 337.471,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.8,
+                        "height": 34.108,
+                        "velocity": -17.658,
+                        "kinetic_energy": 155.902,
+                        "potential_energy": 334.598,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.817,
+                        "height": 33.812,
+                        "velocity": -17.822,
+                        "kinetic_energy": 158.803,
+                        "potential_energy": 331.697,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.833,
+                        "height": 33.514,
+                        "velocity": -17.985,
+                        "kinetic_energy": 161.73,
+                        "potential_energy": 328.77,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.85,
+                        "height": 33.213,
+                        "velocity": -18.148,
+                        "kinetic_energy": 164.684,
+                        "potential_energy": 325.816,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.867,
+                        "height": 32.909,
+                        "velocity": -18.312,
+                        "kinetic_energy": 167.665,
+                        "potential_energy": 322.835,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.883,
+                        "height": 32.602,
+                        "velocity": -18.476,
+                        "kinetic_energy": 170.672,
+                        "potential_energy": 319.828,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.9,
+                        "height": 32.293,
+                        "velocity": -18.639,
+                        "kinetic_energy": 173.706,
+                        "potential_energy": 316.794,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.917,
+                        "height": 31.981,
+                        "velocity": -18.803,
+                        "kinetic_energy": 176.767,
+                        "potential_energy": 313.733,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.933,
+                        "height": 31.666,
+                        "velocity": -18.966,
+                        "kinetic_energy": 179.855,
+                        "potential_energy": 310.645,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.95,
+                        "height": 31.349,
+                        "velocity": -19.13,
+                        "kinetic_energy": 182.969,
+                        "potential_energy": 307.531,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.967,
+                        "height": 31.029,
+                        "velocity": -19.293,
+                        "kinetic_energy": 186.11,
+                        "potential_energy": 304.39,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 1.983,
+                        "height": 30.706,
+                        "velocity": -19.457,
+                        "kinetic_energy": 189.278,
+                        "potential_energy": 301.222,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.0,
+                        "height": 30.38,
+                        "velocity": -19.62,
+                        "kinetic_energy": 192.472,
+                        "potential_energy": 298.028,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.017,
+                        "height": 30.052,
+                        "velocity": -19.784,
+                        "kinetic_energy": 195.693,
+                        "potential_energy": 294.807,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.033,
+                        "height": 29.721,
+                        "velocity": -19.947,
+                        "kinetic_energy": 198.941,
+                        "potential_energy": 291.559,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.05,
+                        "height": 29.387,
+                        "velocity": -20.11,
+                        "kinetic_energy": 202.216,
+                        "potential_energy": 288.284,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.067,
+                        "height": 29.05,
+                        "velocity": -20.274,
+                        "kinetic_energy": 205.518,
+                        "potential_energy": 284.982,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.083,
+                        "height": 28.711,
+                        "velocity": -20.438,
+                        "kinetic_energy": 208.846,
+                        "potential_energy": 281.654,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.1,
+                        "height": 28.369,
+                        "velocity": -20.601,
+                        "kinetic_energy": 212.201,
+                        "potential_energy": 278.299,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.117,
+                        "height": 28.024,
+                        "velocity": -20.765,
+                        "kinetic_energy": 215.582,
+                        "potential_energy": 274.918,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.133,
+                        "height": 27.677,
+                        "velocity": -20.928,
+                        "kinetic_energy": 218.991,
+                        "potential_energy": 271.509,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.15,
+                        "height": 27.327,
+                        "velocity": -21.091,
+                        "kinetic_energy": 222.426,
+                        "potential_energy": 268.074,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.167,
+                        "height": 26.974,
+                        "velocity": -21.255,
+                        "kinetic_energy": 225.888,
+                        "potential_energy": 264.612,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.183,
+                        "height": 26.618,
+                        "velocity": -21.418,
+                        "kinetic_energy": 229.376,
+                        "potential_energy": 261.124,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.2,
+                        "height": 26.26,
+                        "velocity": -21.582,
+                        "kinetic_energy": 232.891,
+                        "potential_energy": 257.609,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.217,
+                        "height": 25.899,
+                        "velocity": -21.746,
+                        "kinetic_energy": 236.433,
+                        "potential_energy": 254.067,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.233,
+                        "height": 25.535,
+                        "velocity": -21.909,
+                        "kinetic_energy": 240.002,
+                        "potential_energy": 250.498,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.25,
+                        "height": 25.168,
+                        "velocity": -22.073,
+                        "kinetic_energy": 243.598,
+                        "potential_energy": 246.902,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.267,
+                        "height": 24.799,
+                        "velocity": -22.236,
+                        "kinetic_energy": 247.22,
+                        "potential_energy": 243.28,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.283,
+                        "height": 24.427,
+                        "velocity": -22.399,
+                        "kinetic_energy": 250.869,
+                        "potential_energy": 239.631,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.3,
+                        "height": 24.053,
+                        "velocity": -22.563,
+                        "kinetic_energy": 254.544,
+                        "potential_energy": 235.956,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.317,
+                        "height": 23.675,
+                        "velocity": -22.726,
+                        "kinetic_energy": 258.247,
+                        "potential_energy": 232.253,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.333,
+                        "height": 23.295,
+                        "velocity": -22.89,
+                        "kinetic_energy": 261.976,
+                        "potential_energy": 228.524,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.35,
+                        "height": 22.912,
+                        "velocity": -23.054,
+                        "kinetic_energy": 265.732,
+                        "potential_energy": 224.768,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.367,
+                        "height": 22.527,
+                        "velocity": -23.217,
+                        "kinetic_energy": 269.515,
+                        "potential_energy": 220.985,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.383,
+                        "height": 22.138,
+                        "velocity": -23.381,
+                        "kinetic_energy": 273.324,
+                        "potential_energy": 217.176,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.4,
+                        "height": 21.747,
+                        "velocity": -23.544,
+                        "kinetic_energy": 277.16,
+                        "potential_energy": 213.34,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.417,
+                        "height": 21.353,
+                        "velocity": -23.707,
+                        "kinetic_energy": 281.023,
+                        "potential_energy": 209.477,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.433,
+                        "height": 20.957,
+                        "velocity": -23.871,
+                        "kinetic_energy": 284.912,
+                        "potential_energy": 205.588,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.45,
+                        "height": 20.558,
+                        "velocity": -24.035,
+                        "kinetic_energy": 288.829,
+                        "potential_energy": 201.671,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.467,
+                        "height": 20.156,
+                        "velocity": -24.198,
+                        "kinetic_energy": 292.772,
+                        "potential_energy": 197.728,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.483,
+                        "height": 19.751,
+                        "velocity": -24.362,
+                        "kinetic_energy": 296.741,
+                        "potential_energy": 193.759,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.5,
+                        "height": 19.344,
+                        "velocity": -24.525,
+                        "kinetic_energy": 300.738,
+                        "potential_energy": 189.762,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.517,
+                        "height": 18.934,
+                        "velocity": -24.689,
+                        "kinetic_energy": 304.761,
+                        "potential_energy": 185.739,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.533,
+                        "height": 18.521,
+                        "velocity": -24.852,
+                        "kinetic_energy": 308.811,
+                        "potential_energy": 181.689,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.55,
+                        "height": 18.105,
+                        "velocity": -25.015,
+                        "kinetic_energy": 312.888,
+                        "potential_energy": 177.612,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.567,
+                        "height": 17.687,
+                        "velocity": -25.179,
+                        "kinetic_energy": 316.991,
+                        "potential_energy": 173.509,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.583,
+                        "height": 17.266,
+                        "velocity": -25.343,
+                        "kinetic_energy": 321.121,
+                        "potential_energy": 169.379,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.6,
+                        "height": 16.842,
+                        "velocity": -25.506,
+                        "kinetic_energy": 325.278,
+                        "potential_energy": 165.222,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.617,
+                        "height": 16.416,
+                        "velocity": -25.67,
+                        "kinetic_energy": 329.462,
+                        "potential_energy": 161.038,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.633,
+                        "height": 15.987,
+                        "velocity": -25.833,
+                        "kinetic_energy": 333.672,
+                        "potential_energy": 156.828,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.65,
+                        "height": 15.555,
+                        "velocity": -25.997,
+                        "kinetic_energy": 337.909,
+                        "potential_energy": 152.591,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.667,
+                        "height": 15.12,
+                        "velocity": -26.16,
+                        "kinetic_energy": 342.173,
+                        "potential_energy": 148.327,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.683,
+                        "height": 14.683,
+                        "velocity": -26.323,
+                        "kinetic_energy": 346.463,
+                        "potential_energy": 144.037,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.7,
+                        "height": 14.243,
+                        "velocity": -26.487,
+                        "kinetic_energy": 350.781,
+                        "potential_energy": 139.719,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.717,
+                        "height": 13.8,
+                        "velocity": -26.651,
+                        "kinetic_energy": 355.125,
+                        "potential_energy": 135.375,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.733,
+                        "height": 13.354,
+                        "velocity": -26.814,
+                        "kinetic_energy": 359.495,
+                        "potential_energy": 131.005,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.75,
+                        "height": 12.906,
+                        "velocity": -26.978,
+                        "kinetic_energy": 363.893,
+                        "potential_energy": 126.607,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.767,
+                        "height": 12.455,
+                        "velocity": -27.141,
+                        "kinetic_energy": 368.317,
+                        "potential_energy": 122.183,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.783,
+                        "height": 12.001,
+                        "velocity": -27.305,
+                        "kinetic_energy": 372.768,
+                        "potential_energy": 117.732,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.8,
+                        "height": 11.545,
+                        "velocity": -27.468,
+                        "kinetic_energy": 377.246,
+                        "potential_energy": 113.254,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.817,
+                        "height": 11.086,
+                        "velocity": -27.631,
+                        "kinetic_energy": 381.75,
+                        "potential_energy": 108.75,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.833,
+                        "height": 10.624,
+                        "velocity": -27.795,
+                        "kinetic_energy": 386.281,
+                        "potential_energy": 104.219,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.85,
+                        "height": 10.159,
+                        "velocity": -27.959,
+                        "kinetic_energy": 390.839,
+                        "potential_energy": 99.661,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.867,
+                        "height": 9.692,
+                        "velocity": -28.122,
+                        "kinetic_energy": 395.423,
+                        "potential_energy": 95.077,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.883,
+                        "height": 9.222,
+                        "velocity": -28.286,
+                        "kinetic_energy": 400.035,
+                        "potential_energy": 90.465,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.9,
+                        "height": 8.749,
+                        "velocity": -28.449,
+                        "kinetic_energy": 404.673,
+                        "potential_energy": 85.827,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.917,
+                        "height": 8.273,
+                        "velocity": -28.613,
+                        "kinetic_energy": 409.338,
+                        "potential_energy": 81.162,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.933,
+                        "height": 7.795,
+                        "velocity": -28.776,
+                        "kinetic_energy": 414.029,
+                        "potential_energy": 76.471,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.95,
+                        "height": 7.314,
+                        "velocity": -28.94,
+                        "kinetic_energy": 418.747,
+                        "potential_energy": 71.753,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.967,
+                        "height": 6.831,
+                        "velocity": -29.103,
+                        "kinetic_energy": 423.492,
+                        "potential_energy": 67.008,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 2.983,
+                        "height": 6.344,
+                        "velocity": -29.267,
+                        "kinetic_energy": 428.264,
+                        "potential_energy": 62.236,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.0,
+                        "height": 5.855,
+                        "velocity": -29.43,
+                        "kinetic_energy": 433.062,
+                        "potential_energy": 57.438,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.017,
+                        "height": 5.363,
+                        "velocity": -29.594,
+                        "kinetic_energy": 437.888,
+                        "potential_energy": 52.612,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.033,
+                        "height": 4.869,
+                        "velocity": -29.757,
+                        "kinetic_energy": 442.74,
+                        "potential_energy": 47.76,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.05,
+                        "height": 4.371,
+                        "velocity": -29.921,
+                        "kinetic_energy": 447.618,
+                        "potential_energy": 42.882,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.067,
+                        "height": 3.871,
+                        "velocity": -30.084,
+                        "kinetic_energy": 452.524,
+                        "potential_energy": 37.976,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.083,
+                        "height": 3.368,
+                        "velocity": -30.248,
+                        "kinetic_energy": 457.456,
+                        "potential_energy": 33.044,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.1,
+                        "height": 2.863,
+                        "velocity": -30.411,
+                        "kinetic_energy": 462.414,
+                        "potential_energy": 28.086,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.117,
+                        "height": 2.355,
+                        "velocity": -30.575,
+                        "kinetic_energy": 467.4,
+                        "potential_energy": 23.1,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.133,
+                        "height": 1.844,
+                        "velocity": -30.738,
+                        "kinetic_energy": 472.412,
+                        "potential_energy": 18.088,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.15,
+                        "height": 1.33,
+                        "velocity": -30.902,
+                        "kinetic_energy": 477.451,
+                        "potential_energy": 13.049,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.167,
+                        "height": 0.814,
+                        "velocity": -31.065,
+                        "kinetic_energy": 482.517,
+                        "potential_energy": 7.983,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.183,
+                        "height": 0.295,
+                        "velocity": -31.229,
+                        "kinetic_energy": 487.61,
+                        "potential_energy": 2.89,
+                        "total_energy": 490.5
+                    },
+                    {
+                        "time": 3.193,
+                        "height": 0.0,
+                        "velocity": -31.321,
+                        "kinetic_energy": 490.5,
+                        "potential_energy": 0.0,
+                        "total_energy": 490.5
+                    }
+                ]
+            },
+            "date": "2026-06-03"
+        }
+    ],
+    "reports": [],
+    "achievements": [
+        {
+            "id": "welcome_pioneer",
+            "title": "Welcome Pioneer",
+            "description": "Successfully set up NeuroLab account",
+            "xp": 100
+        },
+        {
+            "id": "gravity_pioneer",
+            "title": "Gravity Pioneer",
+            "description": "Completed first gravity drop",
+            "xp": 150
+        },
+        {
+            "id": "trajectory_wizard",
+            "title": "Trajectory Wizard",
+            "description": "Fit a 95%+ accurate parabola curve",
+            "xp": 300
+        },
+        {
+            "id": "harmonic_oscillations",
+            "title": "Harmonic Master",
+            "description": "Tracked a pendulum for over 5 complete oscillations",
+            "xp": 250
+        }
+    ],
+    "challenges": [
+        {
+            "id": "free_fall_check",
+            "title": "Free Fall Gravity Proof",
+            "difficulty": "Beginner",
+            "reward": 200
+        },
+        {
+            "id": "parabola_range",
+            "title": "parabola Range Challenge",
+            "difficulty": "Intermediate",
+            "reward": 300
+        },
+        {
+            "id": "harmonic_oscillations_check",
+            "title": "Perfect Harmonic Swing",
+            "difficulty": "Advanced",
+            "reward": 400
+        }
+    ],
+    "leaderboard": [
+        {
+            "username": "Marie Curie",
+            "xp": 3500,
+            "level": 15
+        },
+        {
+            "username": "Isaac Newton",
+            "xp": 3200,
+            "level": 14
+        },
+        {
+            "username": "Albert Einstein",
+            "xp": 2900,
+            "level": 13
+        },
+        {
+            "username": "Junior Scientist",
+            "xp": 120,
+            "level": 1
+        }
+    ],
+    "learning_progress": {
+        "xp": 120,
+        "level": 1,
+        "streak": 3,
+        "quizzes_taken": 1,
+        "challenges_completed": 0,
+        "unlocked_badges": [
+            "welcome_pioneer"
+        ],
+        "history": [
+            {
+                "date": "2026-05-29",
+                "event": "Created Lab Account",
+                "xp": 50
+            },
+            {
+                "date": "2026-05-30",
+                "event": "Completed Electric Circuit Tutorial",
+                "xp": 70
+            }
+        ]
+    }
+}

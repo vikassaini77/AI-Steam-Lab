@@ -1,0 +1,8 @@
+{
+  "welcome": "Welcome Back, {{name}}!",
+  "launchLab": "Launch AI Lab",
+  "totalXP": "Total XP",
+  "dailyStreak": "Daily Streak",
+  "completedLabs": "Completed Labs",
+  "aiInteractions": "AI Interactions"
+}
