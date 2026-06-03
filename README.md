@@ -436,9 +436,9 @@ Distributed under the MIT License. See `LICENSE` for more information.
 ## 👤 26. Author Section
 
 **Developed by a passionate engineer dedicated to democratizing global education.**
-- **GitHub:** [@yourusername](https://github.com/)
-- **LinkedIn:** [Your Name](https://linkedin.com/)
-- **Email:** contact@neuro-lab.example.com
+- **GitHub:** [@vikassaini77](https://github.com/vikassaini77)
+- **LinkedIn:** [Vikas Saini](https://linkedin.com/in/vikassaini77)
+- **Email:** contact@vikassaini77.example.com
 
 ---
 
