@@ -437,8 +437,8 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 **Developed by a passionate engineer dedicated to democratizing global education.**
 - **GitHub:** [@vikassaini77](https://github.com/vikassaini77)
-- **LinkedIn:** [Vikas Saini](https://linkedin.com/in/vikassaini77)
-- **Email:** contact@vikassaini77.example.com
+- **LinkedIn:** [Vikas Saini](https://www.linkedin.com/in/vikas-saini1/)
+- **Email:** vikassn44@gmail.com
 
 ---
 
