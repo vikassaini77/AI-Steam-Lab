@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 import { pushNotification } from '../../lib/notificationStore';
+import { useChatStore } from '../../lib/chatStore';
 
 // Comprehensive multi-language resource pack
 const translations = {
@@ -204,10 +205,10 @@ export default function WebcamSection() {
   // Active translation set
   const t = translations[currentLang];
 
-  // Webcam & Computer Vision WebSocket States
   const [cameraActive, setCameraActive] = useState<boolean>(false);
   const [trackingMethod, setTrackingMethod] = useState<'color' | 'yolo'>('color');
-  const [colorTarget, setColorTarget] = useState<'red' | 'green' | 'blue'>('red');
+  // Default to green to avoid false positives with red/orange room lighting and skin tones
+  const [colorTarget, setColorTarget] = useState<'red' | 'green' | 'blue'>('green');
   const [annotatedImage, setAnnotatedImage] = useState<string | null>(null);
   const [realPhysics, setRealPhysics] = useState<any>(null);
   const [selectedCVSource, setSelectedCVSource] = useState<'auto' | 'cloud' | 'client'>('auto');
@@ -585,7 +586,7 @@ export default function WebcamSection() {
     const octx = overlay.getContext('2d');
     if (!ctx || !octx) return;
 
-    // Draw mirrored frame to hidden canvas
+    // Draw frame to hidden canvas (mirrored, to match video element)
     ctx.save();
     ctx.scale(-1, 1);
     ctx.drawImage(video, -W, 0, W, H);
@@ -596,28 +597,37 @@ export default function WebcamSection() {
 
     // ── Color blob tracking (HSV approximation in RGB) ──
     const targetColor = colorTarget; // 'red' | 'green' | 'blue'
-    let sumX = 0, sumY = 0, blobPixels = 0;
-    let minBX = W, maxBX = 0, minBY = H, maxBY = 0;
+    let sumX = 0, sumY = 0, sumX2 = 0, sumY2 = 0, blobPixels = 0;
 
     for (let y = 0; y < H; y += 3) {
       for (let x = 0; x < W; x += 3) {
         const i = (y * W + x) * 4;
         const r = data[i], g = data[i+1], b = data[i+2];
-        const max = Math.max(r, g, b), min = Math.min(r, g, b);
-        const sat = max === 0 ? 0 : (max - min) / max;
-        const val = max / 255;
+        const rNorm = r / 255, gNorm = g / 255, bNorm = b / 255;
+        const max = Math.max(rNorm, gNorm, bNorm), min = Math.min(rNorm, gNorm, bNorm);
+        const diff = max - min;
+        let h = 0;
+        if (diff !== 0) {
+          if (max === rNorm) h = (60 * ((gNorm - bNorm) / diff) + 360) % 360;
+          else if (max === gNorm) h = (60 * ((bNorm - rNorm) / diff) + 120) % 360;
+          else h = (60 * ((rNorm - gNorm) / diff) + 240) % 360;
+        }
+        const s = max === 0 ? 0 : diff / max;
+        const v = max;
 
         let match = false;
-        if (sat > 0.08 && val > 0.15) {
-          if (targetColor === 'red' && r > 85 && (r - g) > 13 && (r - b) > 13) match = true;
-          if (targetColor === 'green' && g > 75 && (g - r) > 11 && (g - b) > 11) match = true;
-          if (targetColor === 'blue' && b > 75 && (b - r) > 11 && (b - g) > 11) match = true;
-        }
+        // Strictly tuned HSV boundaries to prevent false positives on skin tone, wood, or yellow background lighting
+        // Red is constrained to true red/crimson (h < 10 or h > 350) to avoid orange skin tones
+        if (targetColor === 'red' && (h < 10 || h > 350) && s > 0.4 && v > 0.3) match = true;
+        // Green hue is strictly 75-160 to avoid yellow tungsten light, which lets us safely allow very low brightness/saturation
+        if (targetColor === 'green' && (h > 75 && h < 160) && s > 0.15 && v > 0.1) match = true;
+        // Blue is strictly 200-260
+        if (targetColor === 'blue' && (h > 200 && h < 260) && s > 0.3 && v > 0.2) match = true;
 
         if (match) {
-          sumX += x; sumY += y; blobPixels++;
-          minBX = Math.min(minBX, x); maxBX = Math.max(maxBX, x);
-          minBY = Math.min(minBY, y); maxBY = Math.max(maxBY, y);
+          sumX += x; sumY += y;
+          sumX2 += x * x; sumY2 += y * y;
+          blobPixels++;
         }
       }
     }
@@ -647,13 +657,22 @@ export default function WebcamSection() {
 
     const now = Date.now();
 
-    // Color blob box
-    const blobFound = blobPixels > 60;
+    // Require a significant blob to avoid noise (at least 100 pixels)
+    const blobFound = blobPixels > 100;
     if (blobFound) {
-      const cx = Math.round(sumX / blobPixels);
-      const cy = Math.round(sumY / blobPixels);
-      const bw = Math.max(40, maxBX - minBX + 20);
-      const bh = Math.max(40, maxBY - minBY + 20);
+      const cx = sumX / blobPixels;
+      const cy = sumY / blobPixels;
+      
+      // Calculate spatial variance to ignore outliers
+      const varX = (sumX2 / blobPixels) - (cx * cx);
+      const varY = (sumY2 / blobPixels) - (cy * cy);
+      
+      // Standard deviation defines the true size of the dense blob
+      const stdX = Math.sqrt(Math.max(0, varX));
+      const stdY = Math.sqrt(Math.max(0, varY));
+      
+      const bw = Math.min(W, Math.max(40, stdX * 3.5));
+      const bh = Math.min(H, Math.max(40, stdY * 3.5));
 
       // Track physics
       motionPointsRef.current.push({ x: cx, y: cy, t: now });
@@ -744,13 +763,16 @@ export default function WebcamSection() {
       octx.stroke();
     });
 
+    const centerI = ((H/2) * W + (W/2)) * 4;
+    const cr = data[centerI], cg = data[centerI+1], cb = data[centerI+2];
+
     // Status HUD text
     octx.fillStyle = 'rgba(0,0,0,0.55)';
-    octx.fillRect(8, H - 28, blobFound ? 220 : 190, 22);
+    octx.fillRect(8, H - 28, blobFound ? 220 : 320, 22);
     octx.fillStyle = blobFound ? '#00ff88' : '#f59e0b';
     octx.font = 'bold 10px monospace';
     octx.fillText(
-      blobFound ? `✅ Client CV: ${targetColor} blob detected` : `⚡ Client CV: scanning for ${targetColor}...`,
+      blobFound ? `✅ Client CV: ${targetColor} blob detected` : `⚡ Client CV: scanning for ${targetColor}... [rgb:${cr},${cg},${cb}] (px:${blobPixels})`,
       14, H - 13
     );
 
@@ -1387,7 +1409,7 @@ export default function WebcamSection() {
                           initial={{ opacity: 0, x: 50 }}
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: 50 }}
-                          className="absolute right-0 top-0 bottom-0 w-64 bg-[#0a0a14]/95 backdrop-blur-md border-l border-white/10 z-30 p-4 flex flex-col gap-4 text-left shadow-2xl overflow-y-auto"
+                          className="absolute right-0 top-0 bottom-0 w-64 bg-[#0a0a14]/95 backdrop-blur-md border-l border-white/10 z-50 p-4 flex flex-col gap-4 text-left shadow-2xl overflow-y-auto"
                         >
                           <div className="flex justify-between items-center border-b border-white/5 pb-2">
                             <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -1502,45 +1524,47 @@ export default function WebcamSection() {
                       )}
                     </AnimatePresence>
 
-                    {/* ── SPLIT SCREEN GRID CONTAINER ── */}
-                    <div className="flex flex-col w-full">
+                    {/* ── UNIFIED VISION ENGINE CONTAINER ── */}
+                    <div className="relative aspect-video bg-black w-full overflow-hidden rounded-lg">
+                      <canvas ref={canvasRef} className="hidden" />
                       
-                      {/* ── LEFT: Raw Camera Feed ── */}
-                      <div className="relative aspect-video border-r border-[#22222f] bg-black">
-                        <video
-                          ref={videoRef}
-                          autoPlay
-                          playsInline
-                          muted
-                          className="absolute inset-0 w-full h-full object-cover"
-                          style={{ transform: 'scaleX(-1)' }}
+                      {/* Raw Camera Feed (Mirrored) */}
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="absolute inset-0 w-full h-full object-cover"
+                        style={{ transform: 'scaleX(-1)' }}
+                      />
+                      
+                      {/* Backend CV Image Overlay */}
+                      {annotatedImage && (backendMode === 'ws' || backendMode === 'http') && (
+                        <img
+                          src={annotatedImage}
+                          alt="Backend CV Overlay"
+                          className="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"
                         />
-                        <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-red-500/20 rounded-full border border-red-500/40 backdrop-blur-sm z-20">
+                      )}
+                      
+                      {/* Client-Side Detection Overlay */}
+                      <canvas
+                        ref={overlayCanvasRef}
+                        className="absolute inset-0 w-full h-full pointer-events-none z-20 object-contain"
+                        style={{ display: backendMode === 'client' ? 'block' : 'none' }}
+                      />
+
+                      {/* HUD Badges */}
+                      <div className="absolute top-3 left-3 flex flex-col gap-2 z-30">
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500/20 rounded-full border border-red-500/40 backdrop-blur-sm w-max">
                           <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                           <span className="text-[10px] text-red-400 font-bold uppercase">RAW FEED</span>
                         </div>
-                      </div>
-
-                      {/* ── RIGHT: AI Detection Matrix ── */}
-                      <div className="relative aspect-video bg-[#030308]">
-                        {annotatedImage && (backendMode === 'ws' || backendMode === 'http') && (
-                          <img
-                            src={annotatedImage}
-                            alt="Backend CV Overlay"
-                            className="absolute inset-0 w-full h-full object-contain"
-                          />
-                        )}
-                        <canvas
-                          ref={overlayCanvasRef}
-                          className="absolute inset-0 w-full h-full pointer-events-none z-10 object-contain"
-                          style={{ display: backendMode === 'client' ? 'block' : 'none' }}
-                        />
-                        <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 bg-cyan-500/20 rounded-full border border-cyan-500/40 backdrop-blur-sm z-20">
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-500/20 rounded-full border border-cyan-500/40 backdrop-blur-sm w-max">
                           <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
                           <span className="text-[10px] text-cyan-400 font-bold uppercase">DETECTION ENGINE</span>
                         </div>
                       </div>
-                      
                     </div>
 
                     {/* ── Dynamic mode badge top-center ── */}
@@ -1584,6 +1608,47 @@ export default function WebcamSection() {
                     <div className="absolute bottom-3 right-3 z-20 px-2.5 py-1 bg-black/60 backdrop-blur-sm rounded-full border border-white/10">
                       <span className="text-[9px] text-gray-400">🔒 Local only • Not stored</span>
                     </div>
+
+                    {/* ── LIVE TELEMETRY POP-UP PANEL ── */}
+                    <AnimatePresence>
+                      {realPhysics && (
+                        <motion.div
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -20 }}
+                          className="absolute top-20 left-4 z-40 w-48 bg-black/80 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-3 shadow-2xl"
+                        >
+                          <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-2">
+                            <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                            <span className="text-[10px] font-bold text-cyan-100 tracking-wider uppercase">Live Telemetry</span>
+                          </div>
+                          
+                          <div className="space-y-3">
+                            <div>
+                              <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-0.5">Instant Velocity</div>
+                              <div className="text-xl font-black text-white font-mono">
+                                {realPhysics.speed.toFixed(2)} <span className="text-xs text-cyan-400">m/s</span>
+                              </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <div className="text-[8px] text-gray-400 uppercase tracking-widest">Displacement</div>
+                                <div className="text-xs font-bold text-purple-400 font-mono mt-0.5">
+                                  {realPhysics.distance.toFixed(2)} m
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[8px] text-gray-400 uppercase tracking-widest">Acceleration</div>
+                                <div className="text-xs font-bold text-emerald-400 font-mono mt-0.5">
+                                  {Math.abs(realPhysics.acceleration).toFixed(2)} m/s²
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </>
                 ) : (
                   <>

@@ -321,8 +321,36 @@ export default function ProfilePage({ session }: ProfilePageProps) {
       } catch (e) {
         console.error('Failed to update mock session metadata:', e);
       }
-      handleAutoSaveAction(message);
     }
+  };
+
+  const handleExportData = () => {
+    const exportData = {
+      user: sessionUser,
+      preferences: {
+        activeTab,
+        themeMode,
+        accentColor,
+        fontScale,
+        uiDensity,
+        preferredSubjects,
+        tutorPersonality,
+        simQuality,
+        physicsAccuracy
+      },
+      timestamp: new Date().toISOString()
+    };
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `neurolab_export_${new Date().getTime()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    handleAutoSaveAction('Data export package generated and download started! 📥');
   };
 
   // Nav menu section categories
@@ -1129,7 +1157,11 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                           onClick={() => setAccentColor(c)}
                           className={`py-2 border rounded-lg text-[10px] font-bold uppercase transition-all ${
                             accentColor === c
-                              ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 font-black'
+                              ? c === 'blue' ? 'bg-blue-500/20 border-blue-500/50 text-blue-400 font-black' :
+                                c === 'purple' ? 'bg-purple-500/20 border-purple-500/50 text-purple-400 font-black' :
+                                c === 'green' ? 'bg-green-500/20 border-green-500/50 text-green-400 font-black' :
+                                c === 'orange' ? 'bg-orange-500/20 border-orange-500/50 text-orange-400 font-black' :
+                                c === 'pink' ? 'bg-pink-500/20 border-pink-500/50 text-pink-400 font-black' : ''
                               : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
                           }`}
                         >
@@ -1484,7 +1516,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                       <p className="text-[11px] text-gray-500 mt-1">Acquire a complete JSON package containing all your simulation coordinates, calculations, and AI Tutor chat transcripts.</p>
                     </div>
                     <button
-                      onClick={() => handleAutoSaveAction('Data export package generated and download started! 📥')}
+                      onClick={handleExportData}
                       className="px-4 py-2.5 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold rounded-xl hover:bg-cyan-500/20 transition-all"
                     >
                       Download Export Package (JSON)

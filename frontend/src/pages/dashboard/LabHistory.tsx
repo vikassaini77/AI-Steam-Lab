@@ -160,7 +160,65 @@ export default function LabHistory() {
         throw new Error();
       }
     } catch {
-      pushNotification("Offline simulated PDF compiled successfully! 📄", "xp");
+      // Offline fallback: Generate HTML report blob
+      const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Lab Report: ${exp.name}</title>
+  <style>
+    body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 40px; color: #333; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+    h1 { color: #0e7490; border-bottom: 2px solid #0891b2; padding-bottom: 10px; margin-bottom: 30px; }
+    h2 { color: #0891b2; margin-top: 40px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
+    .metric { margin: 12px 0; font-size: 16px; }
+    .label { font-weight: 600; width: 180px; display: inline-block; color: #4b5563; }
+    .value { font-weight: 700; color: #111827; }
+    .summary { background: #f3f4f6; padding: 20px; border-radius: 12px; margin-top: 20px; border-left: 4px solid #0891b2; }
+    .dialogue { white-space: pre-wrap; }
+    .footer { margin-top: 50px; font-size: 12px; color: #9ca3af; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>NeuroLab Scientific Report</h1>
+  
+  <div class="metric"><span class="label">Experiment Name:</span> <span class="value">${exp.name}</span></div>
+  <div class="metric"><span class="label">Date Recorded:</span> <span class="value">${exp.date}</span></div>
+  <div class="metric"><span class="label">Subject Area:</span> <span class="value">${exp.metrics.subject || 'Physics'}</span></div>
+  
+  <h2>Kinematics & Telemetry</h2>
+  <div class="metric"><span class="label">Peak Velocity:</span> <span class="value">${exp.metrics.velocity_peak || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Max Amplitude:</span> <span class="value">${exp.metrics.displacement_max || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Gravity Verified:</span> <span class="value">${exp.metrics.gravity_verified || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Simulation Sync:</span> <span class="value">${exp.metrics.sync_percentage || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Max Potential Energy:</span> <span class="value">${exp.metrics.pe_max || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Max Kinetic Energy:</span> <span class="value">${exp.metrics.ke_max || 'N/A'}</span></div>
+  
+  <h2>Computer Vision Details</h2>
+  <div class="metric"><span class="label">Tracking Method:</span> <span class="value">${exp.metrics.tracking_method || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Tracking Target:</span> <span class="value">${exp.metrics.target_color || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Tracking Confidence:</span> <span class="value">${exp.metrics.accuracy || 'N/A'} @ ${exp.metrics.fps || 'N/A'}</span></div>
+
+  <h2>Scientific Roundtable Summary</h2>
+  <div class="summary">
+    <div class="dialogue">${exp.metrics.roundtable || 'No dialogue logged.'}</div>
+  </div>
+  
+  <div class="footer">
+    Generated offline by NeuroLab AI Assistant • ${new Date().toLocaleString()}
+  </div>
+</body>
+</html>`;
+
+      const blob = new Blob([htmlContent], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${exp.name.replace(/\s+/g, '_')}_Report.html`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      pushNotification("Offline simulated Lab Report downloaded successfully! 📄", "xp");
     }
   };
 
