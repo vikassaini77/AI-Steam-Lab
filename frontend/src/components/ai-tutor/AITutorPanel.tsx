@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, Mic, Sparkles, Plus, Square, Download, Share, CheckCircle2, RefreshCw, Edit2, Check, X, Volume2, Loader2 } from 'lucide-react';
 import { useChatStore } from '../../lib/chatStore';
 import type { Message } from '../../lib/chatStore';
+import ReactMarkdown from 'react-markdown';
 
 export default function AITutorPanel() {
   const { chats = [], activeChatId, addMessage, updateMessage, createNewChat, setMessages, botName, botVoiceURI } = useChatStore();
@@ -433,7 +434,13 @@ export default function AITutorPanel() {
                     </div>
                   ) : (
                     <div className="relative">
-                      <p className="whitespace-pre-wrap">{message.text}</p>
+                      {message.sender === 'ai' ? (
+                        <div className="prose prose-invert max-w-none text-gray-200 prose-p:leading-relaxed prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/10 prose-strong:text-white">
+                          <ReactMarkdown>{message.text}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="whitespace-pre-wrap">{message.text}</p>
+                      )}
                       
                       {message.sender === 'user' && (
                         <div className="absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
