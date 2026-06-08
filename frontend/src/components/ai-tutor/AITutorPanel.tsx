@@ -15,6 +15,7 @@ export default function AITutorPanel() {
   const [showCopied, setShowCopied] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editInput, setEditInput] = useState('');
+  const [kgPopup, setKgPopup] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -243,7 +244,7 @@ export default function AITutorPanel() {
           
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split('\n');
-          
+
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               try {
@@ -251,6 +252,10 @@ export default function AITutorPanel() {
                 if (data.text) {
                   fullText += data.text;
                   updateMessage(activeChatId, aiMessageId, fullText);
+                }
+                if (data.kg_update) {
+                  setKgPopup(data.kg_update);
+                  setTimeout(() => setKgPopup(''), 4000);
                 }
               } catch (e) {}
             }
@@ -298,6 +303,15 @@ export default function AITutorPanel() {
           {botName} <span className="text-gray-500 text-sm font-normal">v2.5</span>
         </div>
         <div className="flex items-center gap-2">
+          <button 
+            onClick={() => {
+              setInput("[SYSTEM: ENGAGEMENT_SPIKE]");
+              setTimeout(() => handleSend(), 100);
+            }}
+            className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold border border-cyan-500/30 hover:bg-cyan-500/30"
+          >
+            Mock Lean Forward
+          </button>
           {messages.length > 0 && (
             <>
               <button 
@@ -487,6 +501,20 @@ export default function AITutorPanel() {
           <div ref={messagesEndRef} className="h-4" />
         </div>
       </div>
+
+      <AnimatePresence>
+        {kgPopup && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="absolute bottom-24 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border border-emerald-500/50 text-white px-6 py-3 rounded-full shadow-[0_0_20px_rgba(16,185,129,0.3)] backdrop-blur-md flex items-center gap-3"
+          >
+            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+            <span className="font-semibold text-sm">{kgPopup}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Input Area */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#070714] via-[#070714] to-transparent pt-6 pb-4 px-4 w-full">
