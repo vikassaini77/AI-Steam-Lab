@@ -52,7 +52,7 @@ export default function AITutorPage() {
         </div>
 
         {/* Foreground Panel */}
-        <div className="relative z-10 w-full h-full">
+        <div className="relative z-10 w-full flex-1 flex flex-col">
           <AITutorPanel />
         </div>
       </div>
