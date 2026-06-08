@@ -10,6 +10,7 @@ import AITutorSettingsModal from './AITutorSettingsModal';
 import { useChatStore } from '../../lib/chatStore';
 import { useUserStore } from '../../store/useUserStore';
 import { UserAvatar } from '../dashboard/DashboardLayout';
+import KnowledgeMap from './KnowledgeMap';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -20,6 +21,9 @@ export default function AITutorSidebar({ isOpen, onToggle }: SidebarProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const navigate = useNavigate();
+
+  // Phase 2: Accessibility - Reading Level
+  const [readingLevel, setReadingLevel] = useState('Middle School');
 
   const chats = useChatStore((state) => state.chats) || [];
   const activeChatId = useChatStore((state) => state.activeChatId);
@@ -70,31 +74,52 @@ export default function AITutorSidebar({ isOpen, onToggle }: SidebarProps) {
             </div>
 
             {/* Scrollable History */}
-            <div className="flex-1 overflow-y-auto p-3 pt-0 space-y-2 scrollbar-hide">
-              <h3 className="text-xs font-semibold text-gray-500 px-3 pb-1">Recents</h3>
-              {chats.length === 0 && (
-                <p className="text-xs text-gray-600 px-3">No chats yet</p>
-              )}
-              {chats.map((chat) => (
-                <div key={chat.id} className="relative group">
-                  <button 
-                    onClick={() => setActiveChat(chat.id)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors truncate pr-8 ${
-                      activeChatId === chat.id 
-                        ? 'bg-white/10 text-cyan-400' 
-                        : 'text-gray-300 hover:bg-white/5 hover:text-cyan-400'
-                    }`}
-                  >
-                    {chat.title}
-                  </button>
-                  <button
-                    onClick={() => deleteChat(chat.id)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+            <div className="flex-1 overflow-y-auto p-3 pt-0 space-y-4 scrollbar-hide">
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 px-3 pb-1">Recents</h3>
+                {chats.length === 0 && (
+                  <p className="text-xs text-gray-600 px-3">No chats yet</p>
+                )}
+                {chats.map((chat) => (
+                  <div key={chat.id} className="relative group">
+                    <button 
+                      onClick={() => setActiveChat(chat.id)}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors truncate pr-8 ${
+                        activeChatId === chat.id 
+                          ? 'bg-white/10 text-cyan-400' 
+                          : 'text-gray-300 hover:bg-white/5 hover:text-cyan-400'
+                      }`}
+                    >
+                      {chat.title}
+                    </button>
+                    <button
+                      onClick={() => deleteChat(chat.id)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Phase 2: Accessibility Reading Level */}
+              <div className="px-3">
+                <h3 className="text-xs font-semibold text-gray-500 pb-2">Reading Level</h3>
+                <select 
+                  value={readingLevel}
+                  onChange={(e) => setReadingLevel(e.target.value)}
+                  className="w-full bg-[#12121a] border border-white/10 rounded-lg text-sm text-gray-300 px-3 py-2 outline-none focus:border-cyan-500/50"
+                >
+                  <option value="Middle School">Middle School</option>
+                  <option value="High School">High School</option>
+                  <option value="Undergraduate">Undergraduate</option>
+                </select>
+              </div>
+
+              {/* Phase 2: Knowledge Graph UI */}
+              <div className="px-3 pt-2">
+                <KnowledgeMap unlockedNode="Newton's 3rd Law" />
+              </div>
             </div>
 
             {/* Profile Section */}

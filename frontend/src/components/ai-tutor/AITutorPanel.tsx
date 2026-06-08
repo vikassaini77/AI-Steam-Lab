@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useRef, useEffect } from 'react';
-import { Send, Mic, Sparkles, Plus, Square, Download, Share, CheckCircle2, RefreshCw, Edit2, Check, X, Volume2 } from 'lucide-react';
+import { Send, Mic, Sparkles, Plus, Square, Download, Share, CheckCircle2, RefreshCw, Edit2, Check, X, Volume2, Loader2 } from 'lucide-react';
 import { useChatStore } from '../../lib/chatStore';
 import type { Message } from '../../lib/chatStore';
 
@@ -16,6 +16,11 @@ export default function AITutorPanel() {
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editInput, setEditInput] = useState('');
   const [kgPopup, setKgPopup] = useState('');
+  
+  // Phase 2: Engagement Tracker States
+  const [engagementState, setEngagementState] = useState<'FOCUSED' | 'CONFUSED' | 'DISENGAGED' | null>(null);
+  const [showNudge, setShowNudge] = useState(false);
+  const disengagedTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -69,6 +74,29 @@ export default function AITutorPanel() {
       }
     }
   }, []);
+
+  // Handle Engagement States
+  useEffect(() => {
+    if (engagementState === 'DISENGAGED') {
+      disengagedTimerRef.current = setTimeout(() => {
+        setShowNudge(true);
+      }, 8000);
+    } else {
+      setShowNudge(false);
+      if (disengagedTimerRef.current) clearTimeout(disengagedTimerRef.current);
+    }
+
+    if (engagementState === 'CONFUSED' && !isTyping) {
+      // Automatically ask the agent to simplify
+      setInput("[SYSTEM: CONFUSED_USER]");
+      setTimeout(() => handleSend(), 500);
+      setEngagementState(null); // Reset
+    }
+
+    return () => {
+      if (disengagedTimerRef.current) clearTimeout(disengagedTimerRef.current);
+    };
+  }, [engagementState]);
 
   const toggleListen = () => {
     if (isListening) {
@@ -301,16 +329,38 @@ export default function AITutorPanel() {
       <div className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-10 bg-gradient-to-b from-[#070714] to-transparent">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-gray-300 font-semibold text-lg ml-12">
           {botName} <span className="text-gray-500 text-sm font-normal">v2.5</span>
+          {engagementState && (
+            <span className={`ml-3 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest font-bold border ${
+              engagementState === 'FOCUSED' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+              engagementState === 'CONFUSED' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' :
+              'bg-red-500/20 text-red-400 border-red-500/30'
+            }`}>
+              {engagementState}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button 
+            onClick={() => setEngagementState('CONFUSED')}
+            className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded-lg text-[10px] font-bold border border-amber-500/30 hover:bg-amber-500/30"
+          >
+            Mock Confused
+          </button>
+          <button 
+            onClick={() => setEngagementState('DISENGAGED')}
+            className="px-2 py-1 bg-red-500/20 text-red-400 rounded-lg text-[10px] font-bold border border-red-500/30 hover:bg-red-500/30"
+          >
+            Mock Away
+          </button>
+          <button 
             onClick={() => {
+              setEngagementState('FOCUSED');
               setInput("[SYSTEM: ENGAGEMENT_SPIKE]");
               setTimeout(() => handleSend(), 100);
             }}
-            className="px-3 py-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-xs font-bold border border-cyan-500/30 hover:bg-cyan-500/30"
+            className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-[10px] font-bold border border-cyan-500/30 hover:bg-cyan-500/30"
           >
-            Mock Lean Forward
+            Mock Lean
           </button>
           {messages.length > 0 && (
             <>
@@ -486,15 +536,16 @@ export default function AITutorPanel() {
               <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center bg-white">
                 <Sparkles className="w-5 h-5 text-black" />
               </div>
-              <div className="flex items-center gap-1.5 h-8">
-                {[0, 1, 2].map((i) => (
-                  <motion.div
-                    key={i}
-                    animate={{ scale: [1, 1.2, 1], opacity: [0.3, 1, 0.3] }}
-                    transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
-                    className="w-2 h-2 rounded-full bg-gray-500"
-                  />
-                ))}
+              <div className="bg-[#12121a]/80 border border-white/5 rounded-3xl px-5 py-2.5 flex flex-col gap-2 min-w-[200px]">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+                  <span className="text-xs text-cyan-400 font-semibold uppercase tracking-wider">Thinking</span>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <div className="h-2 bg-white/10 rounded w-full animate-pulse" />
+                  <div className="h-2 bg-white/10 rounded w-3/4 animate-pulse" />
+                  <div className="h-2 bg-white/10 rounded w-5/6 animate-pulse" />
+                </div>
               </div>
             </motion.div>
           )}
@@ -512,6 +563,24 @@ export default function AITutorPanel() {
           >
             <CheckCircle2 className="w-5 h-5 text-emerald-400" />
             <span className="font-semibold text-sm">{kgPopup}</span>
+          </motion.div>
+        )}
+        
+        {showNudge && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="absolute top-20 left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-blue-900/80 to-purple-900/80 border border-blue-500/50 text-white px-6 py-3 rounded-2xl shadow-xl backdrop-blur-md flex items-center gap-3 cursor-pointer"
+            onClick={() => setEngagementState('FOCUSED')}
+          >
+            <div className="w-8 h-8 rounded-full bg-blue-500/30 flex items-center justify-center animate-pulse">
+              <Sparkles className="w-4 h-4 text-blue-300" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm text-blue-100">Are you still there?</p>
+              <p className="text-xs text-blue-300">I noticed you stepped away. Click to resume.</p>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

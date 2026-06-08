@@ -2,7 +2,10 @@ import os
 import json # trigger reload
 import asyncio
 import google.generativeai as genai
-from app.core_backend.database.supabase_db import DatabaseManager
+from app.core_backend.database.pgvector_db import PGVectorManager as DatabaseManager
+from app.cache import get_cache, set_cache
+from app.core_backend.knowledge_graph import kg_manager
+import hashlib
 
 class AITutorService:
     def __init__(self):
@@ -15,9 +18,18 @@ class AITutorService:
             self.model = None
         self.db = DatabaseManager()
 
-    def generate_embedding(self, text):
+    async def generate_embedding(self, text):
         if not self.model: return [0.0]*768
-        return [0.1]*768
+        
+        # Latency Fix: Check Redis Cache for pre-warmed embeddings
+        cache_key = f"emb_{hashlib.md5(text.encode()).hexdigest()}"
+        cached = await get_cache(cache_key)
+        if cached:
+            return cached
+            
+        emb = [0.1]*768 # Mocked embedding response
+        await set_cache(cache_key, emb, ttl_seconds=86400) # Cache for 24h
+        return emb
 
     async def stream_chat(self, req):
         if not self.model:
@@ -45,6 +57,14 @@ class AITutorService:
                     await asyncio.sleep(0.01)
                 return
 
+            if "[system: confused_user]" in prompt_lower:
+                # Engagement Tracker: Agent notices furrowed brow and auto-simplifies
+                demo_response = "I noticed you look a bit confused. Let's break this down even simpler: Every action has an equal, opposite reaction. Does that make sense?"
+                for char in demo_response:
+                    yield f"data: {json.dumps({'text': char})}\n\n"
+                    await asyncio.sleep(0.01)
+                return
+
             if "it goes up" in prompt_lower or "goes up" in prompt_lower or "moves up" in prompt_lower:
                 # Step 6: Correct Answer -> Advance Node
                 demo_response = "Correct! 🚀 Concept Mastered. You've just unlocked a new node in your Knowledge Graph!"
@@ -64,14 +84,22 @@ class AITutorService:
             # --- NORMAL RAG FLOW ---
 
             try:
-                q_emb = self.generate_embedding(req.prompt)
+                q_emb = await self.generate_embedding(req.prompt)
                 past_context = self.db.search_memories(q_emb)
             except Exception as db_err:
                 print(f"Supabase RAG Error: {db_err}")
                 past_context = ""
             
             sys_prompt = "You are a Socratic AI physics tutor. Do not give direct answers. If the user is confused, ask a simple guiding question."
-            if past_context:
+            
+            # Phase 2: Knowledge Graph Prerequisite Mapping
+            if past_context and "[LOW_CONFIDENCE]" in past_context[0]:
+                sys_prompt += "\nSystem Note: The RAG system returned low confidence. Use the Knowledge Graph to suggest a prerequisite concept."
+                # Example keyword extraction for demo (in reality, use LLM extraction)
+                if "newton" in prompt_lower:
+                    prereqs = kg_manager.get_prerequisites("Newton's 3rd Law")
+                    sys_prompt += f"\nSuggest the user reviews these prerequisites first: {', '.join(prereqs)}"
+            elif past_context:
                 sys_prompt += f"\nPast context: {past_context}"
                 
             response = self.model.generate_content(
@@ -87,7 +115,8 @@ class AITutorService:
                     
             try:
                 session_id = getattr(req, 'session_id', 'local_session')
-                self.db.save_memory(session_id, f"Q: {req.prompt} A: {full_text}", self.generate_embedding(full_text))
+                emb = await self.generate_embedding(full_text)
+                self.db.save_memory(session_id, f"Q: {req.prompt} A: {full_text}", emb)
             except Exception as save_err:
                 print(f"Supabase Save Error: {save_err}")
                 
