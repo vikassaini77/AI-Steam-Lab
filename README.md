@@ -2,6 +2,10 @@
 
 > **DSH Hacks V1 Finalist | Theme: AI x STEM Education**
 
+[![Vercel](https://therealsujitk-vercel-badge.vercel.app/?app=stemlab-frontend)](https://vercel.com)
+[![Render](https://img.shields.io/badge/Render-Backend_Deployed-46E3B7?logo=render&logoColor=white)](https://render.com)
+[![CI/CD](https://github.com/vikassaini77/AI-Steam-Lab/actions/workflows/ci.yml/badge.svg)](https://github.com/vikassaini77/AI-Steam-Lab/actions)
+
 AI-STEAM-Lab is not just an LLM wrapper. It is a **Real-Time, Context-Aware Educational Engine**. We combine sub-1.5s latency retrieval-augmented generation (RAG) with live computer vision engagement tracking to simulate a true 1-on-1 Socratic tutoring experience. 
 
 When a student furrows their brow in confusion, our engine detects the cognitive load drop and dynamically simplifies the agent's vocabulary—in real time.

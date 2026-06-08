@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: stemlab-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    repo: https://github.com/vikassaini77/AI-Steam-Lab
+    branch: main
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: stemlab-redis
+          envVarKey: REDIS_URL
+      - key: POSTGRES_URL
+        fromDatabase:
+          name: stemlab-db
+          envVarKey: DATABASE_URL
+
+  - type: redis
+    name: stemlab-redis
+    plan: free
+
+databases:
+  - name: stemlab-db
+    databaseName: stemlab
+    user: postgres
+    plan: free
+    # Note: Free tier Render Postgres does not support pgvector out of the box easily without a custom Docker service, 
+    # but for hackathon blueprint completeness, this demonstrates the architecture.
