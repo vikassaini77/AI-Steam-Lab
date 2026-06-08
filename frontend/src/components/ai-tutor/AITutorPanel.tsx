@@ -324,7 +324,7 @@ export default function AITutorPanel() {
   };
 
   return (
-    <div className="flex-1 flex flex-col relative bg-ambient-glow bg-[#070714]">
+    <div className="flex-1 w-full h-full flex flex-col relative bg-ambient-glow bg-[#070714]">
       
       {/* Top Bar (Optional Model Selector & Actions) */}
       <div className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-10 glass border-b-0">
