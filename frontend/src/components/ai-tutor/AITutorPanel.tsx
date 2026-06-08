@@ -323,10 +323,10 @@ export default function AITutorPanel() {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-transparent relative overflow-hidden">
+    <div className="flex-1 flex flex-col relative bg-ambient-glow bg-[#070714]">
       
       {/* Top Bar (Optional Model Selector & Actions) */}
-      <div className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-10 bg-gradient-to-b from-[#070714] to-transparent">
+      <div className="absolute top-0 left-0 right-0 h-14 flex items-center justify-between px-4 z-10 glass border-b-0">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-gray-300 font-semibold text-lg ml-12">
           {botName} <span className="text-gray-500 text-sm font-normal">v2.5</span>
           {engagementState && (
@@ -402,7 +402,7 @@ export default function AITutorPanel() {
                 <div
                   className={`text-[15px] leading-relaxed max-w-[85%] ${
                     message.sender === 'user'
-                      ? 'bg-[#12121a]/80 border border-white/5 shadow-lg shadow-cyan-900/10 text-gray-100 px-5 py-2.5 rounded-3xl group'
+                      ? 'glass text-gray-100 px-5 py-2.5 rounded-3xl group'
                       : 'text-gray-100 py-1 group'
                   }`}
                 >
@@ -586,7 +586,7 @@ export default function AITutorPanel() {
       </AnimatePresence>
 
       {/* Input Area */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#070714] via-[#070714] to-transparent pt-6 pb-4 px-4 w-full">
+      <div className="absolute bottom-0 left-0 right-0 p-4 glass border-t-0 z-10 pt-8 pb-6">
         <div className="max-w-3xl mx-auto w-full relative">
           <div className="bg-[#12121a]/90 backdrop-blur-md rounded-[24px] pl-4 pr-2 py-2 flex items-end shadow-[0_0_15px_rgba(0,255,255,0.05)] border border-white/10">
             <button 
