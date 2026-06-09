@@ -6,8 +6,16 @@ import AITutorPanel from '../components/ai-tutor/AITutorPanel';
 export default function AITutorPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // Hack for Windows Chrome 33% zoom bug: force a layout reflow on mount
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <div className="w-full h-full flex overflow-hidden bg-[#070714] text-gray-100 font-sans">
+    <div className="absolute inset-0 flex overflow-hidden bg-[#070714] text-gray-100 font-sans">
       {/* Sidebar Component */}
       <AITutorSidebar 
         isOpen={sidebarOpen} 
@@ -15,7 +23,7 @@ export default function AITutorPage() {
       />
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col relative h-full bg-[#070714]">
+      <div className="flex-1 min-h-0 flex flex-col relative bg-[#070714]">
         {/* Animated Background Layers */}
         <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
           {/* Animated floating orbs */}
@@ -52,7 +60,7 @@ export default function AITutorPage() {
         </div>
 
         {/* Foreground Panel */}
-        <div className="relative z-10 w-full flex-1 flex flex-col">
+        <div className="relative z-10 w-full flex-1 min-h-0 flex flex-col">
           <AITutorPanel />
         </div>
       </div>
