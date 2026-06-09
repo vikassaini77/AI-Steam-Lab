@@ -46,7 +46,6 @@ export default function KnowledgeMap({ unlockedNode }: { unlockedNode?: string }
       </div>
       <ReactFlow nodes={nodes} edges={edges} fitView>
         <Background color="#374151" gap={16} />
-        <Controls className="bg-gray-900 border-white/10 fill-white" />
       </ReactFlow>
     </div>
   );
