@@ -6,16 +6,23 @@ import AITutorPanel from '../components/ai-tutor/AITutorPanel';
 export default function AITutorPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Hack for Windows Chrome 33% zoom bug: force a layout reflow on mount
+  // Ultimate hack for Windows Chrome rendering engine initial paint bug
   React.useEffect(() => {
     const timer = setTimeout(() => {
-      window.dispatchEvent(new Event('resize'));
-    }, 100);
+      // Force hardware layout recalculation
+      const root = document.getElementById('root');
+      if (root) {
+        root.style.display = 'none';
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        root.offsetHeight; // Force layout read
+        root.style.display = '';
+      }
+    }, 50);
     return () => clearTimeout(timer);
   }, []);
 
   return (
-    <div className="flex-1 min-h-0 w-full flex overflow-hidden bg-[#070714] text-gray-100 font-sans">
+    <div className="h-[100dvh] w-full flex overflow-hidden bg-[#070714] text-gray-100 font-sans">
       {/* Sidebar Component */}
       <AITutorSidebar 
         isOpen={sidebarOpen} 
