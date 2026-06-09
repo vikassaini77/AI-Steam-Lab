@@ -6,7 +6,30 @@
 
   **The Next-Generation Agentic AI & Computer Vision Physics Platform**
 
+  [![Demo Video](https://img.shields.io/badge/▶_Watch_Demo-YouTube-red?style=for-the-badge)](YOUR_YOUTUBE_LINK)
+  [![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Render-blue?style=for-the-badge)](https://neurolab.onrender.com)
+  [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+
   *Transforming any standard webcam into a high-precision, interactive science laboratory with real-time tracking and a dedicated AI Tutor.*
+
+---
+
+## ⚡ TL;DR
+
+> An agentic AI platform that turns any $0 webcam into a 
+> physics laboratory. No expensive hardware. No rigid simulations.
+
+- 🔬 **What it does**: Real-time CV kinematics tracking + 
+  Socratic AI tutor that guides students to conclusions from 
+  their own live experiment data
+- 🧠 **Core innovation**: 3-hop ReAct loop (Gemini 2.5 Flash) 
+  + pgvector RAG memory + 60+ FPS OpenCV tracking in one pipeline
+- 💥 **Impact**: Replaces $50,000 school lab setups with a 
+  standard webcam — accessible to every student on Earth
+- 🚀 **Live Demo**: [Launch NeuroLab](https://neurolab.onrender.com)
+- ⚙️ **One-command setup**: `docker-compose up --build`
+
+---
 
   <!-- Badges -->
   [![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)](#)
@@ -194,6 +217,8 @@ AI STEM Lab Assistant/
 | **AI / NLP** | Google Gemini 2.5 Flash | Tool-calling ReAct Agent and text embeddings. |
 | **Computer Vision**| OpenCV, NumPy | Real-time object tracking and numerical integration. |
 | **DevOps** | Docker, Nginx, GitHub Actions| Containerized deployments and automated CI/CD. |
+| Task Queue  | Celery, Redis 7       | Async background workers |
+| Monitoring  | Prometheus, Sentry    | APM, error tracking, metrics |
 
 ---
 
@@ -203,8 +228,8 @@ AI STEM Lab Assistant/
 
 **1. Clone the repository**
 ```bash
-git clone https://github.com/username/neurolab.git
-cd neurolab
+git clone https://github.com/vikassaini77/AI-Steam-Lab.git
+cd AI-Steam-Lab
 ```
 
 **2. Backend Setup**
@@ -375,7 +400,16 @@ npm run lint
 
 ## 🖼️ 20. Screenshots Section
 
-*(These are generated mockups representing the final high-fidelity design of the application)*
+See the [live demo](https://neurolab.onrender.com) to experience the platform in action.
+
+### CV Tracking in Action
+![CV Tracking](docs/assets/cv_tracking.gif)
+
+### AI Socratic Tutor
+![AI Tutor](docs/assets/ai_tutor.gif)
+
+### Gamification System
+![Gamification](docs/assets/gamification.gif)
 
 | Dashboard HUD | AI Tutor Interface |
 | ------------- | ------------------ |
