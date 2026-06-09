@@ -414,7 +414,7 @@ export default function AITutorPanel() {
       <div className="flex-1 overflow-y-auto w-full pt-16 pb-32">
         <div className="max-w-3xl mx-auto px-4 flex flex-col space-y-6">
           <AnimatePresence>
-            {messages.map((message) => (
+            {messages.filter(m => !m.text.startsWith('[SYSTEM:')).map((message) => (
               <motion.div
                 key={message.id}
                 initial={{ opacity: 0, y: 10 }}
