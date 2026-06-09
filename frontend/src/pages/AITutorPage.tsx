@@ -15,7 +15,7 @@ export default function AITutorPage() {
   }, []);
 
   return (
-    <div className="absolute inset-0 flex overflow-hidden bg-[#070714] text-gray-100 font-sans">
+    <div className="flex-1 min-h-0 w-full flex overflow-hidden bg-[#070714] text-gray-100 font-sans">
       {/* Sidebar Component */}
       <AITutorSidebar 
         isOpen={sidebarOpen} 
