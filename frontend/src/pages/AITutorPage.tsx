@@ -7,7 +7,7 @@ export default function AITutorPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#070714] text-gray-100 font-sans">
+    <div className="fixed inset-0 flex overflow-hidden bg-[#070714] text-gray-100 font-sans">
       {/* Sidebar Component */}
       <AITutorSidebar 
         isOpen={sidebarOpen} 
