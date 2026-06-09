@@ -346,31 +346,49 @@ export default function AITutorPanel() {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mr-2 hidden md:inline-block">Webcam Simulator:</span>
-          <button 
-            title="Simulates the student looking confused. The AI will instantly pause and simplify the current topic."
-            onClick={() => setEngagementState('CONFUSED')}
-            className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded-lg text-[10px] font-bold border border-amber-500/30 hover:bg-amber-500/30 cursor-help"
-          >
-            Confused
-          </button>
-          <button 
-            title="Simulates the student looking away from the screen. After 8 seconds, the AI will nudge them to focus."
-            onClick={() => setEngagementState('DISENGAGED')}
-            className="px-2 py-1 bg-red-500/20 text-red-400 rounded-lg text-[10px] font-bold border border-red-500/30 hover:bg-red-500/30 cursor-help"
-          >
-            Look Away
-          </button>
-          <button 
-            title="Simulates the student leaning in closely. The AI will immediately dive deeper into the topic with more enthusiasm."
-            onClick={() => {
-              setEngagementState('FOCUSED');
-              setInput("[SYSTEM: ENGAGEMENT_SPIKE]");
-              setTimeout(() => handleSend(), 100);
-            }}
-            className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-[10px] font-bold border border-cyan-500/30 hover:bg-cyan-500/30 cursor-help"
-          >
-            Lean In
-          </button>
+          
+          <div className="relative group">
+            <button 
+              onClick={() => setEngagementState('CONFUSED')}
+              className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded-lg text-[10px] font-bold border border-amber-500/30 hover:bg-amber-500/30 transition-colors"
+            >
+              Confused
+            </button>
+            <div className="absolute top-full mt-3 right-0 w-64 p-3 bg-[#12121a] border border-white/10 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none translate-y-2 group-hover:translate-y-0">
+              <div className="absolute -top-2 right-4 w-4 h-4 bg-[#12121a] border-t border-l border-white/10 transform rotate-45"></div>
+              <p className="text-xs text-gray-300 leading-relaxed relative z-10">Simulates the student looking <span className="text-amber-400 font-semibold">confused</span>. The AI will instantly pause and simplify the topic.</p>
+            </div>
+          </div>
+
+          <div className="relative group">
+            <button 
+              onClick={() => setEngagementState('DISENGAGED')}
+              className="px-2 py-1 bg-red-500/20 text-red-400 rounded-lg text-[10px] font-bold border border-red-500/30 hover:bg-red-500/30 transition-colors"
+            >
+              Look Away
+            </button>
+            <div className="absolute top-full mt-3 right-0 w-64 p-3 bg-[#12121a] border border-white/10 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none translate-y-2 group-hover:translate-y-0">
+              <div className="absolute -top-2 right-4 w-4 h-4 bg-[#12121a] border-t border-l border-white/10 transform rotate-45"></div>
+              <p className="text-xs text-gray-300 leading-relaxed relative z-10">Simulates the student <span className="text-red-400 font-semibold">looking away</span>. After 8 seconds, the AI will nudge them to focus.</p>
+            </div>
+          </div>
+
+          <div className="relative group">
+            <button 
+              onClick={() => {
+                setEngagementState('FOCUSED');
+                setInput("[SYSTEM: ENGAGEMENT_SPIKE]");
+                setTimeout(() => handleSend(), 100);
+              }}
+              className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-[10px] font-bold border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors"
+            >
+              Lean In
+            </button>
+            <div className="absolute top-full mt-3 right-0 w-64 p-3 bg-[#12121a] border border-white/10 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 pointer-events-none translate-y-2 group-hover:translate-y-0">
+              <div className="absolute -top-2 right-4 w-4 h-4 bg-[#12121a] border-t border-l border-white/10 transform rotate-45"></div>
+              <p className="text-xs text-gray-300 leading-relaxed relative z-10">Simulates the student <span className="text-cyan-400 font-semibold">leaning in</span>. The AI will immediately dive deeper into the topic.</p>
+            </div>
+          </div>
           {messages.length > 0 && (
             <>
               <button 
