@@ -345,27 +345,31 @@ export default function AITutorPanel() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mr-2 hidden md:inline-block">Webcam Simulator:</span>
           <button 
+            title="Simulates the student looking confused. The AI will instantly pause and simplify the current topic."
             onClick={() => setEngagementState('CONFUSED')}
-            className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded-lg text-[10px] font-bold border border-amber-500/30 hover:bg-amber-500/30"
+            className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded-lg text-[10px] font-bold border border-amber-500/30 hover:bg-amber-500/30 cursor-help"
           >
-            Mock Confused
+            Confused
           </button>
           <button 
+            title="Simulates the student looking away from the screen. After 8 seconds, the AI will nudge them to focus."
             onClick={() => setEngagementState('DISENGAGED')}
-            className="px-2 py-1 bg-red-500/20 text-red-400 rounded-lg text-[10px] font-bold border border-red-500/30 hover:bg-red-500/30"
+            className="px-2 py-1 bg-red-500/20 text-red-400 rounded-lg text-[10px] font-bold border border-red-500/30 hover:bg-red-500/30 cursor-help"
           >
-            Mock Away
+            Look Away
           </button>
           <button 
+            title="Simulates the student leaning in closely. The AI will immediately dive deeper into the topic with more enthusiasm."
             onClick={() => {
               setEngagementState('FOCUSED');
               setInput("[SYSTEM: ENGAGEMENT_SPIKE]");
               setTimeout(() => handleSend(), 100);
             }}
-            className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-[10px] font-bold border border-cyan-500/30 hover:bg-cyan-500/30"
+            className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-[10px] font-bold border border-cyan-500/30 hover:bg-cyan-500/30 cursor-help"
           >
-            Mock Lean
+            Lean In
           </button>
           {messages.length > 0 && (
             <>
