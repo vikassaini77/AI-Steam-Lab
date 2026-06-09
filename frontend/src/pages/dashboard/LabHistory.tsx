@@ -54,8 +54,10 @@ export default function LabHistory() {
       const res = await fetch(`${apiHost}/api/experiments/history`);
       if (res.ok) {
         const data = await res.json();
+        // Handle both array and {history: array} response formats
+        const historyArray = Array.isArray(data) ? data : (data.history || []);
         // Sort chronologically desc
-        setExperiments(data.reverse());
+        setExperiments(historyArray.reverse());
       } else {
         throw new Error('Failed to retrieve history');
       }
