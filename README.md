@@ -6,7 +6,6 @@
 
   **The Next-Generation Agentic AI & Computer Vision Physics Platform**
 
-  [![Demo Video](https://img.shields.io/badge/▶_Watch_Demo-YouTube-red?style=for-the-badge)](YOUR_YOUTUBE_LINK)
   [![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Render-blue?style=for-the-badge)](https://neurolab.onrender.com)
   [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -105,12 +104,13 @@ Global STEM education faces a massive accessibility crisis. Developing nations a
 | Feature | Description | Status |
 | ------- | ----------- | ------ |
 | **Real-Time CV Tracking** | Extracts live kinematics (velocity, acceleration) from webcam feeds. | 🟢 Active |
-| **Agentic AI Tutor** | Multi-persona ReAct Loop driven by Gemini 2.5 Flash. | 🟢 Active |
+| **Agentic AI Tutor** | Multi-persona ReAct Loop driven by Gemini 2.5 Flash, with Text-to-Speech (TTS) Voice Synthesis. | 🟢 Active |
 | **Vector RAG Memory** | Cross-session context retrieval via `text-embedding-004`. | 🟢 Active |
-| **Server-Sent Events (SSE)** | Typewriter-style AI response streaming for extreme low latency. | 🟢 Active |
-| **Gamified Progress** | XP calculation, badges, and adaptive skill trees. | 🟢 Active |
-| **PWA Resiliency** | Progressive Web App offline caching via Service Workers. | 🟢 Active |
+| **Downloadable PDF Lab Reports**| Generates pixel-perfect PDF science reports securely on the client-side (`html2pdf`). | 🟢 Active |
+| **Global Leaderboards** | Gamified competitive rankings, top 3 podiums, and adaptive XP leveling. | 🟢 Active |
+| **Interactive Onboarding Tour**| Seamless dashboard overlay guiding new students through core features. | 🟢 Active |
 | **Dual-DB Architecture** | Supabase Postgres/pgvector with a robust Local JSON fallback. | 🟢 Active |
+| **Enterprise Security Standard** | Incorporates stringent authentication routing and a full `SECURITY.md` framework. | 🟢 Active |
 
 ---
 
@@ -438,6 +438,7 @@ Simply link your GitHub repository to Render.
 | ------- | -------- | ------ |
 | **v1.0** | Core Physics Engine, Gemini Chat, Gamification | ✅ Complete |
 | **v1.1** | Vector RAG Memory, CI/CD pipelines, Docker | ✅ Complete |
+| **v1.5** | Premium UX: Global Leaderboards, AI Voice (TTS), PDF Exports, Onboarding Tour | ✅ Complete |
 | **v2.0** | Multiplayer WebRTC Lab Sharing, Chemistry module | Q3 2026 |
 | **v2.5** | Multi-modal Computer Vision (Hands & Pose detection) | Q4 2026 |
 
