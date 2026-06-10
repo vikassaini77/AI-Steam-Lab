@@ -27,6 +27,18 @@ export default function AITutorPanel() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const recognitionRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      pushNotification(`Attached: ${file.name}`, 'success');
+      setInput((prev) => prev + (prev ? '\n' : '') + `[Attached File: ${file.name}] `);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   // Initialize new chat if none exists
   useEffect(() => {
@@ -622,8 +634,14 @@ export default function AITutorPanel() {
       <div className="relative w-full p-4 glass border-t border-white/5 z-10 pt-4 pb-6 shrink-0">
         <div className="max-w-3xl mx-auto w-full relative">
           <div className="bg-[#12121a]/90 backdrop-blur-md rounded-[24px] pl-4 pr-2 py-2 flex items-end shadow-[0_0_15px_rgba(0,255,255,0.05)] border border-white/10">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              onChange={handleFileSelect} 
+            />
             <button 
-              onClick={() => pushNotification('File attachments will be supported in v3.0.', 'info')}
+              onClick={() => fileInputRef.current?.click()}
               className="p-2 mr-1 rounded-full text-gray-400 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0 mb-1"
             >
               <Plus className="w-5 h-5" />

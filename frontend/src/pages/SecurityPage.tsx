@@ -374,7 +374,7 @@ export default function SecurityPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#070714] text-white relative overflow-hidden">
+    <div className="min-h-screen bg-[#070714] text-white relative overflow-x-hidden">
       <Toast msg={toastMsg} />
 
       {/* Background */}

@@ -49,7 +49,7 @@ export default function FeaturesPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#070714] text-white relative overflow-hidden">
+    <div className="min-h-screen bg-[#070714] text-white relative overflow-x-hidden">
       {/* Grid background */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-cyan-500/5 rounded-full blur-3xl" />

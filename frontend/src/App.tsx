@@ -79,6 +79,14 @@ function AppContent() {
     setCurrentPage('auth');
   };
 
+  const RequireAuthFallback = () => {
+    useEffect(() => {
+      setCurrentPage('intro');
+      navigate('/', { replace: true });
+    }, []);
+    return <PageLoader />;
+  };
+
   if (loading) {
     return <PageLoader />;
   }
@@ -108,7 +116,11 @@ function AppContent() {
         {/* Live Lab direct routing */}
         <Route 
           path="/live-lab" 
-          element={session ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />} 
+          element={session ? <Navigate to="/dashboard" replace /> : <RequireAuthFallback />} 
+        />
+        <Route 
+          path="/ai-tutor" 
+          element={session ? <Navigate to="/dashboard/ai-tutor" replace /> : <RequireAuthFallback />} 
         />
         
         <Route
@@ -236,9 +248,13 @@ function AppContent() {
         <Route
           path="/ai-tutor"
           element={
-            <ReactSuspense fallback={<PageLoader />}>
-              <AITutorPage />
-            </ReactSuspense>
+            session ? (
+              <ReactSuspense fallback={<PageLoader />}>
+                <AITutorPage />
+              </ReactSuspense>
+            ) : (
+              <RequireAuthFallback />
+            )
           }
         />
 

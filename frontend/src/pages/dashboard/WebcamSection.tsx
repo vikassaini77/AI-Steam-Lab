@@ -1073,43 +1073,26 @@ export default function WebcamSection() {
   };
 
   const downloadCompiledReport = async () => {
-    handleAutoSaveAction("FastAPI compiling scientific ReportLab PDF... 📄");
+    handleAutoSaveAction("Compiling PDF Lab Report...");
     try {
-      const apiHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? `${window.location.protocol}//${window.location.hostname}:8000`
-        : window.location.origin;
-        
-      const response = await fetch(`${apiHost}/api/experiments/generate-report`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          experiment_name: 'Pendulum Harmonic Motion',
-          student_name: 'Hackathon Student',
-          metrics: {
-            displacement: '1.25m',
-            velocity_peak: '2.84m/s',
-            gravity_verified: '9.81m/s²',
-            sync_percentage: '99.4%'
-          },
-          ai_summary: 'Consensus reached: Potential and Kinetic energy margins scale beautifully under Simple Harmonic Motion.'
-        })
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const downloadUrl = `${apiHost}${data.download_url}`;
-        const a = document.createElement('a');
-        a.href = downloadUrl;
-        a.download = data.filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        handleAutoSaveAction('Lab Report PDF downloaded successfully! 📄');
-      } else {
-        throw new Error();
-      }
-    } catch {
-      handleAutoSaveAction('Offline simulated download active!');
+      // @ts-ignore
+      const html2pdf = (await import('html2pdf.js')).default;
+      const element = document.getElementById('lab-report-content');
+      if (!element) throw new Error("Content not found");
+      
+      const opt = {
+        margin:       0.5,
+        filename:     'NeuroLab_Live_Report.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#070714' },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
+      };
+      
+      await html2pdf().set(opt).from(element).save();
+      handleAutoSaveAction('Lab Report PDF downloaded successfully! 📄');
+    } catch (err) {
+      console.error(err);
+      handleAutoSaveAction('Failed to generate PDF Report.');
     }
   };
 
@@ -1376,7 +1359,7 @@ export default function WebcamSection() {
       </motion.div>
 
       {/* Main Workspace Layout Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div id="lab-report-content" className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* Left Side: Dynamic Side-by-Side Digital Twin synchronized views */}
         <div className="lg:col-span-8 space-y-6">

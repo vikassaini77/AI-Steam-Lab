@@ -78,7 +78,8 @@ class AITutorService:
                 except Exception as e:
                     print(f"Error adding XP: {e}")
                     
-                yield f"data: {json.dumps({'kg_update': \"Newton's 3rd Law Mastered\"})}\n\n"
+                update_data = json.dumps({'kg_update': "Newton's 3rd Law Mastered"})
+                yield f"data: {update_data}\n\n"
                 return
             
             # --- NORMAL RAG FLOW ---

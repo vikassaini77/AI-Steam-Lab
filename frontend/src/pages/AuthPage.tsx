@@ -152,17 +152,8 @@ function SignInForm({ onSwitch, onAuthSuccess, onForgot }: { onSwitch: () => voi
   };
 
   const handleOAuth = async (provider: 'google' | 'github') => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo: `${window.location.origin}/dashboard` },
-      });
-      if (error) throw error;
-    } catch (err: any) {
-      setError(err.message);
-      setLoading(false);
-    }
+    const providerName = provider === 'google' ? 'Google' : 'GitHub';
+    setError(`${providerName} sign in is coming soon!`);
   };
 
   return (
@@ -279,7 +270,7 @@ function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (e
     if (!formData.firstName.trim()) errors.firstName = 'First name is required';
     if (!formData.lastName.trim()) errors.lastName = 'Last name is required';
     if (!formData.username.trim()) errors.username = 'Username is required';
-    if (!/^[a-z0-9_]{3,20}$/.test(formData.username)) errors.username = 'Username must be 3-20 chars, lowercase letters, numbers, underscores';
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(formData.username)) errors.username = 'Username must be 3-20 chars, letters, numbers, underscores';
     if (!formData.email.includes('@')) errors.email = 'Valid email required';
     if (formData.password.length < 8) errors.password = 'Password must be at least 8 characters';
     if (formData.password !== formData.confirmPassword) errors.confirmPassword = 'Passwords do not match';
@@ -321,17 +312,8 @@ function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (e
   };
 
   const handleOAuth = async (provider: 'google' | 'github') => {
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo: `${window.location.origin}/dashboard` },
-      });
-      if (error) throw error;
-    } catch (err: any) {
-      setError(err.message);
-      setLoading(false);
-    }
+    const providerName = provider === 'google' ? 'Google' : 'GitHub';
+    setError(`${providerName} sign in is coming soon!`);
   };
 
   return (
@@ -926,7 +908,7 @@ export default function AuthPage({ onAuthSuccess, initialView = 'signin' }: Auth
   const [signupEmail, setSignupEmail] = useState('');
 
   return (
-    <div className="min-h-screen bg-[#070714] relative overflow-hidden flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#070714] relative overflow-x-hidden flex items-center justify-center p-4">
       <AuthBackground />
 
       {/* Left panel — only on large screens */}

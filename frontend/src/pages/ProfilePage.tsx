@@ -463,7 +463,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#07070f] relative overflow-hidden flex flex-col justify-between">
+    <div className="min-h-screen bg-[#07070f] relative overflow-x-hidden flex flex-col justify-between">
       {/* Ambient glassmorphic glowing panels */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-purple-500/5 rounded-full blur-[120px]" />

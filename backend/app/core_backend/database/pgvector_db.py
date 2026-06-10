@@ -123,7 +123,11 @@ class PGVectorManager:
             # Fallback
             if hasattr(self, 'fallback_memories') and self.fallback_memories:
                 def cosine_similarity(a, b):
-                    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+                    norm_a = np.linalg.norm(a)
+                    norm_b = np.linalg.norm(b)
+                    if norm_a == 0 or norm_b == 0:
+                        return 0.0
+                    return np.dot(a, b) / (norm_a * norm_b)
                 results = []
                 for mem in self.fallback_memories:
                     sim = cosine_similarity(query_embedding, mem["embedding"])

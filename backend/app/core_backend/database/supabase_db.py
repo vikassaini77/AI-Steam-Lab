@@ -1,6 +1,9 @@
 import os
 import json
 import numpy as np
+import threading
+
+db_lock = threading.Lock()
 
 class DatabaseManager:
     def __init__(self):
@@ -20,34 +23,43 @@ class DatabaseManager:
             json.dump(data, f, indent=2)
 
     def save_experiment(self, data):
-        db = self._read_local()
-        db["experiments"].append(data)
-        self._write_local(db)
+        with db_lock:
+            db = self._read_local()
+            db["experiments"].append(data)
+            self._write_local(db)
 
     def get_experiments(self):
         print(f"Supabase get_experiments failed: [Errno 11001] getaddrinfo failed")
-        return self._read_local()["experiments"]
+        with db_lock:
+            return self._read_local()["experiments"]
 
     def add_xp(self, user_id, amount):
-        db = self._read_local()
-        if user_id not in db["xp"]:
-            db["xp"][user_id] = 0
-        db["xp"][user_id] += amount
-        self._write_local(db)
+        with db_lock:
+            db = self._read_local()
+            if user_id not in db["xp"]:
+                db["xp"][user_id] = 0
+            db["xp"][user_id] += amount
+            self._write_local(db)
 
     def save_memory(self, session_id, text, embedding):
-        db = self._read_local()
-        db["memories"].append({"session_id": session_id, "text": text, "embedding": embedding})
-        self._write_local(db)
+        with db_lock:
+            db = self._read_local()
+            db["memories"].append({"session_id": session_id, "text": text, "embedding": embedding})
+            self._write_local(db)
 
     def search_memories(self, query_embedding, top_k=3):
-        db = self._read_local()
+        with db_lock:
+            db = self._read_local()
         memories = db["memories"]
         if not memories:
             return []
         
         def cosine_similarity(a, b):
-            return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+            norm_a = np.linalg.norm(a)
+            norm_b = np.linalg.norm(b)
+            if norm_a == 0 or norm_b == 0:
+                return 0.0
+            return np.dot(a, b) / (norm_a * norm_b)
             
         results = []
         for mem in memories:

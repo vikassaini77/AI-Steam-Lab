@@ -17,7 +17,8 @@ import {
   Shield,
   History,
   Camera,
-  Activity
+  Activity,
+  Target
 } from 'lucide-react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -28,6 +29,7 @@ import {
   clearAll,
   Notification,
 } from '../../lib/notificationStore';
+import OnboardingTour from './OnboardingTour';
 
 const navItems = [
   { icon: Home, label: 'Home', path: '/dashboard' },
@@ -37,6 +39,7 @@ const navItems = [
   { icon: Atom, label: 'Physics Lab', path: '/dashboard/physics' },
   { icon: Trophy, label: 'Challenges', path: '/dashboard/challenges' },
   { icon: Sparkles, label: 'Achievements', path: '/dashboard/achievements' },
+  { icon: Target, label: 'Leaderboard', path: '/dashboard/leaderboard' },
   { icon: Shield, label: 'Security', path: '/dashboard/security' },
 ];
 
@@ -205,6 +208,7 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
     if (path.startsWith('/dashboard/physics')) return { title: 'Physics Lab', subtitle: 'Interactive physics simulations' };
     if (path.startsWith('/dashboard/challenges')) return { title: 'Challenges', subtitle: 'Complete quests to level up your rank' };
     if (path.startsWith('/dashboard/achievements')) return { title: 'Achievements', subtitle: 'Track your progress and badges' };
+    if (path.startsWith('/dashboard/leaderboard')) return { title: 'Leaderboard', subtitle: 'Global ranking' };
     if (path.startsWith('/dashboard/profile')) return { title: 'Settings', subtitle: 'Customize your experience' };
     if (path.startsWith('/dashboard/security')) return { title: 'Cyber Security Center', subtitle: 'Production-grade session safety controls' };
     return { title: 'AI Laboratory', subtitle: 'Real-time STEM experiments powered by AI' };
@@ -213,7 +217,8 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
   const headerInfo = getHeaderInfo();
 
   return (
-    <div className="min-h-screen bg-[#0a0a1a] relative overflow-hidden">
+    <div className="min-h-screen bg-[#0a0a1a] relative overflow-x-hidden">
+      <OnboardingTour />
       {/* Background gradient */}
       <div className="fixed inset-0 bg-gradient-to-br from-[#0a0a1a] via-[#0d0d25] to-[#0a0a1a] z-0" />
       <div className="fixed top-0 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />

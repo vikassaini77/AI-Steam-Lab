@@ -14,6 +14,33 @@ export interface Notification {
   popup?: boolean; // show as floating toast popup
 }
 
+function playPopSound() {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    osc.type = 'sine';
+    // Frequency sweep for a nice "pop/bloop" sound
+    osc.frequency.setValueAtTime(600, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.1);
+    
+    // Quick volume fade out
+    gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+    
+    osc.start();
+    osc.stop(ctx.currentTime + 0.1);
+  } catch (e) {
+    // silently ignore if audio fails or is blocked
+  }
+}
+
 type Listener = (notifications: Notification[]) => void;
 type PopupListener = (notification: Notification) => void;
 
@@ -93,6 +120,7 @@ export function pushNotification(
   notify();
   if (showPopup) {
     popupListeners.forEach((l) => l(n));
+    playPopSound();
   }
 }
 

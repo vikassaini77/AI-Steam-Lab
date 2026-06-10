@@ -8,6 +8,7 @@ import PhysicsLabPageWrapper from '../components/physics/PhysicsLabPageWrapper';
 import ChallengesPage from '../components/dashboard/ChallengesPage';
 import AchievementsPage from '../components/dashboard/AchievementsPage';
 import ExperimentsCatalog from '../components/dashboard/ExperimentsCatalog';
+import LeaderboardPage from './dashboard/LeaderboardPage';
 
 const ProfilePage = lazy(() => import('./ProfilePage'));
 const SecurityPage = lazy(() => import('./SecurityPage'));
@@ -30,6 +31,7 @@ export default function Dashboard({ session }: DashboardProps) {
           <Route path="physics" element={<PhysicsLabPageWrapper />} />
           <Route path="challenges" element={<ChallengesPage />} />
           <Route path="achievements" element={<AchievementsPage />} />
+          <Route path="leaderboard" element={<LeaderboardPage />} />
           <Route
             path="history"
             element={
