@@ -44,9 +44,9 @@ export default function LabHistory() {
   const [loading, setLoading] = useState<boolean>(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const apiHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  const apiHost = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? `${window.location.protocol}//${window.location.hostname}:8000`
-    : window.location.origin;
+    : window.location.origin);
 
   const fetchHistory = async () => {
     try {

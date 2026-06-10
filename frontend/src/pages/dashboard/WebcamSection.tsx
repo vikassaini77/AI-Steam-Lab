@@ -406,9 +406,9 @@ export default function WebcamSection() {
         handleAutoSaveAction("FastAPI backend compiling scientific PDF report... 📄");
 
         try {
-          const apiHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+          const apiHost = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? `${window.location.protocol}//${window.location.hostname}:8000`
-            : window.location.origin;
+            : window.location.origin);
             
           const response = await fetch(`${apiHost}/api/experiments/generate-report`, {
             method: 'POST',
@@ -907,7 +907,7 @@ export default function WebcamSection() {
 
     // ── Tier 2: HTTP POST fallback ──
     const tryHttpFallback = async () => {
-      const apiHost = `${window.location.protocol}//${window.location.hostname}:8000`;
+      const apiHost = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`;
       try {
         const res = await fetch(`${apiHost}/api/cv/process-frame`, {
           method: 'POST',
@@ -1099,9 +1099,9 @@ export default function WebcamSection() {
   const saveExperimentSession = async () => {
     handleAutoSaveAction("💾 Archiving live session to lab database...");
     try {
-      const apiHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      const apiHost = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
         ? `${window.location.protocol}//${window.location.hostname}:8000`
-        : window.location.origin;
+        : window.location.origin);
 
       const calcPeakVel = cameraActive && realPhysics ? realPhysics.speed : (amplitude * (Math.PI / 180) * Math.sqrt(9.81 / length) * length);
       const calcMaxDisp = cameraActive && realPhysics ? (realPhysics.distance || 0.6) : (length * Math.sin(amplitude * Math.PI / 180));
