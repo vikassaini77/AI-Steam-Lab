@@ -29,18 +29,57 @@ function AchievementsPage() {
     { title: "Knowledge Seeker", desc: "Ask 500 questions to AI Tutor", tag: "Rare", progress: 127, maxProgress: 500, xp: "350 XP" }
   ];
 
-  const leaderboardUsers = [
-    { rank: 1, name: 'Alex K.', xp: 15420, level: 24, badge: '🏆 Top Scholar' },
-    { rank: 2, name: 'Sarah M.', xp: 14850, level: 22, badge: '⭐ Gravity Sage' },
-    { rank: 3, name: 'James L.', xp: 13890, level: 21, badge: '⚡ Electro Pro' },
-    { rank: 4, name: 'vikas', xp: 2450, level: 12, badge: '🔥 Junior Scientist', isUser: true },
-    { rank: 5, name: 'Emily R.', xp: 2210, level: 11, badge: '🔬 Lab Novice' },
-    { rank: 6, name: 'David B.', xp: 1980, level: 10, badge: '🧠 Logic Seeker' },
-    { rank: 7, name: 'Chloe T.', xp: 1740, level: 9, badge: '📐 Shape Master' },
-    { rank: 8, name: 'Daniel H.', xp: 1620, level: 8, badge: '⏱️ Friction Mage' },
-    { rank: 9, name: 'Sophia W.', xp: 1450, level: 8, badge: '💫 Orbit Rookie' },
-    { rank: 10, name: 'Oliver G.', xp: 1210, level: 7, badge: '💡 Ray Starter' }
-  ];
+  const [leaderboardUsers, setLeaderboardUsers] = useState<any[]>([]);
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('neurolab_session');
+      if (stored) {
+        const session = JSON.parse(stored);
+        if (session?.user?.id) {
+          setCurrentUserId(session.user.id);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+
+    const fetchLeaderboard = async () => {
+      try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${API_URL}/api/gamification/leaderboard`);
+        if (response.ok) {
+          const data = await response.json();
+          const enrichedData = data.map((user: any) => {
+            const level = Math.max(1, Math.floor(user.xp / 1000) + (user.xp > 0 ? 1 : 0));
+            let badgeStr = '🔬 Lab Novice';
+            if (user.rank === 1) badgeStr = '🏆 Top Scholar';
+            else if (user.rank === 2) badgeStr = '⭐ Gravity Sage';
+            else if (user.rank === 3) badgeStr = '⚡ Electro Pro';
+            else if (user.rank <= 10) badgeStr = '🔥 Rising Star';
+            
+            return {
+              ...user,
+              level,
+              badge: badgeStr,
+              isUser: user.user_id === currentUserId
+            };
+          });
+          setLeaderboardUsers(enrichedData);
+        }
+      } catch (error) {
+        console.error("Failed to fetch leaderboard:", error);
+      } finally {
+        setLoadingLeaderboard(false);
+      }
+    };
+    
+    if (activeTab === 'leaderboard') {
+      fetchLeaderboard();
+    }
+  }, [activeTab, currentUserId]);
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -273,9 +312,13 @@ function AchievementsPage() {
       ) : (
         /* Global Leaderboard Tab */
         <div className="space-y-8">
-          {/* Top 3 Podium Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end mt-8">
-            {/* 2nd Place */}
+          {loadingLeaderboard ? (
+            <div className="text-center py-12 text-gray-400">Loading Leaderboard...</div>
+          ) : (
+            <>
+              {/* Top 3 Podium Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end mt-8">
+                {/* 2nd Place */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -287,14 +330,14 @@ function AchievementsPage() {
                 2
               </div>
               <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-gray-400 to-gray-200 p-0.5 shadow-lg mt-4">
-                <div className="w-full h-full rounded-full bg-[#12121a] flex items-center justify-center text-white font-black text-xl">
-                  S
+                <div className="w-full h-full rounded-full bg-[#12121a] flex items-center justify-center text-white font-black text-xl overflow-hidden">
+                  {leaderboardUsers[1]?.isUser ? <UserAvatar className="w-full h-full object-cover" /> : leaderboardUsers[1]?.name?.substring(0, 2).toUpperCase() || '-'}
                 </div>
               </div>
-              <h3 className="text-lg font-bold text-white mt-3">Sarah M.</h3>
-              <p className="text-xs text-gray-400">⭐ Gravity Sage • Level 22</p>
+              <h3 className="text-lg font-bold text-white mt-3">{leaderboardUsers[1]?.isUser ? 'You' : (leaderboardUsers[1]?.name || 'N/A')}</h3>
+              <p className="text-xs text-gray-400">{leaderboardUsers[1]?.badge || '⭐ Gravity Sage'} • Level {leaderboardUsers[1]?.level || 0}</p>
               <div className="mt-4 px-4 py-1.5 bg-gray-500/10 border border-gray-500/20 rounded-xl text-gray-300 font-extrabold text-sm">
-                14,850 XP
+                {(leaderboardUsers[1]?.xp || 0).toLocaleString()} XP
               </div>
             </motion.div>
 
@@ -310,16 +353,16 @@ function AchievementsPage() {
                 👑
               </div>
               <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-yellow-500 to-amber-300 p-0.5 shadow-lg mt-2">
-                <div className="w-full h-full rounded-full bg-[#12121a] flex items-center justify-center text-white font-black text-2xl">
-                  A
+                <div className="w-full h-full rounded-full bg-[#12121a] flex items-center justify-center text-white font-black text-2xl overflow-hidden">
+                  {leaderboardUsers[0]?.isUser ? <UserAvatar className="w-full h-full object-cover" /> : leaderboardUsers[0]?.name?.substring(0, 2).toUpperCase() || '-'}
                 </div>
               </div>
               <h3 className="text-xl font-black text-white mt-3 flex items-center gap-1.5">
-                Alex K.
+                {leaderboardUsers[0]?.isUser ? 'You' : (leaderboardUsers[0]?.name || 'N/A')}
               </h3>
-              <p className="text-xs text-yellow-400 font-semibold">🏆 Top Scholar • Level 24</p>
+              <p className="text-xs text-yellow-400 font-semibold">{leaderboardUsers[0]?.badge || '🏆 Top Scholar'} • Level {leaderboardUsers[0]?.level || 0}</p>
               <div className="mt-4 px-5 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-yellow-400 font-extrabold text-base shadow-lg shadow-yellow-500/5">
-                15,420 XP
+                {(leaderboardUsers[0]?.xp || 0).toLocaleString()} XP
               </div>
             </motion.div>
 
@@ -335,14 +378,14 @@ function AchievementsPage() {
                 3
               </div>
               <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-orange-600 to-orange-400 p-0.5 shadow-lg mt-4">
-                <div className="w-full h-full rounded-full bg-[#12121a] flex items-center justify-center text-white font-black text-xl">
-                  J
+                <div className="w-full h-full rounded-full bg-[#12121a] flex items-center justify-center text-white font-black text-xl overflow-hidden">
+                  {leaderboardUsers[2]?.isUser ? <UserAvatar className="w-full h-full object-cover" /> : leaderboardUsers[2]?.name?.substring(0, 2).toUpperCase() || '-'}
                 </div>
               </div>
-              <h3 className="text-lg font-bold text-white mt-3">James L.</h3>
-              <p className="text-xs text-gray-400">⚡ Electro Pro • Level 21</p>
+              <h3 className="text-lg font-bold text-white mt-3">{leaderboardUsers[2]?.isUser ? 'You' : (leaderboardUsers[2]?.name || 'N/A')}</h3>
+              <p className="text-xs text-gray-400">{leaderboardUsers[2]?.badge || '⚡ Electro Pro'} • Level {leaderboardUsers[2]?.level || 0}</p>
               <div className="mt-4 px-4 py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-xl text-orange-400 font-extrabold text-sm">
-                13,890 XP
+                {(leaderboardUsers[2]?.xp || 0).toLocaleString()} XP
               </div>
             </motion.div>
           </div>
@@ -409,6 +452,8 @@ function AchievementsPage() {
               ))}
             </div>
           </div>
+          </>
+          )}
         </div>
       )}
     </div>
