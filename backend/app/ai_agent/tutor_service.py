@@ -91,7 +91,7 @@ class AITutorService:
                 print(f"Supabase RAG Error: {db_err}")
                 past_context = ""
             
-            sys_prompt = "You are a Socratic AI physics tutor. Do not give direct answers. If the user is confused, ask a simple guiding question."
+            sys_prompt = "You are a friendly and adaptive AI physics tutor. If a user asks for a definition or says they don't know a concept, first provide a simple, clear explanation with an intuitive analogy. Only use the Socratic method (asking guiding questions) for problem-solving or after the user understands the basic concept. Do not frustrate the user by answering a direct plea for knowledge with another question."
             
             # Phase 2: Knowledge Graph Prerequisite Mapping
             if past_context and "[LOW_CONFIDENCE]" in past_context[0]:
