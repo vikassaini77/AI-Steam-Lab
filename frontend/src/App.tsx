@@ -118,10 +118,6 @@ function AppContent() {
           path="/live-lab" 
           element={session ? <Navigate to="/dashboard" replace /> : <RequireAuthFallback />} 
         />
-        <Route 
-          path="/ai-tutor" 
-          element={session ? <Navigate to="/dashboard/ai-tutor" replace /> : <RequireAuthFallback />} 
-        />
         
         <Route
           path="/dashboard/*"
