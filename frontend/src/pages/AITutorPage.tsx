@@ -6,20 +6,7 @@ import AITutorPanel from '../components/ai-tutor/AITutorPanel';
 export default function AITutorPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Ultimate hack for Windows Chrome rendering engine initial paint bug
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      // Force hardware layout recalculation
-      const root = document.getElementById('root');
-      if (root) {
-        root.style.display = 'none';
-        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-        root.offsetHeight; // Force layout read
-        root.style.display = '';
-      }
-    }, 50);
-    return () => clearTimeout(timer);
-  }, []);
+  // Removed dangerous layout recalculation hack that could cause the entire root element to disappear in React Strict Mode.
 
   return (
     <div className="h-[100dvh] w-full flex overflow-hidden bg-[#070714] text-gray-100 font-sans">

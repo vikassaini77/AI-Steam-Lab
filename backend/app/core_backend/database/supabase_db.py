@@ -41,6 +41,24 @@ class DatabaseManager:
             db["xp"][user_id] += amount
             self._write_local(db)
 
+    def get_leaderboard(self, limit=10):
+        with db_lock:
+            db = self._read_local()
+        xp_data = db.get("xp", {})
+        # Sort users by XP descending
+        sorted_users = sorted(xp_data.items(), key=lambda item: item[1], reverse=True)
+        
+        # Return a list of dicts with user_id and xp
+        leaderboard = []
+        for i, (uid, xp) in enumerate(sorted_users[:limit]):
+            leaderboard.append({
+                "id": uid,
+                "user_id": uid,
+                "rank": i + 1,
+                "xp": xp
+            })
+        return leaderboard
+
     def save_memory(self, session_id, text, embedding):
         with db_lock:
             db = self._read_local()
