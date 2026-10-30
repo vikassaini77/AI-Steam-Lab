@@ -1,4 +1,4 @@
-from app.services.physics_engine import PhysicsEngine
+from app.machine_learning.physics_engine import PhysicsEngine
 
 
 def test_free_fall():

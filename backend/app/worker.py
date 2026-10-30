@@ -38,3 +38,12 @@ def generate_ai_tutor_response(self, prompt: str):
     Returns the response to a webhook or stores it in Redis for the client to poll.
     """
     return {"status": "generated", "response": "AI response generated in background."}
+
+@celery_app.task(bind=True)
+def check_worker_db_connectivity(self):
+    """
+    Verifies that the Celery worker can connect to the canonical PostgreSQL database service.
+    """
+    from app.core_backend.database.pgvector_db import PGVectorManager
+    manager = PGVectorManager()
+    return manager.check_readiness()

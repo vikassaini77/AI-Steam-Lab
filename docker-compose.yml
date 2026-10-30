@@ -12,8 +12,19 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
+      - POSTGRES_URL=${POSTGRES_URL:?Set POSTGRES_URL in .env (e.g. postgresql://${POSTGRES_USER:-stemlab_app}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-stemlab})}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - METRICS_TOKEN=${METRICS_TOKEN}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - IS_CONTAINER=true
+      - ENVIRONMENT=${ENVIRONMENT:-development}
     volumes:
       - ./backend/app/database:/app/app/database
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   frontend:
     build:
@@ -33,13 +44,18 @@ services:
   db:
     image: pgvector/pgvector:pg16
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=stemlab
+      - POSTGRES_USER=${POSTGRES_USER:-stemlab_app}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Error: POSTGRES_PASSWORD environment variable must be set in .env}
+      - POSTGRES_DB=${POSTGRES_DB:-stemlab}
     expose:
       - "5432"
     volumes:
       - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stemlab_app} -d ${POSTGRES_DB:-stemlab}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   celery_worker:
     build:
@@ -50,10 +66,17 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
-      - REDIS_URL=redis://redis:6379/0
+      - POSTGRES_URL=${POSTGRES_URL:?Set POSTGRES_URL in .env (e.g. postgresql://${POSTGRES_USER:-stemlab_app}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-stemlab})}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - IS_CONTAINER=true
+      - ENVIRONMENT=${ENVIRONMENT:-development}
     depends_on:
-      - redis
-      - backend
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      backend:
+        condition: service_started
 
   proxy:
     image: nginxinc/nginx-unprivileged:alpine

@@ -6,8 +6,41 @@ services:
     repo: https://github.com/vikassaini77/AI-Steam-Lab
     branch: main
     plan: free
-    healthCheckPath: /
+    healthCheckPath: /ready
     envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: METRICS_TOKEN
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: stemlab-redis
+          envVarKey: REDIS_URL
+      - key: POSTGRES_URL
+        fromDatabase:
+          name: stemlab-db
+          envVarKey: DATABASE_URL
+
+  - type: worker
+    name: stemlab-worker
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerCommand: celery -A app.worker.celery_app worker --loglevel=info
+    repo: https://github.com/vikassaini77/AI-Steam-Lab
+    branch: main
+    plan: free
+    envVars:
+      - key: ENVIRONMENT
+        value: production
       - key: GEMINI_API_KEY
         sync: false
       - key: SUPABASE_URL
@@ -31,7 +64,7 @@ services:
 databases:
   - name: stemlab-db
     databaseName: stemlab
-    user: postgres
+    user: neurolab_app
     plan: free
-    # Note: Free tier Render Postgres does not support pgvector out of the box easily without a custom Docker service, 
-    # but for hackathon blueprint completeness, this demonstrates the architecture.
+    # Note: Free tier Render Postgres provisions a managed PostgreSQL service.
+    # The canonical connection string is automatically populated into POSTGRES_URL via fromDatabase: DATABASE_URL.

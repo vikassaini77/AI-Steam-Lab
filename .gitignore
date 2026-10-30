@@ -1,9 +1,21 @@
 # General
 .DS_Store
 *.log
+.pytest_cache/
+**/.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.pyc
+**/*.pyc
+
+# Local runtime & demo databases
+**/local_stem_db.json
+*.db
+*.sqlite3
 
 # Node & Frontend
 frontend/node_modules/
+node_modules/
 frontend/dist/
 frontend/build/
 frontend/.env
@@ -16,11 +28,11 @@ npm-debug.log*
 # Python & Backend
 backend/venv/
 backend/env/
-backend/__pycache__/
-backend/*.pyc
+venv/
+env/
+.env
 backend/.env
-backend/.pytest_cache/
-backend/app/database/local_stem_db.json
+hf_deploy_temp/
 
 # IDE
 .vscode/
