@@ -3,6 +3,7 @@ import json
 import uuid
 import time
 import threading
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Tuple, Union
 import numpy as np
 from app.core_backend.database.hybrid_retrieval import (
@@ -37,32 +38,43 @@ class DatabaseManager:
         with open(self.local_db_path, "w") as f:
             json.dump(data, f, indent=2)
 
-    def save_experiment(self, data: dict, user_id: str) -> dict:
+    def save_experiment(
+        self,
+        data: Optional[dict] = None,
+        user_id: Optional[str] = None,
+        experiment_type: Optional[str] = None,
+        **kwargs,
+    ) -> dict:
         """
         Saves an experiment record stamped with the canonical user_id.
         Guarantees record ownership.
+        Supports both (data, user_id) and (user_id=..., experiment_type=..., data=...) signatures.
         """
-        data = dict(data)
-        data["user_id"] = str(user_id)
-        if "id" not in data or not data["id"]:
-            data["id"] = f"exp_{uuid.uuid4().hex[:12]}"
-        if "timestamp" not in data:
-            data["timestamp"] = int(time.time())
+        payload = dict(data or kwargs.get("data") or {})
+        uid = str(user_id or kwargs.get("user_id") or payload.get("user_id", ""))
+        payload["user_id"] = uid
+        exp_type = experiment_type or kwargs.get("experiment_type") or payload.get("experiment_type")
+        if exp_type:
+            payload["experiment_type"] = exp_type
+        if "id" not in payload or not payload["id"]:
+            payload["id"] = f"exp_{uuid.uuid4().hex[:12]}"
+        if "timestamp" not in payload:
+            payload["timestamp"] = int(time.time())
 
         with db_lock:
             db = self._read_local()
             # If experiment already exists, update it, else append
             existing_idx = next(
-                (i for i, exp in enumerate(db["experiments"]) if exp.get("id") == data["id"]),
+                (i for i, exp in enumerate(db["experiments"]) if exp.get("id") == payload["id"]),
                 None,
             )
             if existing_idx is not None:
-                db["experiments"][existing_idx] = data
+                db["experiments"][existing_idx] = payload
             else:
-                db["experiments"].append(data)
+                db["experiments"].append(payload)
             self._write_local(db)
 
-        return data
+        return payload
 
     def get_experiments(self, user_id: str) -> List[dict]:
         """
@@ -261,6 +273,72 @@ class DatabaseManager:
             db = self._read_local()
         xp_data = db.get("xp", {})
         return sum(1 for xp in xp_data.values() if xp > 0)
+
+    def award_achievement(
+        self,
+        user_id: str,
+        achievement_id: str,
+        evidence: Optional[dict] = None,
+        criteria_met: Optional[dict] = None,
+    ) -> Tuple[bool, dict]:
+        """
+        Awards an achievement to user if not already earned.
+        Enforces strict uniqueness per (user_id, achievement_id).
+        Returns (is_new, record).
+        """
+        canonical_uid = str(user_id)
+        ach_id = str(achievement_id)
+        with db_lock:
+            db = self._read_local()
+            if "user_achievements" not in db:
+                db["user_achievements"] = []
+
+            for rec in db["user_achievements"]:
+                if str(rec.get("user_id")) == canonical_uid and str(rec.get("achievement_id")) == ach_id:
+                    return False, rec
+
+            record = {
+                "id": f"ach_{canonical_uid}_{ach_id}_{uuid.uuid4().hex[:8]}",
+                "user_id": canonical_uid,
+                "achievement_id": ach_id,
+                "awarded_at": datetime.now(timezone.utc).isoformat(),
+                "criteria_met": criteria_met or {},
+                "evidence": evidence or {},
+            }
+            db["user_achievements"].append(record)
+            self._write_local(db)
+            return True, record
+
+    def get_user_achievements(self, user_id: str) -> List[dict]:
+        """
+        Retrieves all achievements awarded to the user, ordered chronologically.
+        """
+        canonical_uid = str(user_id)
+        with db_lock:
+            db = self._read_local()
+        achievements = db.get("user_achievements", [])
+        user_achs = [a for a in achievements if str(a.get("user_id")) == canonical_uid]
+        return sorted(user_achs, key=lambda x: str(x.get("awarded_at", "")))
+
+    def get_user_badge_count(self, user_id: str) -> int:
+        """
+        Returns authoritative count of actual achievements earned by the user.
+        """
+        return len(self.get_user_achievements(user_id))
+
+    def get_user_badge_counts_batch(self, user_ids: List[str]) -> Dict[str, int]:
+        """
+        Batch returns authoritative badge counts for a list of users.
+        """
+        with db_lock:
+            db = self._read_local()
+        achievements = db.get("user_achievements", [])
+        counts: Dict[str, int] = {str(uid): 0 for uid in user_ids}
+        for ach in achievements:
+            uid = str(ach.get("user_id"))
+            if uid in counts:
+                counts[uid] += 1
+        return counts
 
     def save_memory(self, session_id: str, text: str, embedding: list, user_id: Optional[str] = None) -> int:
         """

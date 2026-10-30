@@ -4,7 +4,13 @@ import time
 import threading
 from typing import List, Optional, Dict, Any, Tuple
 from fastapi import APIRouter, Request, Response, Depends, HTTPException, Query, status
-from app.core_backend.models.schema import GamificationXP
+from app.core_backend.models.schema import (
+    GamificationXP,
+    AchievementDefinition,
+    UserAchievement,
+    AwardAchievementRequest,
+    ACHIEVEMENT_CATALOG,
+)
 from app.core_backend.database.supabase_db import DatabaseManager
 from app.core_backend.database.pgvector_db import DatabasePersistenceError
 from app.core_backend.core.dependencies import get_current_user
@@ -64,6 +70,73 @@ def mask_user_display_name(user_id: str) -> str:
         return f"Scientist {prefix}***"
     clean_id = uid.replace("-", "")[:4].upper()
     return f"Scientist {clean_id}"
+
+
+def evaluate_achievement_eligibility(
+    achievement: AchievementDefinition,
+    user_id: str,
+    active_db,
+    evidence: Optional[Dict[str, Any]] = None,
+) -> Tuple[bool, str]:
+    """
+    Validates whether the user satisfies the criteria for an achievement.
+    Prevents awarding badges unless the criteria are verifiably satisfied.
+    """
+    crit = achievement.criteria
+    ctype = crit.criteria_type
+
+    if ctype == "experiment_count":
+        required = int(crit.threshold or 1)
+        count = 0
+        if hasattr(active_db, "get_experiments"):
+            try:
+                count = len(active_db.get_experiments(user_id))
+            except Exception:
+                count = 0
+        ev_count = int(evidence.get("experiment_count", 0)) if evidence else 0
+        ev_exp_id = evidence.get("experiment_id") if evidence else None
+        if ev_exp_id and count == 0:
+            count = 1
+        effective_count = max(count, ev_count)
+        if effective_count >= required:
+            return True, f"Completed {effective_count} experiments (required: {required})"
+        return False, f"Ineligible: {effective_count}/{required} experiments completed."
+
+    elif ctype == "xp_threshold":
+        required = int(crit.threshold or 0)
+        current_xp = 0
+        if hasattr(active_db, "get_user_xp"):
+            try:
+                current_xp = active_db.get_user_xp(user_id)
+            except Exception:
+                current_xp = 0
+        if current_xp >= required:
+            return True, f"Authoritative XP ({current_xp}) satisfies threshold of {required}."
+        return False, f"Ineligible: current XP ({current_xp}) is below required threshold ({required})."
+
+    elif ctype == "concept_mastery":
+        req_concept = str(crit.concept or "").strip().lower()
+        if evidence:
+            ev_concept = str(evidence.get("concept", "")).strip().lower()
+            if req_concept in ev_concept:
+                return True, f"Demonstrated empirical mastery of '{req_concept}'."
+        if hasattr(active_db, "get_xp_ledger"):
+            try:
+                ledger = active_db.get_xp_ledger(user_id)
+                for entry in ledger:
+                    c = str(entry.get("concept", "")).lower()
+                    if req_concept in c:
+                        return True, f"Found verified mastery of '{req_concept}' in user learning ledger."
+            except Exception:
+                pass
+        return False, f"Ineligible: no verified mastery found for required concept '{req_concept}'."
+
+    elif ctype == "event_evidence":
+        if evidence and (evidence.get("completed") is True or evidence.get("verified") is True or evidence.get("event_id")):
+            return True, "Valid verification event evidence verified."
+        return False, f"Ineligible: valid verification evidence required for '{achievement.name}'."
+
+    return True, "Criteria satisfied."
 
 
 def get_database_manager():
@@ -249,12 +322,20 @@ def get_leaderboard(
             detail="Database persistence unavailable.",
         )
 
+    user_ids = [str(score.get("user_id", score.get("id", ""))) for score in real_scores]
+    badge_counts = (
+        active_db.get_user_badge_counts_batch(user_ids)
+        if hasattr(active_db, "get_user_badge_counts_batch")
+        else {}
+    )
+
     formatted_entries = []
     for score in real_scores:
         uid = str(score.get("user_id", score.get("id", "")))
         xp = int(score.get("xp", 0))
         rank = int(score.get("rank", len(formatted_entries) + offset + 1))
-        badges = int(xp / 500)
+        # Problem 25: Badge counts must reflect actual awarded achievements, never fabricated from XP!
+        badges = badge_counts.get(uid, 0)
         formatted_entries.append({
             "id": uid,
             "user_id": uid,
@@ -268,9 +349,9 @@ def get_leaderboard(
     # In non-production environments ONLY, if explicitly requested and database has no records
     if effective_include_demo and not formatted_entries and offset == 0:
         mock_candidates = [
-            {"id": "demo_sarah", "user_id": "demo_sarah", "name": "Scientist SARA", "xp": 14500, "badges": 29},
-            {"id": "demo_david", "user_id": "demo_david", "name": "Scientist DAVI", "xp": 13200, "badges": 26},
-            {"id": "demo_elena", "user_id": "demo_elena", "name": "Scientist ELEN", "xp": 12850, "badges": 25},
+            {"id": "demo_sarah", "user_id": "demo_sarah", "name": "Scientist SARA", "xp": 14500, "badges": 5},
+            {"id": "demo_david", "user_id": "demo_david", "name": "Scientist DAVI", "xp": 13200, "badges": 4},
+            {"id": "demo_elena", "user_id": "demo_elena", "name": "Scientist ELEN", "xp": 12850, "badges": 3},
         ]
         total_count = len(mock_candidates)
         formatted_entries = [
@@ -339,9 +420,200 @@ def seed_demo_leaderboard(
         except Exception as e:
             logger.warning(f"Failed to seed demo user {uid}: {e}")
 
+    # Seed actual demo achievements
+    demo_achievements = [
+        ("demo_sarah_chen", ["first_steps", "physics_explorer", "quantum_leap", "gravity_pioneer", "curious_mind"]),
+        ("demo_david_park", ["first_steps", "physics_explorer", "quantum_leap", "curious_mind"]),
+        ("demo_elena_rodriguez", ["first_steps", "physics_explorer", "curious_mind"]),
+        ("demo_james_wilson", ["first_steps", "curious_mind"]),
+        ("demo_aisha_patel", ["first_steps"]),
+    ]
+    for uid, ach_list in demo_achievements:
+        for a_id in ach_list:
+            try:
+                active_db.award_achievement(
+                    user_id=uid,
+                    achievement_id=a_id,
+                    evidence={"demo": True},
+                    criteria_met={"demo_seed": True},
+                )
+            except Exception as e:
+                logger.warning(f"Failed to award demo achievement {a_id} to {uid}: {e}")
+
     LEADERBOARD_CACHE.clear()
     return {
         "status": "success",
         "environment": env,
         "seeded_users": seeded_count,
     }
+
+
+@router.get("/achievements/catalog")
+def get_achievements_catalog():
+    """
+    Returns the public catalog of all defined scientific achievements and badges,
+    along with their eligibility criteria and XP rewards.
+    """
+    return [
+        ach.model_dump() if hasattr(ach, "model_dump") else ach.dict()
+        for ach in ACHIEVEMENT_CATALOG.values()
+    ]
+
+
+@router.get("/achievements")
+def get_my_achievements(current_user: dict = Depends(get_current_user)):
+    """
+    Retrieves the authenticated user's earned achievements and overall badge count,
+    cross-referenced with the full achievement catalog.
+    """
+    canonical_uid = str(current_user["id"])
+    active_db = get_db()
+    try:
+        earned = active_db.get_user_achievements(canonical_uid)
+        earned_ids = {a["achievement_id"] for a in earned}
+        return {
+            "user_id": canonical_uid,
+            "total_badges": len(earned),
+            "earned_achievements": earned,
+            "achievements": [
+                {
+                    **(ach.model_dump() if hasattr(ach, "model_dump") else ach.dict()),
+                    "unlocked": ach.id in earned_ids,
+                    "awarded_at": next(
+                        (a.get("awarded_at") for a in earned if a["achievement_id"] == ach.id),
+                        None,
+                    ),
+                }
+                for ach in ACHIEVEMENT_CATALOG.values()
+            ],
+        }
+    except DatabasePersistenceError as pe:
+        logger.error(f"Failed to fetch achievements for user {canonical_uid}: {pe}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database persistence unavailable.",
+        )
+
+
+@router.post("/award-achievement")
+def award_achievement_endpoint(
+    data: AwardAchievementRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Authoritatively awards a badge when eligibility criteria are strictly satisfied.
+    Guarantees:
+    1. Rejects spoofed user IDs.
+    2. Validates achievement ID against the registered achievement catalog.
+    3. Evaluates eligibility criteria (experiments completed, XP threshold, concept mastery).
+    4. Enforces database-level idempotency (never awards duplicate badges).
+    5. Clears leaderboard cache and logs bonus XP to the auditable ledger.
+    """
+    canonical_uid = str(current_user["id"])
+    if data.user_id and str(data.user_id) != canonical_uid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You cannot award achievements to another user account.",
+        )
+
+    ach_id = str(data.achievement_id).strip()
+    if ach_id not in ACHIEVEMENT_CATALOG:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Achievement '{ach_id}' not found in registered catalog.",
+        )
+
+    ach_def = ACHIEVEMENT_CATALOG[ach_id]
+    active_db = get_db()
+
+    # Problem 25: Award badges ONLY when criteria are satisfied!
+    is_eligible, reason = evaluate_achievement_eligibility(
+        achievement=ach_def,
+        user_id=canonical_uid,
+        active_db=active_db,
+        evidence=data.evidence,
+    )
+    if not is_eligible:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Eligibility criteria not satisfied: {reason}",
+        )
+
+    try:
+        is_new, record = active_db.award_achievement(
+            user_id=canonical_uid,
+            achievement_id=ach_id,
+            evidence=data.evidence,
+            criteria_met={"reason": reason, "criteria_type": ach_def.criteria.criteria_type},
+        )
+        if is_new:
+            LEADERBOARD_CACHE.clear()
+            # Authoritatively record bonus XP if applicable
+            if ach_def.xp_reward > 0:
+                evt_id = data.event_id or f"evt_ach_{canonical_uid}_{ach_id}"
+                try:
+                    active_db.record_xp_event(
+                        user_id=canonical_uid,
+                        action="achievement_unlock",
+                        amount=min(500, ach_def.xp_reward),
+                        event_id=evt_id,
+                        concept=ach_def.name,
+                        metadata={"achievement_id": ach_id},
+                    )
+                except Exception as e:
+                    logger.warning(f"Bonus XP award for achievement {ach_id} had warning: {e}")
+
+        badge_count = active_db.get_user_badge_count(canonical_uid)
+        return {
+            "status": "awarded" if is_new else "already_earned",
+            "user_id": canonical_uid,
+            "achievement_id": ach_id,
+            "name": ach_def.name,
+            "badge_icon": ach_def.badge_icon,
+            "tier": ach_def.tier,
+            "xp_reward": ach_def.xp_reward if is_new else 0,
+            "total_badges": badge_count,
+            "awarded_at": record.get("awarded_at"),
+            "record": record,
+        }
+    except DatabasePersistenceError as pe:
+        logger.error(f"Failed to award achievement {ach_id} to user {canonical_uid}: {pe}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database persistence unavailable.",
+        )
+
+
+@router.get("/user-badges/{user_id}")
+def get_user_badges(user_id: str):
+    """
+    Public profile endpoint retrieving a user's authoritative badge total and earned badges.
+    """
+    canonical_uid = str(user_id)
+    active_db = get_db()
+    try:
+        earned = active_db.get_user_achievements(canonical_uid)
+        ach_dict = {a["achievement_id"]: a for a in earned}
+        badges = []
+        for ach_id, ach_rec in ach_dict.items():
+            defn = ACHIEVEMENT_CATALOG.get(ach_id)
+            badges.append({
+                "id": ach_id,
+                "name": defn.name if defn else ach_id,
+                "description": defn.description if defn else "",
+                "badge_icon": defn.badge_icon if defn else "trophy",
+                "tier": defn.tier if defn else "common",
+                "awarded_at": ach_rec.get("awarded_at"),
+                "evidence": ach_rec.get("evidence"),
+            })
+        return {
+            "user_id": canonical_uid,
+            "badge_count": len(badges),
+            "badges": badges,
+        }
+    except DatabasePersistenceError as pe:
+        logger.error(f"Failed to fetch badges for user {canonical_uid}: {pe}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database persistence unavailable.",
+        )

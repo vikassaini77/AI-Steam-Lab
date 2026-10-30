@@ -9,7 +9,7 @@ from typing import List, Tuple, Optional, Dict, Any
 import psycopg2
 from app.logger import logger
 
-REQUIRED_SCHEMA_VERSION = 4
+REQUIRED_SCHEMA_VERSION = 5
 
 MIGRATION_V1_SQL = """
 -- 1. Enable pgvector extension
@@ -129,12 +129,30 @@ CREATE INDEX IF NOT EXISTS idx_xp_ledger_user_id ON xp_ledger(user_id);
 CREATE INDEX IF NOT EXISTS idx_xp_ledger_created_at ON xp_ledger(created_at);
 """
 
+MIGRATION_V5_SQL = """
+-- Dedicated achievements and badge persistence table (Problem 25)
+CREATE TABLE IF NOT EXISTS user_achievements (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    achievement_id TEXT NOT NULL,
+    awarded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    criteria_met JSONB DEFAULT '{}'::jsonb,
+    evidence JSONB DEFAULT '{}'::jsonb,
+    CONSTRAINT uq_user_achievement UNIQUE (user_id, achievement_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_achievements_user_id ON user_achievements(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_achievements_achievement_id ON user_achievements(achievement_id);
+CREATE INDEX IF NOT EXISTS idx_user_achievements_awarded_at ON user_achievements(awarded_at);
+"""
+
 # Ordered registry of versioned migrations
 MIGRATIONS: List[Tuple[int, str, str]] = [
     (1, "001_initial_schema", MIGRATION_V1_SQL),
     (2, "002_memory_lifecycle_and_ownership", MIGRATION_V2_SQL),
     (3, "003_hybrid_search_indexes", MIGRATION_V3_SQL),
     (4, "004_auditable_xp_ledger", MIGRATION_V4_SQL),
+    (5, "005_user_achievements_and_badges", MIGRATION_V5_SQL),
 ]
 
 

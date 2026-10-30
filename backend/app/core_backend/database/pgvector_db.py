@@ -2,6 +2,7 @@ import os
 import time
 import uuid
 import threading
+from datetime import datetime, timezone
 from contextlib import contextmanager
 from enum import Enum
 from typing import Optional, List, Dict, Any, Union, Tuple
@@ -2058,6 +2059,216 @@ class PGVectorManager:
             if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
                 raise
             return _fallback_count()
+
+    def award_achievement(
+        self,
+        user_id: str,
+        achievement_id: str,
+        evidence: Optional[dict] = None,
+        criteria_met: Optional[dict] = None,
+    ) -> Tuple[bool, dict]:
+        """
+        Awards an achievement to user if not already earned.
+        Enforces database uniqueness constraint on (user_id, achievement_id).
+        Returns (is_new, record).
+        """
+        canonical_uid = str(user_id)
+        ach_id = str(achievement_id)
+        ev_json = json.dumps(evidence or {})
+        crit_json = json.dumps(criteria_met or {})
+        rec_id = f"ach_{canonical_uid}_{ach_id}_{uuid.uuid4().hex[:8]}"
+
+        def _fallback_award():
+            if not hasattr(self, "fallback_user_achievements"):
+                self.fallback_user_achievements = {}
+            user_list = self.fallback_user_achievements.setdefault(canonical_uid, [])
+            for rec in user_list:
+                if str(rec.get("achievement_id")) == ach_id:
+                    return False, rec
+            new_rec = {
+                "id": rec_id,
+                "user_id": canonical_uid,
+                "achievement_id": ach_id,
+                "awarded_at": datetime.now(timezone.utc).isoformat(),
+                "criteria_met": criteria_met or {},
+                "evidence": evidence or {},
+            }
+            user_list.append(new_rec)
+            return True, new_rec
+
+        if getattr(self, "is_in_memory_fallback", False) or not getattr(self, "url", None):
+            if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
+                raise DatabasePersistenceError(f"Database unavailable in {self.mode} mode.")
+            return _fallback_award()
+
+        def _db_award():
+            with self._get_conn() as conn:
+                with conn.cursor() as cur:
+                    # Attempt insert with ON CONFLICT DO NOTHING
+                    cur.execute(
+                        """
+                        INSERT INTO user_achievements (id, user_id, achievement_id, awarded_at, criteria_met, evidence)
+                        VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s, %s)
+                        ON CONFLICT (user_id, achievement_id) DO NOTHING
+                        RETURNING id, user_id, achievement_id, awarded_at, criteria_met, evidence;
+                        """,
+                        (rec_id, canonical_uid, ach_id, crit_json, ev_json),
+                    )
+                    row = cur.fetchone()
+                    if row:
+                        conn.commit()
+                        return True, {
+                            "id": row[0],
+                            "user_id": row[1],
+                            "achievement_id": row[2],
+                            "awarded_at": row[3].isoformat() if hasattr(row[3], "isoformat") else str(row[3]),
+                            "criteria_met": row[4] if isinstance(row[4], dict) else json.loads(row[4] or "{}"),
+                            "evidence": row[5] if isinstance(row[5], dict) else json.loads(row[5] or "{}"),
+                        }
+                    # If duplicate conflict, fetch existing
+                    cur.execute(
+                        """
+                        SELECT id, user_id, achievement_id, awarded_at, criteria_met, evidence
+                        FROM user_achievements
+                        WHERE user_id = %s AND achievement_id = %s;
+                        """,
+                        (canonical_uid, ach_id),
+                    )
+                    row = cur.fetchone()
+                    conn.commit()
+                    if row:
+                        return False, {
+                            "id": row[0],
+                            "user_id": row[1],
+                            "achievement_id": row[2],
+                            "awarded_at": row[3].isoformat() if hasattr(row[3], "isoformat") else str(row[3]),
+                            "criteria_met": row[4] if isinstance(row[4], dict) else json.loads(row[4] or "{}"),
+                            "evidence": row[5] if isinstance(row[5], dict) else json.loads(row[5] or "{}"),
+                        }
+                    return False, {"id": rec_id, "user_id": canonical_uid, "achievement_id": ach_id}
+
+        try:
+            return self._execute(
+                operation_name="award_achievement",
+                operation_fn=_db_award,
+                is_idempotent=True,
+                is_write=True,
+                user_id=canonical_uid,
+            )
+        except DatabasePersistenceError:
+            if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
+                raise
+            return _fallback_award()
+
+    def get_user_achievements(self, user_id: str) -> List[dict]:
+        """
+        Retrieves all awarded achievements for a user.
+        """
+        canonical_uid = str(user_id)
+
+        def _fallback_get():
+            if hasattr(self, "fallback_user_achievements"):
+                return list(self.fallback_user_achievements.get(canonical_uid, []))
+            return []
+
+        if getattr(self, "is_in_memory_fallback", False) or not getattr(self, "url", None):
+            if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
+                raise DatabasePersistenceError(f"Database unavailable in {self.mode} mode.")
+            return _fallback_get()
+
+        def _db_get():
+            with self._get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT id, user_id, achievement_id, awarded_at, criteria_met, evidence
+                        FROM user_achievements
+                        WHERE user_id = %s
+                        ORDER BY awarded_at ASC;
+                        """,
+                        (canonical_uid,),
+                    )
+                    rows = cur.fetchall()
+                    return [
+                        {
+                            "id": r[0],
+                            "user_id": r[1],
+                            "achievement_id": r[2],
+                            "awarded_at": r[3].isoformat() if hasattr(r[3], "isoformat") else str(r[3]),
+                            "criteria_met": r[4] if isinstance(r[4], dict) else json.loads(r[4] or "{}"),
+                            "evidence": r[5] if isinstance(r[5], dict) else json.loads(r[5] or "{}"),
+                        }
+                        for r in rows
+                    ]
+
+        try:
+            return self._execute(
+                operation_name="get_user_achievements",
+                operation_fn=_db_get,
+                is_idempotent=True,
+                is_write=False,
+                user_id=canonical_uid,
+            )
+        except DatabasePersistenceError:
+            if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
+                raise
+            return _fallback_get()
+
+    def get_user_badge_count(self, user_id: str) -> int:
+        """
+        Retrieves the authoritative total badge count from actual awarded achievements.
+        """
+        return len(self.get_user_achievements(user_id))
+
+    def get_user_badge_counts_batch(self, user_ids: List[str]) -> Dict[str, int]:
+        """
+        Batch fetches badge counts for a list of user IDs.
+        """
+        canonical_uids = [str(uid) for uid in user_ids]
+        if not canonical_uids:
+            return {}
+
+        def _fallback_batch():
+            counts = {uid: 0 for uid in canonical_uids}
+            if hasattr(self, "fallback_user_achievements"):
+                for uid in canonical_uids:
+                    counts[uid] = len(self.fallback_user_achievements.get(uid, []))
+            return counts
+
+        if getattr(self, "is_in_memory_fallback", False) or not getattr(self, "url", None):
+            if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
+                raise DatabasePersistenceError(f"Database unavailable in {self.mode} mode.")
+            return _fallback_batch()
+
+        def _db_batch():
+            with self._get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT user_id, COUNT(*)
+                        FROM user_achievements
+                        WHERE user_id = ANY(%s)
+                        GROUP BY user_id;
+                        """,
+                        (canonical_uids,),
+                    )
+                    rows = cur.fetchall()
+                    counts = {uid: 0 for uid in canonical_uids}
+                    for r in rows:
+                        counts[str(r[0])] = int(r[1])
+                    return counts
+
+        try:
+            return self._execute(
+                operation_name="get_user_badge_counts_batch",
+                operation_fn=_db_batch,
+                is_idempotent=True,
+                is_write=False,
+            )
+        except DatabasePersistenceError:
+            if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
+                raise
+            return _fallback_batch()
 
     def check_and_increment_daily_usage(self, user_id: str, limit: int = 100) -> Tuple[bool, int]:
         today_key = time.strftime("%Y-%m-%d", time.gmtime())
