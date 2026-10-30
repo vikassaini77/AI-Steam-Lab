@@ -17,7 +17,11 @@ from app.core_backend.models.schema import (
 )
 from app.core_backend.database.supabase_db import DatabaseManager
 from app.core_backend.database.pgvector_db import DatabasePersistenceError
-from app.core_backend.core.dependencies import get_current_user
+from app.core_backend.core.dependencies import (
+    get_current_user,
+    get_db,
+    get_database_manager,
+)
 from app.core_backend.core.limiter import limiter
 from app.machine_learning.physics_engine import PhysicsEngine
 from app.logger import logger
@@ -25,23 +29,14 @@ from app.logger import logger
 router = APIRouter()
 
 
-def get_database_manager():
-    """
-    Returns the configured database manager:
-    - If POSTGRES_URL is configured or in production: PGVectorManager
-    - Otherwise: DatabaseManager (Supabase / local dev)
-    """
-    if os.getenv("POSTGRES_URL") or os.getenv("ENVIRONMENT") == "production":
-        from app.core_backend.database.pgvector_db import PGVectorManager
-        return PGVectorManager()
-    return DatabaseManager()
-
-
-db = get_database_manager()
-
-
-def get_db():
-    return getattr(router, "db", None) or globals().get("db") or get_database_manager()
+def __getattr__(name: str):
+    """Lazy backward-compatible attribute access for db without import side-effects."""
+    if name == "db":
+        try:
+            return get_db()
+        except Exception:
+            return None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 @router.post("/analyze/{exp_type}")
@@ -144,6 +139,7 @@ def save_experiment(
     request: Request,
     data: ExperimentData,
     current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
 ):
     """
     Commits experiment kinematics to database.
@@ -289,7 +285,7 @@ def save_experiment(
         "timestamp": int(time.time()),
     }
 
-    active_db = get_db()
+    active_db = active_db or get_db()
     try:
         saved_record = active_db.save_experiment(record_payload, user_id=canonical_uid)
         return {
@@ -309,6 +305,7 @@ def save_experiment(
 def get_history(
     user_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
 ):
     """
     Returns experiment history filtered strictly by the authenticated canonical user ID.
@@ -323,7 +320,7 @@ def get_history(
             detail="Forbidden: You do not have permission to view another user's experiment history.",
         )
 
-    active_db = get_db()
+    active_db = active_db or get_db()
     try:
         user_experiments = active_db.get_experiments(user_id=canonical_uid)
         return {"history": user_experiments}
@@ -339,13 +336,14 @@ def get_history(
 def get_experiment(
     experiment_id: str,
     current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
 ):
     """
     Fetches a specific experiment by ID.
     Enforces authorization: 403 Forbidden if the resource belongs to another user.
     """
     canonical_uid = str(current_user["id"])
-    active_db = get_db()
+    active_db = active_db or get_db()
     try:
         target_exp = active_db.get_experiment_by_id(experiment_id)
     except DatabasePersistenceError as pe:

@@ -27,6 +27,12 @@ from app.core_backend.database.pgvector_db import (
     close_database_pool,
     check_database_readiness,
 )
+from app.core_backend.core.dependencies import get_database_manager
+from app.ai_agent.tutor_service import (
+    AITutorService,
+    get_tutor_executor,
+    shutdown_tutor_executor,
+)
 
 # Initialize Sentry for APM and Error Tracking
 SENTRY_DSN = os.getenv("SENTRY_DSN")
@@ -77,7 +83,7 @@ def validate_production_configuration():
 async def lifespan(app: FastAPI):
     validate_production_configuration()
 
-    # Initialize PostgreSQL connection pool during application lifespan startup
+    # 1. Initialize PostgreSQL connection pool during application lifespan startup
     postgres_url = os.getenv("POSTGRES_URL")
     if postgres_url:
         try:
@@ -86,14 +92,41 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Database connection pool initialization deferred/warning: {e}")
 
+    # 2. Initialize shared thread-safe database manager and attach to app.state
+    db = get_database_manager()
+    app.state.db = db
+
+    # 3. Initialize thread pool executor and attach to app.state
+    tutor_executor = get_tutor_executor()
+    app.state.tutor_executor = tutor_executor
+
+    # 4. Initialize AITutorService sharing thread-safe DB and executor, attach to app.state
+    tutor_service = AITutorService(db=db, executor=tutor_executor)
+    app.state.tutor_service = tutor_service
+    logger.info("Shared services (db, tutor_service, tutor_executor) initialized during lifespan startup.")
+
     yield
 
-    # Gracefully close connection pool on application shutdown
+    # Gracefully close resources during shutdown
     try:
         close_database_pool()
         logger.info("Database connection pool closed during lifespan shutdown.")
     except Exception as e:
         logger.warning(f"Error closing database connection pool during shutdown: {e}")
+
+    try:
+        shutdown_tutor_executor(wait=False)
+        logger.info("Tutor thread pool executor closed during lifespan shutdown.")
+    except Exception as e:
+        logger.warning(f"Error shutting down tutor executor during shutdown: {e}")
+
+    # Clean up app.state
+    if hasattr(app.state, "db"):
+        delattr(app.state, "db")
+    if hasattr(app.state, "tutor_service"):
+        delattr(app.state, "tutor_service")
+    if hasattr(app.state, "tutor_executor"):
+        delattr(app.state, "tutor_executor")
 
 
 app = FastAPI(title="NeuroLab AI API", version="1.0.0", lifespan=lifespan)

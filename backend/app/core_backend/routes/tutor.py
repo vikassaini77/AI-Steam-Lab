@@ -1,33 +1,39 @@
 import os
 import json
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from fastapi import APIRouter, Request, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from app.ai_agent.tutor_service import AITutorService
 from app.ai_agent.learning_evaluation import EvaluationResult
-from app.core_backend.core.dependencies import get_current_user
+from app.core_backend.core.dependencies import (
+    get_current_user,
+    get_db,
+    get_tutor_service,
+    get_database_manager,
+)
 from app.core_backend.core.limiter import limiter
 from app.core_backend.database.supabase_db import DatabaseManager
 from app.core_backend.database.pgvector_db import DatabasePersistenceError
 from app.logger import logger
 
 router = APIRouter()
-tutor_service = AITutorService()
+get_tutor = get_tutor_service
 
 
-def get_database_manager():
-    if os.getenv("POSTGRES_URL") or os.getenv("ENVIRONMENT") == "production":
-        from app.core_backend.database.pgvector_db import PGVectorManager
-        return PGVectorManager()
-    return DatabaseManager()
-
-
-db = get_database_manager()
-
-
-def get_db():
-    return getattr(router, "db", None) or globals().get("db") or get_database_manager()
+def __getattr__(name: str):
+    """Lazy backward-compatible attribute access for tutor_service and db without import side-effects."""
+    if name == "tutor_service":
+        try:
+            return get_tutor_service()
+        except Exception:
+            return None
+    if name == "db":
+        try:
+            return get_db()
+        except Exception:
+            return None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class ChatRequest(BaseModel):
@@ -65,6 +71,7 @@ async def evaluate_student_answer(
     request: Request,
     eval_req: ConceptEvaluationRequest,
     current_user: dict = Depends(get_current_user),
+    tutor_svc: AITutorService = Depends(get_tutor_service),
 ):
     """
     Authoritative evaluation endpoint for student concept responses:
@@ -74,7 +81,7 @@ async def evaluate_student_answer(
     - Guarantees idempotency (repeated submissions do not award duplicate XP).
     """
     canonical_uid = str(current_user["id"])
-    return await tutor_service.evaluate_answer(
+    return await tutor_svc.evaluate_answer(
         user_id=canonical_uid,
         concept=eval_req.concept,
         question=eval_req.question,
@@ -88,6 +95,8 @@ async def chat_with_tutor(
     request: Request,
     req: ChatRequest,
     current_user: dict = Depends(get_current_user),
+    tutor_svc: AITutorService = Depends(get_tutor_service),
+    db_manager = Depends(get_db),
 ):
     """
     Streams AI Tutor responses with:
@@ -99,7 +108,7 @@ async def chat_with_tutor(
     canonical_uid = str(current_user["id"])
 
     # Enforce daily request budget
-    daily_allowed, current_count = db.check_and_increment_daily_usage(canonical_uid, limit=100)
+    daily_allowed, current_count = db_manager.check_and_increment_daily_usage(canonical_uid, limit=100)
     if not daily_allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -108,7 +117,7 @@ async def chat_with_tutor(
 
     last_event_id = request.headers.get("last-event-id")
     return StreamingResponse(
-        tutor_service.stream_chat(
+        tutor_svc.stream_chat(
             req,
             user_id=canonical_uid,
             request=request,
@@ -130,6 +139,7 @@ async def delete_user_memories(
     request: Request,
     session_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
 ):
     """
     Account-level memory deletion workflow (Right to Erasure / Privacy):
@@ -137,7 +147,6 @@ async def delete_user_memories(
     Optionally scoped to a specific session_id.
     """
     canonical_uid = str(current_user["id"])
-    active_db = get_db()
     try:
         deleted = active_db.delete_user_memories(user_id=canonical_uid, session_id=session_id)
         return {
@@ -159,12 +168,12 @@ async def delete_single_memory(
     request: Request,
     memory_id: int,
     current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
 ):
     """
     Deletes a specific memory record with ownership verification.
     """
     canonical_uid = str(current_user["id"])
-    active_db = get_db()
     try:
         deleted = active_db.delete_memory_by_id(memory_id=memory_id, user_id=canonical_uid)
         if not deleted:
@@ -188,12 +197,12 @@ async def delete_single_memory(
 async def export_user_memories(
     request: Request,
     current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
 ):
     """
     Data-export workflow for student account memories (Data Portability).
     """
     canonical_uid = str(current_user["id"])
-    active_db = get_db()
     try:
         memories = active_db.export_user_memories(user_id=canonical_uid)
         return {

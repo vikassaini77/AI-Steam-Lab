@@ -1,7 +1,9 @@
 import os
+import sys
 import time
+import types
 from typing import Optional, Dict, Any
-from fastapi import Header, HTTPException, status
+from fastapi import Header, HTTPException, status, Request
 import jwt
 from app.core_backend.core.supabase_client import get_supabase_client
 
@@ -140,3 +142,106 @@ def verify_resource_ownership(resource_owner_id: str, current_user: Dict[str, An
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: You do not have permission to access or modify resources belonging to another user.",
         )
+
+
+# ==============================================================================
+# Service & Database Dependency Injection Providers (FastAPI Lifespan Driven)
+# ==============================================================================
+
+_shared_db = None
+_shared_tutor_service = None
+
+
+def get_database_manager():
+    """
+    Factory for database manager instance based on environment configuration.
+    Side-effect free until invoked.
+    """
+    if os.getenv("POSTGRES_URL") or os.getenv("ENVIRONMENT") == "production":
+        from app.core_backend.database.pgvector_db import PGVectorManager
+        return PGVectorManager()
+    from app.core_backend.database.supabase_db import DatabaseManager
+    return DatabaseManager()
+
+
+def get_db(request: Request = None):
+    """
+    FastAPI dependency injection provider for DatabaseManager / PGVectorManager.
+    Resolution order:
+    1. Active route module/router override if monkeypatched in tests
+    2. request.app.state.db (initialized during FastAPI lifespan startup)
+    3. request.state.db (per-request override)
+    4. Global lazy shared instance / factory fallback (for standalone or test contexts)
+
+    Can be swapped with test doubles via:
+        app.dependency_overrides[get_db] = lambda: mock_db
+    """
+    if request is not None:
+        endpoint = request.scope.get("endpoint") if hasattr(request, "scope") and isinstance(request.scope, dict) else None
+        if endpoint and hasattr(endpoint, "__module__"):
+            mod = sys.modules.get(endpoint.__module__)
+            if mod:
+                if hasattr(mod, "router") and "db" in getattr(mod.router, "__dict__", {}) and mod.router.db is not None:
+                    return mod.router.db
+                if "db" in getattr(mod, "__dict__", {}) and mod.__dict__["db"] is not None and not isinstance(mod.__dict__["db"], (types.FunctionType, types.BuiltinFunctionType)):
+                    return mod.__dict__["db"]
+
+        app_ref = getattr(request, "app", None)
+        app_state = getattr(app_ref, "state", None)
+        if app_state and hasattr(app_state, "db") and app_state.db is not None:
+            return app_state.db
+
+        req_state = getattr(request, "state", None)
+        if req_state and hasattr(req_state, "db") and req_state.db is not None:
+            return req_state.db
+
+    global _shared_db
+    if _shared_db is None:
+        _shared_db = get_database_manager()
+    return _shared_db
+
+
+def get_tutor_service(request: Request = None):
+    """
+    FastAPI dependency injection provider for AITutorService.
+    Resolution order:
+    1. Active route module/router override if monkeypatched in tests
+    2. request.app.state.tutor_service (initialized during FastAPI lifespan startup)
+    3. request.state.tutor_service (per-request override)
+    4. Global lazy shared instance
+
+    Can be swapped with test doubles via:
+        app.dependency_overrides[get_tutor_service] = lambda: mock_tutor
+    """
+    if request is not None:
+        endpoint = request.scope.get("endpoint") if hasattr(request, "scope") and isinstance(request.scope, dict) else None
+        if endpoint and hasattr(endpoint, "__module__"):
+            mod = sys.modules.get(endpoint.__module__)
+            if mod:
+                if hasattr(mod, "router") and "tutor_service" in getattr(mod.router, "__dict__", {}) and mod.router.tutor_service is not None:
+                    return mod.router.tutor_service
+                if "tutor_service" in getattr(mod, "__dict__", {}) and mod.__dict__["tutor_service"] is not None and not isinstance(mod.__dict__["tutor_service"], (types.FunctionType, types.BuiltinFunctionType)):
+                    return mod.__dict__["tutor_service"]
+
+        app_ref = getattr(request, "app", None)
+        app_state = getattr(app_ref, "state", None)
+        if app_state and hasattr(app_state, "tutor_service") and app_state.tutor_service is not None:
+            return app_state.tutor_service
+
+        req_state = getattr(request, "state", None)
+        if req_state and hasattr(req_state, "tutor_service") and req_state.tutor_service is not None:
+            return req_state.tutor_service
+
+    global _shared_tutor_service
+    if _shared_tutor_service is None:
+        from app.ai_agent.tutor_service import AITutorService
+        _shared_tutor_service = AITutorService(db=get_db(request))
+    return _shared_tutor_service
+
+
+def reset_shared_dependencies():
+    """Resets lazy singletons for clean test isolation."""
+    global _shared_db, _shared_tutor_service
+    _shared_db = None
+    _shared_tutor_service = None
+

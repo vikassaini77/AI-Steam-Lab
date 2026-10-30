@@ -13,7 +13,11 @@ from app.core_backend.models.schema import (
 )
 from app.core_backend.database.supabase_db import DatabaseManager
 from app.core_backend.database.pgvector_db import DatabasePersistenceError
-from app.core_backend.core.dependencies import get_current_user
+from app.core_backend.core.dependencies import (
+    get_current_user,
+    get_db,
+    get_database_manager,
+)
 from app.core_backend.core.limiter import limiter
 from app.logger import logger
 
@@ -139,18 +143,14 @@ def evaluate_achievement_eligibility(
     return True, "Criteria satisfied."
 
 
-def get_database_manager():
-    if os.getenv("POSTGRES_URL") or os.getenv("ENVIRONMENT") == "production":
-        from app.core_backend.database.pgvector_db import PGVectorManager
-        return PGVectorManager()
-    return DatabaseManager()
-
-
-db = get_database_manager()
-
-
-def get_db():
-    return getattr(router, "db", None) or globals().get("db") or get_database_manager()
+def __getattr__(name: str):
+    """Lazy backward-compatible attribute access for db without import side-effects."""
+    if name == "db":
+        try:
+            return get_db()
+        except Exception:
+            return None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 @router.post("/add-xp")
@@ -159,6 +159,7 @@ def add_xp(
     request: Request,
     data: GamificationXP,
     current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
 ):
     """
     Authoritatively awards XP strictly to the authenticated user.
@@ -197,7 +198,7 @@ def add_xp(
         clean_action = str(data.action or "general_award").strip().lower()
         event_id = f"evt_{canonical_uid}_{clean_action}_{uuid.uuid4().hex[:12]}"
 
-    active_db = get_db()
+    active_db = active_db or get_db()
     try:
         is_new, updated_xp = active_db.record_xp_event(
             user_id=canonical_uid,
@@ -226,12 +227,15 @@ def add_xp(
 
 
 @router.get("/my-xp")
-def get_my_xp(current_user: dict = Depends(get_current_user)):
+def get_my_xp(
+    current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
+):
     """
     Retrieves the authenticated user's authoritative accumulated XP total.
     """
     canonical_uid = str(current_user["id"])
-    active_db = get_db()
+    active_db = active_db or get_db()
     try:
         xp = active_db.get_user_xp(user_id=canonical_uid)
         return {"user_id": canonical_uid, "xp": xp}
@@ -247,12 +251,13 @@ def get_my_xp(current_user: dict = Depends(get_current_user)):
 def get_my_xp_history(
     limit: int = 50,
     current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
 ):
     """
     Retrieves the authenticated user's auditable XP ledger entries.
     """
     canonical_uid = str(current_user["id"])
-    active_db = get_db()
+    active_db = active_db or get_db()
     try:
         history = active_db.get_xp_ledger(user_id=canonical_uid, limit=min(100, max(1, limit)))
         return {"user_id": canonical_uid, "history": history}
@@ -265,12 +270,15 @@ def get_my_xp_history(
 
 
 @router.post("/reconcile")
-def reconcile_my_xp(current_user: dict = Depends(get_current_user)):
+def reconcile_my_xp(
+    current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
+):
     """
     Reconciles the user's aggregate XP total from the immutable audit ledger.
     """
     canonical_uid = str(current_user["id"])
-    active_db = get_db()
+    active_db = active_db or get_db()
     try:
         reconciled_xp = active_db.reconcile_xp_from_ledger(user_id=canonical_uid)
         LEADERBOARD_CACHE.clear()
@@ -289,6 +297,7 @@ def get_leaderboard(
     limit: int = Query(10, ge=1, le=100, description="Maximum number of leaderboard entries to return"),
     offset: int = Query(0, ge=0, description="Offset for leaderboard pagination"),
     include_demo: bool = Query(False, description="Include demo participants (only permitted in non-production environments)"),
+    active_db = Depends(get_db),
 ):
     """
     Retrieves the authoritative public leaderboard computed from actual persisted scores.
@@ -311,7 +320,7 @@ def get_leaderboard(
         response.headers["X-Cache"] = "HIT"
         return entries
 
-    active_db = get_db()
+    active_db = active_db or get_db()
     try:
         real_scores = active_db.get_leaderboard(limit=limit, offset=offset)
         total_count = active_db.get_leaderboard_count()
@@ -378,6 +387,7 @@ def get_leaderboard(
 @router.post("/seed-demo-leaderboard")
 def seed_demo_leaderboard(
     current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
 ):
     """
     Seeds demonstration learners with realistic XP in development or test environments.
@@ -390,7 +400,7 @@ def seed_demo_leaderboard(
             detail="Forbidden: Seeding demonstration leaderboard data is disabled in production.",
         )
 
-    active_db = get_db()
+    active_db = active_db or get_db()
     demo_users = [
         ("demo_sarah_chen", 1500, "Advanced Quantum Physics Exploration"),
         ("demo_david_park", 1200, "Neural Circuit Simulation"),
@@ -461,13 +471,16 @@ def get_achievements_catalog():
 
 
 @router.get("/achievements")
-def get_my_achievements(current_user: dict = Depends(get_current_user)):
+def get_my_achievements(
+    current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
+):
     """
     Retrieves the authenticated user's earned achievements and overall badge count,
     cross-referenced with the full achievement catalog.
     """
     canonical_uid = str(current_user["id"])
-    active_db = get_db()
+    active_db = active_db or get_db()
     try:
         earned = active_db.get_user_achievements(canonical_uid)
         earned_ids = {a["achievement_id"] for a in earned}
@@ -499,6 +512,7 @@ def get_my_achievements(current_user: dict = Depends(get_current_user)):
 def award_achievement_endpoint(
     data: AwardAchievementRequest,
     current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
 ):
     """
     Authoritatively awards a badge when eligibility criteria are strictly satisfied.
@@ -524,7 +538,7 @@ def award_achievement_endpoint(
         )
 
     ach_def = ACHIEVEMENT_CATALOG[ach_id]
-    active_db = get_db()
+    active_db = active_db or get_db()
 
     # Problem 25: Award badges ONLY when criteria are satisfied!
     is_eligible, reason = evaluate_achievement_eligibility(
@@ -585,12 +599,15 @@ def award_achievement_endpoint(
 
 
 @router.get("/user-badges/{user_id}")
-def get_user_badges(user_id: str):
+def get_user_badges(
+    user_id: str,
+    active_db = Depends(get_db),
+):
     """
     Public profile endpoint retrieving a user's authoritative badge total and earned badges.
     """
     canonical_uid = str(user_id)
-    active_db = get_db()
+    active_db = active_db or get_db()
     try:
         earned = active_db.get_user_achievements(canonical_uid)
         ach_dict = {a["achievement_id"]: a for a in earned}

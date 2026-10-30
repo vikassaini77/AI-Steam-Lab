@@ -4,8 +4,9 @@ import json
 import uuid
 import asyncio
 import hashlib
+import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, AsyncGenerator, Union
+from typing import Optional, AsyncGenerator, Union, Any
 from fastapi import Request
 import google.generativeai as genai
 from app.core_backend.database.supabase_db import DatabaseManager
@@ -28,11 +29,30 @@ MAX_WORKER_THREADS = int(os.getenv("TUTOR_MAX_THREADS", "8"))
 MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "1024"))
 MODEL_TIMEOUT_SECONDS = float(os.getenv("MODEL_TIMEOUT_SECONDS", "30.0"))
 
-# Bounded thread pool for isolating synchronous model / DB calls from the event loop
-tutor_executor = ThreadPoolExecutor(
-    max_workers=MAX_WORKER_THREADS,
-    thread_name_prefix="tutor_worker",
-)
+# Thread pool for isolating synchronous model / DB calls from the event loop
+_tutor_executor: Optional[ThreadPoolExecutor] = None
+_executor_lock = threading.Lock()
+
+
+def get_tutor_executor() -> ThreadPoolExecutor:
+    """Lazily creates and returns the shared ThreadPoolExecutor on demand."""
+    global _tutor_executor
+    with _executor_lock:
+        if _tutor_executor is None:
+            _tutor_executor = ThreadPoolExecutor(
+                max_workers=MAX_WORKER_THREADS,
+                thread_name_prefix="tutor_worker",
+            )
+        return _tutor_executor
+
+
+def shutdown_tutor_executor(wait: bool = False):
+    """Gracefully shuts down the shared ThreadPoolExecutor during application shutdown."""
+    global _tutor_executor
+    with _executor_lock:
+        if _tutor_executor is not None:
+            _tutor_executor.shutdown(wait=wait)
+            _tutor_executor = None
 
 
 class SSEEventName:
@@ -164,20 +184,28 @@ async def _stream_model_chunks(
 
 
 class AITutorService:
-    def __init__(self, db=None, executor: Optional[ThreadPoolExecutor] = None):
-        api_key = os.getenv("GEMINI_API_KEY")
-        if api_key:
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel(
-                "gemini-2.5-flash",
-                generation_config={
-                    "max_output_tokens": MAX_OUTPUT_TOKENS,
-                    "temperature": 0.7,
-                },
-            )
-            logger.info("Gemini API Client initialized with output token limits.")
+    def __init__(
+        self,
+        db=None,
+        executor: Optional[ThreadPoolExecutor] = None,
+        model: Optional[Any] = None,
+    ):
+        if model is not None:
+            self.model = model
         else:
-            self.model = None
+            api_key = os.getenv("GEMINI_API_KEY")
+            if api_key:
+                genai.configure(api_key=api_key)
+                self.model = genai.GenerativeModel(
+                    "gemini-2.5-flash",
+                    generation_config={
+                        "max_output_tokens": MAX_OUTPUT_TOKENS,
+                        "temperature": 0.7,
+                    },
+                )
+                logger.info("Gemini API Client initialized with output token limits.")
+            else:
+                self.model = None
 
         if db is not None:
             self.db = db
@@ -192,7 +220,7 @@ class AITutorService:
             self.db = DatabaseManager()
 
         self._concurrency_semaphore = asyncio.Semaphore(MAX_CONCURRENT_GENERATIONS)
-        self._executor = executor or tutor_executor
+        self._executor = executor or get_tutor_executor()
 
     async def generate_embedding(self, text: str):
         """
@@ -523,3 +551,11 @@ class AITutorService:
         finally:
             if acquired:
                 self._concurrency_semaphore.release()
+
+
+def __getattr__(name: str):
+    """Provides lazy access to tutor_executor for backward-compatible imports."""
+    if name == "tutor_executor":
+        return get_tutor_executor()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
