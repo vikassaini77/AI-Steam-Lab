@@ -1,15 +1,186 @@
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+import math
+from enum import Enum
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, Dict, Any, List, Union
+
+
+class ExperimentType(str, Enum):
+    FREE_FALL = "free_fall"
+    PENDULUM = "pendulum"
+    COLLISION = "collision"
+    HARMONIC_MOTION = "harmonic_motion"
+
+
+SUPPORTED_EXPERIMENT_TYPES = {e.value for e in ExperimentType}
+VALID_UNIT_SYSTEMS = {"si", "mks", "metric"}
+
+
+def validate_finite(v: Any, field_name: str) -> float:
+    if v is None:
+        return v
+    if not isinstance(v, (int, float)):
+        try:
+            v = float(v)
+        except (ValueError, TypeError):
+            raise ValueError(f"Field '{field_name}' must be a numeric value, got '{v}'")
+    if not math.isfinite(v):
+        raise ValueError(f"Field '{field_name}' must be a finite real number, got '{v}'")
+    return float(v)
+
+
+def validate_unit_system(unit_system: Optional[str]) -> str:
+    if unit_system is None:
+        return "SI"
+    cleaned = str(unit_system).strip().lower()
+    if cleaned not in VALID_UNIT_SYSTEMS:
+        allowed = ", ".join(sorted(VALID_UNIT_SYSTEMS)).upper()
+        raise ValueError(f"Unsupported unit system: '{unit_system}'. Allowed unit systems are: {allowed}.")
+    return unit_system.upper()
+
+
+def normalize_experiment_type(raw_type: Optional[str], raw_name: Optional[str] = None) -> ExperimentType:
+    """
+    Normalizes and validates experiment types against the ExperimentType enum.
+    Raises ValueError if the experiment type is unsupported.
+    """
+    candidate = str(raw_type or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not candidate and raw_name:
+        name_clean = str(raw_name).strip().lower()
+        if "pendulum" in name_clean:
+            candidate = "pendulum"
+        elif "free_fall" in name_clean or "freefall" in name_clean or "free fall" in name_clean:
+            candidate = "free_fall"
+        elif "collision" in name_clean:
+            candidate = "collision"
+        elif "harmonic" in name_clean:
+            candidate = "harmonic_motion"
+
+    alias_map = {
+        "free_fall": ExperimentType.FREE_FALL,
+        "freefall": ExperimentType.FREE_FALL,
+        "pendulum": ExperimentType.PENDULUM,
+        "collision": ExperimentType.COLLISION,
+        "harmonic_motion": ExperimentType.HARMONIC_MOTION,
+        "harmonicmotion": ExperimentType.HARMONIC_MOTION,
+    }
+
+    if candidate in alias_map:
+        return alias_map[candidate]
+
+    supported = ", ".join(sorted(SUPPORTED_EXPERIMENT_TYPES))
+    raise ValueError(f"Unsupported experiment type: '{raw_type}'. Supported types are: {supported}.")
+
+
+class FreeFallInputSchema(BaseModel):
+    height: float = Field(..., gt=0.0, le=10000.0, description="Initial drop height in meters (m)")
+    mass: float = Field(default=1.0, gt=0.0, le=50000.0, description="Object mass in kilograms (kg)")
+    gravity: float = Field(default=9.81, gt=0.0, le=100.0, description="Gravitational acceleration in m/s^2")
+    unit_system: str = Field(default="SI", description="Unit system (default: SI)")
+
+    @field_validator("height", "mass", "gravity", mode="before")
+    @classmethod
+    def check_finite(cls, v, info):
+        return validate_finite(v, info.field_name)
+
+    @field_validator("unit_system")
+    @classmethod
+    def check_units(cls, v):
+        return validate_unit_system(v)
+
+
+class PendulumInputSchema(BaseModel):
+    length: float = Field(..., gt=0.0, le=1000.0, description="Pendulum string/rod length in meters (m)")
+    angle_deg: float = Field(default=45.0, ge=-180.0, le=180.0, description="Initial displacement angle in degrees (°)")
+    mass: float = Field(default=1.0, gt=0.0, le=50000.0, description="Bob mass in kilograms (kg)")
+    gravity: float = Field(default=9.81, gt=0.0, le=100.0, description="Gravitational acceleration in m/s^2")
+    damping: float = Field(default=0.0, ge=0.0, le=10.0, description="Damping coefficient (non-negative)")
+    unit_system: str = Field(default="SI", description="Unit system (default: SI)")
+
+    @field_validator("length", "angle_deg", "mass", "gravity", "damping", mode="before")
+    @classmethod
+    def check_finite(cls, v, info):
+        return validate_finite(v, info.field_name)
+
+    @field_validator("unit_system")
+    @classmethod
+    def check_units(cls, v):
+        return validate_unit_system(v)
+
+
+class CollisionInputSchema(BaseModel):
+    mass_a: float = Field(..., gt=0.0, le=100000.0, description="Mass of body A in kg")
+    mass_b: float = Field(..., gt=0.0, le=100000.0, description="Mass of body B in kg")
+    vel_a: float = Field(..., ge=-10000.0, le=10000.0, description="Initial velocity of body A in m/s")
+    vel_b: float = Field(..., ge=-10000.0, le=10000.0, description="Initial velocity of body B in m/s")
+    collision_type: str = Field(default="Elastic", description="Collision type: 'Elastic' or 'Inelastic'")
+    unit_system: str = Field(default="SI", description="Unit system (default: SI)")
+
+    @field_validator("mass_a", "mass_b", "vel_a", "vel_b", mode="before")
+    @classmethod
+    def check_finite(cls, v, info):
+        return validate_finite(v, info.field_name)
+
+    @field_validator("collision_type")
+    @classmethod
+    def check_collision_type(cls, v):
+        clean = str(v).strip().lower()
+        if clean not in ("elastic", "inelastic"):
+            raise ValueError(f"Invalid collision_type: '{v}'. Must be 'Elastic' or 'Inelastic'.")
+        return "Elastic" if clean == "elastic" else "Inelastic"
+
+    @field_validator("unit_system")
+    @classmethod
+    def check_units(cls, v):
+        return validate_unit_system(v)
+
+
+class HarmonicMotionInputSchema(BaseModel):
+    amplitude: float = Field(..., gt=0.0, le=1000.0, description="Oscillation amplitude in meters (m)")
+    angular_frequency: float = Field(..., gt=0.0, le=1000.0, description="Angular frequency omega in rad/s")
+    phase: float = Field(default=0.0, ge=-360.0, le=360.0, description="Initial phase phi in degrees or radians")
+    time: float = Field(default=1.0, ge=0.0, le=3600.0, description="Evaluation time in seconds")
+    unit_system: str = Field(default="SI", description="Unit system (default: SI)")
+
+    @field_validator("amplitude", "angular_frequency", "phase", "time", mode="before")
+    @classmethod
+    def check_finite(cls, v, info):
+        return validate_finite(v, info.field_name)
+
+    @field_validator("unit_system")
+    @classmethod
+    def check_units(cls, v):
+        return validate_unit_system(v)
+
 
 class ChatRequest(BaseModel):
     session_id: str
     message: str
     context: Optional[Dict[str, Any]] = None
 
+
 class ExperimentData(BaseModel):
-    user_id: str
-    type: str
-    metrics: Dict[str, Any]
+    user_id: Optional[str] = None
+    type: Optional[str] = None
+    experiment_type: Optional[str] = None
+    name: Optional[str] = None
+    parameters: Optional[Dict[str, Any]] = None
+    metrics: Optional[Dict[str, Any]] = None
+    unit_system: Optional[str] = "SI"
+    height: Optional[float] = None
+    mass: Optional[float] = None
+    gravity: Optional[float] = None
+    length: Optional[float] = None
+    angle_deg: Optional[float] = None
+    damping: Optional[float] = None
+    mass_a: Optional[float] = None
+    mass_b: Optional[float] = None
+    vel_a: Optional[float] = None
+    vel_b: Optional[float] = None
+    collision_type: Optional[str] = None
+    amplitude: Optional[float] = None
+    angular_frequency: Optional[float] = None
+    phase: Optional[float] = None
+    time: Optional[float] = None
 
 class GamificationXP(BaseModel):
     user_id: Optional[str] = None

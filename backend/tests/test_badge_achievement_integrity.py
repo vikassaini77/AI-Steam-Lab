@@ -308,3 +308,4 @@ def test_pgvector_db_achievements_postgresql_queries():
         executed_sql = mock_cur.execute.call_args[0][0]
         assert "SELECT user_id, COUNT(*)" in executed_sql
         assert "WHERE user_id = ANY(%s)" in executed_sql
+

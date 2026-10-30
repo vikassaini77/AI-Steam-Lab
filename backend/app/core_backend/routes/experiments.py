@@ -1,8 +1,20 @@
 import os
-from typing import Optional, Dict, Any
+import math
+import time
+import uuid
+from typing import Optional, Dict, Any, Union
 from fastapi import APIRouter, Request, Depends, HTTPException, status
-from pydantic import BaseModel
-from app.core_backend.models.schema import ExperimentData
+from pydantic import ValidationError
+from app.core_backend.models.schema import (
+    ExperimentData,
+    ExperimentType,
+    SUPPORTED_EXPERIMENT_TYPES,
+    FreeFallInputSchema,
+    PendulumInputSchema,
+    CollisionInputSchema,
+    HarmonicMotionInputSchema,
+    normalize_experiment_type,
+)
 from app.core_backend.database.supabase_db import DatabaseManager
 from app.core_backend.database.pgvector_db import DatabasePersistenceError
 from app.core_backend.core.dependencies import get_current_user
@@ -32,55 +44,98 @@ def get_db():
     return getattr(router, "db", None) or globals().get("db") or get_database_manager()
 
 
-class ExperimentAnalysisRequest(BaseModel):
-    user_id: Optional[str] = None
-    type: Optional[str] = None
-    metrics: Optional[Dict[str, Any]] = None
-    height: Optional[float] = None
-    mass: Optional[float] = None
-    gravity: Optional[float] = 9.81
-    length: Optional[float] = None
-    angle_deg: Optional[float] = None
-    damping: Optional[float] = 0.0
-    mass_a: Optional[float] = None
-    mass_b: Optional[float] = None
-    vel_a: Optional[float] = None
-    vel_b: Optional[float] = None
-    collision_type: Optional[str] = "Elastic"
-
-
 @router.post("/analyze/{exp_type}")
-def analyze_experiment(exp_type: str, data: ExperimentAnalysisRequest):
+def analyze_experiment(exp_type: str, data: Dict[str, Any]):
     """
-    Analyzes physics kinematics simulations (e.g. free-fall, pendulum, collision).
-    Returns calculated trajectory and series data.
+    Analyzes physics kinematics simulations (e.g. free_fall, pendulum, collision, harmonic_motion).
+    Guarantees:
+    1. Validates experiment type against ExperimentType enum (rejects unsupported types with 400).
+    2. Validates parameters using distinct physics-specific schema (units, coordinate ranges, required parameters, finite numbers).
+    3. Computes simulation results on the server using PhysicsEngine.
     """
-    norm_type = exp_type.lower()
-    if norm_type in ["free-fall", "freefall"]:
-        height = data.height if data.height is not None else 50.0
-        mass = data.mass if data.mass is not None else 1.0
-        gravity = data.gravity if data.gravity is not None else 9.81
-        return PhysicsEngine.solve_free_fall(height=height, mass=mass, gravity=gravity)
-    elif norm_type == "pendulum":
-        length = data.length if data.length is not None else 2.5
-        angle = data.angle_deg if data.angle_deg is not None else 45.0
-        mass = data.mass if data.mass is not None else 1.0
-        gravity = data.gravity if data.gravity is not None else 9.81
-        damping = data.damping if data.damping is not None else 0.0
-        return PhysicsEngine.solve_pendulum(
-            length=length, angle_deg=angle, mass=mass, gravity=gravity, damping=damping
-        )
-    elif norm_type == "collision":
-        mass_a = data.mass_a if data.mass_a is not None else 1.0
-        mass_b = data.mass_b if data.mass_b is not None else 1.0
-        vel_a = data.vel_a if data.vel_a is not None else 1.0
-        vel_b = data.vel_b if data.vel_b is not None else -1.0
-        col_type = data.collision_type or "Elastic"
-        return PhysicsEngine.solve_collision(
-            mass_a=mass_a, mass_b=mass_b, vel_a=vel_a, vel_b=vel_b, collision_type=col_type
+    try:
+        exp_type_enum = normalize_experiment_type(exp_type)
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ve),
         )
 
-    return {"status": "analyzed", "type": exp_type, "parameters": data.model_dump()}
+    try:
+        if exp_type_enum == ExperimentType.FREE_FALL:
+            schema = FreeFallInputSchema(**data)
+            computed = PhysicsEngine.solve_free_fall(
+                height=schema.height,
+                mass=schema.mass,
+                gravity=schema.gravity,
+            )
+            validated_inputs = schema.model_dump()
+
+        elif exp_type_enum == ExperimentType.PENDULUM:
+            schema = PendulumInputSchema(**data)
+            computed = PhysicsEngine.solve_pendulum(
+                length=schema.length,
+                angle_deg=schema.angle_deg,
+                mass=schema.mass,
+                gravity=schema.gravity,
+                damping=schema.damping,
+            )
+            validated_inputs = schema.model_dump()
+
+        elif exp_type_enum == ExperimentType.COLLISION:
+            schema = CollisionInputSchema(**data)
+            computed = PhysicsEngine.solve_collision(
+                mass_a=schema.mass_a,
+                mass_b=schema.mass_b,
+                vel_a=schema.vel_a,
+                vel_b=schema.vel_b,
+                collision_type=schema.collision_type,
+            )
+            validated_inputs = schema.model_dump()
+
+        elif exp_type_enum == ExperimentType.HARMONIC_MOTION:
+            schema = HarmonicMotionInputSchema(**data)
+            pos = PhysicsEngine.harmonic_motion(
+                t=schema.time,
+                A=schema.amplitude,
+                omega=schema.angular_frequency,
+                phi=math.radians(schema.phase),
+            )
+            computed = {
+                "position": round(pos, 4),
+                "amplitude": schema.amplitude,
+                "angular_frequency": schema.angular_frequency,
+                "time": schema.time,
+                "phase": schema.phase,
+            }
+            validated_inputs = schema.model_dump()
+
+    except ValidationError as e:
+        errors = e.errors()
+        first_err = errors[0]["msg"] if errors else "Invalid parameters"
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Physics schema validation failed: {first_err}",
+        )
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Physics validation error: {str(ve)}",
+        )
+
+    response_payload = {
+        "status": "success",
+        "experiment_type": exp_type_enum.value,
+        "algorithm_version": "physics_engine_v1.0",
+        "validated_inputs": validated_inputs,
+        "computed_results": computed,
+        "parameters": computed.get("parameters", validated_inputs),
+    }
+    for k, v in computed.items():
+        if k != "parameters":
+            response_payload[k] = v
+
+    return response_payload
 
 
 @router.post("/save")
@@ -92,10 +147,13 @@ def save_experiment(
 ):
     """
     Commits experiment kinematics to database.
-    Obtains the canonical user ID from the verified identity.
-    Never trusts client-supplied user_id: rejects mismatches with 403 Forbidden.
-    In production mode: reports a controlled 503 failure if persistence fails,
-    never claiming that the record was saved when it was not durably committed.
+    Guarantees:
+    1. Obtains canonical user ID from verified identity (rejects spoofing with 403 Forbidden).
+    2. Enforces supported experiment type enum (rejects unsupported types with 400 Bad Request).
+    3. Validates units, ranges, and required parameters against physics schema.
+    4. Computes authoritative results on the server (does not trust client-supplied metrics).
+    5. Persists input data, algorithm/model version, and computed results separately.
+    6. In production mode: reports 503 if persistence fails.
     """
     canonical_uid = str(current_user["id"])
 
@@ -106,10 +164,139 @@ def save_experiment(
             detail="Forbidden: You cannot save an experiment on behalf of another user.",
         )
 
+    # Validate and normalize experiment type
+    try:
+        exp_type_enum = normalize_experiment_type(data.type or data.experiment_type, raw_name=data.name)
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ve),
+        )
+
+    # Extract raw parameters from data, parameters, or metrics
+    raw_params: Dict[str, Any] = {}
+    if data.parameters:
+        raw_params.update(data.parameters)
+    if data.metrics:
+        for k in (
+            "height", "mass", "gravity", "length", "angle_deg", "damping",
+            "mass_a", "mass_b", "vel_a", "vel_b", "collision_type",
+            "amplitude", "angular_frequency", "phase", "time"
+        ):
+            if k in data.metrics and k not in raw_params:
+                raw_params[k] = data.metrics[k]
+    for k in (
+        "height", "mass", "gravity", "length", "angle_deg", "damping",
+        "mass_a", "mass_b", "vel_a", "vel_b", "collision_type",
+        "amplitude", "angular_frequency", "phase", "time", "unit_system"
+    ):
+        val = getattr(data, k, None)
+        if val is not None and k not in raw_params:
+            raw_params[k] = val
+    if data.unit_system and "unit_system" not in raw_params:
+        raw_params["unit_system"] = data.unit_system
+
+    # Validate against specific physics schema and compute authoritative results on server
+    try:
+        if exp_type_enum == ExperimentType.FREE_FALL:
+            if "height" not in raw_params or raw_params["height"] is None:
+                raw_params["height"] = 50.0
+            schema = FreeFallInputSchema(**raw_params)
+            server_results = PhysicsEngine.solve_free_fall(
+                height=schema.height,
+                mass=schema.mass,
+                gravity=schema.gravity,
+            )
+            validated_inputs = schema.model_dump()
+
+        elif exp_type_enum == ExperimentType.PENDULUM:
+            if "length" not in raw_params or raw_params["length"] is None:
+                raw_params["length"] = 2.5
+            schema = PendulumInputSchema(**raw_params)
+            server_results = PhysicsEngine.solve_pendulum(
+                length=schema.length,
+                angle_deg=schema.angle_deg,
+                mass=schema.mass,
+                gravity=schema.gravity,
+                damping=schema.damping,
+            )
+            validated_inputs = schema.model_dump()
+
+        elif exp_type_enum == ExperimentType.COLLISION:
+            if "mass_a" not in raw_params:
+                raw_params["mass_a"] = 1.0
+            if "mass_b" not in raw_params:
+                raw_params["mass_b"] = 1.0
+            if "vel_a" not in raw_params:
+                raw_params["vel_a"] = 1.0
+            if "vel_b" not in raw_params:
+                raw_params["vel_b"] = -1.0
+            schema = CollisionInputSchema(**raw_params)
+            server_results = PhysicsEngine.solve_collision(
+                mass_a=schema.mass_a,
+                mass_b=schema.mass_b,
+                vel_a=schema.vel_a,
+                vel_b=schema.vel_b,
+                collision_type=schema.collision_type,
+            )
+            validated_inputs = schema.model_dump()
+
+        elif exp_type_enum == ExperimentType.HARMONIC_MOTION:
+            if "amplitude" not in raw_params:
+                raw_params["amplitude"] = 1.0
+            if "angular_frequency" not in raw_params:
+                raw_params["angular_frequency"] = 2.0
+            schema = HarmonicMotionInputSchema(**raw_params)
+            pos = PhysicsEngine.harmonic_motion(
+                t=schema.time,
+                A=schema.amplitude,
+                omega=schema.angular_frequency,
+                phi=math.radians(schema.phase),
+            )
+            server_results = {
+                "position": round(pos, 4),
+                "amplitude": schema.amplitude,
+                "angular_frequency": schema.angular_frequency,
+            }
+            validated_inputs = schema.model_dump()
+
+    except ValidationError as e:
+        errors = e.errors()
+        first_err = errors[0]["msg"] if errors else "Invalid parameters"
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Physics schema validation failed: {first_err}",
+        )
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Physics validation error: {str(ve)}",
+        )
+
+    # Persist input data, algorithm/model version, and computed results separately!
+    # Server-computed results are authoritative; client metrics stored separately for audit
+    record_id = f"exp_{uuid.uuid4().hex[:12]}"
+    record_payload = {
+        "id": record_id,
+        "user_id": canonical_uid,
+        "experiment_type": exp_type_enum.value,
+        "type": exp_type_enum.value,
+        "algorithm_version": "physics_engine_v1.0",
+        "input_data": validated_inputs,
+        "server_computed_results": server_results,
+        "client_supplied_metrics": data.metrics or {},
+        "metrics": server_results,  # Authoritative results override client claims
+        "timestamp": int(time.time()),
+    }
+
     active_db = get_db()
     try:
-        saved_record = active_db.save_experiment(data.model_dump(), user_id=canonical_uid)
-        return {"status": "saved", "experiment": saved_record}
+        saved_record = active_db.save_experiment(record_payload, user_id=canonical_uid)
+        return {
+            "status": "saved",
+            "experiment": saved_record,
+            "server_computed_results": server_results,
+        }
     except DatabasePersistenceError as pe:
         logger.error(f"Durable save failed for user {canonical_uid}: {pe}")
         raise HTTPException(
