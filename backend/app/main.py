@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Response, Depends
+from fastapi import FastAPI, Request, Response, Depends, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
@@ -162,11 +162,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Unversioned API routes (backward-compatible legacy surface)
 app.include_router(tutor_router, prefix="/api/tutor", tags=["Tutor"])
 app.include_router(cv_tracker_router, prefix="/api/cv", tags=["Computer Vision"])
 app.include_router(experiments_router, prefix="/api/experiments", tags=["Experiments"])
 app.include_router(gamification_router, prefix="/api/gamification", tags=["Gamification"])
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
+
+# Versioned v1 API routes (explicit version contract surface)
+v1_router = APIRouter(prefix="/api/v1")
+v1_router.include_router(tutor_router, prefix="/tutor", tags=["Tutor (v1)"])
+v1_router.include_router(cv_tracker_router, prefix="/cv", tags=["Computer Vision (v1)"])
+v1_router.include_router(experiments_router, prefix="/experiments", tags=["Experiments (v1)"])
+v1_router.include_router(gamification_router, prefix="/gamification", tags=["Gamification (v1)"])
+v1_router.include_router(auth_router, prefix="/auth", tags=["Authentication (v1)"])
+app.include_router(v1_router)
 
 @app.get("/")
 @limiter.limit("10/minute")

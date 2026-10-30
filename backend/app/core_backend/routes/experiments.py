@@ -2,9 +2,9 @@ import os
 import math
 import time
 import uuid
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 from fastapi import APIRouter, Request, Depends, HTTPException, status
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
 from app.core_backend.models.schema import (
     ExperimentData,
     ExperimentType,
@@ -39,7 +39,70 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-@router.post("/analyze/{exp_type}")
+class ExperimentAnalyzePayload(BaseModel):
+    height: Optional[float] = Field(None, gt=0.0, le=10000.0, description="Height in meters (free-fall)")
+    mass: Optional[float] = Field(None, gt=0.0, le=100000.0, description="Mass in kg")
+    gravity: Optional[float] = Field(None, gt=0.0, le=100.0, description="Gravity in m/s^2")
+    length: Optional[float] = Field(None, gt=0.0, le=1000.0, description="Length in meters (pendulum)")
+    angle_deg: Optional[float] = Field(None, ge=-90.0, le=90.0, description="Release angle in degrees")
+    damping: Optional[float] = Field(None, ge=0.0, le=10.0, description="Damping coefficient")
+    mass_a: Optional[float] = Field(None, gt=0.0, le=100000.0, description="Mass A in kg (collision)")
+    mass_b: Optional[float] = Field(None, gt=0.0, le=100000.0, description="Mass B in kg (collision)")
+    vel_a: Optional[float] = Field(None, ge=-10000.0, le=10000.0, description="Velocity A in m/s")
+    vel_b: Optional[float] = Field(None, ge=-10000.0, le=10000.0, description="Velocity B in m/s")
+    collision_type: Optional[str] = Field(None, max_length=20, description="elastic or inelastic")
+    amplitude: Optional[float] = Field(None, gt=0.0, le=1000.0, description="Amplitude in meters (harmonic)")
+    angular_frequency: Optional[float] = Field(None, gt=0.0, le=1000.0, description="Angular frequency in rad/s")
+    phase: Optional[float] = Field(None, ge=-360.0, le=360.0, description="Phase angle in degrees")
+    time: Optional[float] = Field(None, ge=0.0, le=100000.0, description="Time in seconds")
+    unit_system: Optional[str] = Field(default="metric", max_length=20, description="Unit system: metric or imperial")
+
+    model_config = {
+        "extra": "allow",
+    }
+
+
+class ExperimentAnalysisResponse(BaseModel):
+    status: str = Field(..., description="Analysis status ('success')")
+    experiment_type: str = Field(..., description="Normalized experiment type")
+    algorithm_version: str = Field(..., description="Physics algorithm version")
+    validated_inputs: Dict[str, Any] = Field(..., description="Validated physics input parameters")
+    computed_results: Dict[str, Any] = Field(..., description="Authoritative server-computed physics results")
+    parameters: Dict[str, Any] = Field(..., description="Simulation parameters")
+
+    model_config = {"extra": "allow"}
+
+
+class ExperimentRecord(BaseModel):
+    id: str = Field(..., description="Unique experiment record ID")
+    user_id: str = Field(..., description="Owner user ID")
+    experiment_type: str = Field(..., description="Experiment type")
+    type: Optional[str] = Field(None, description="Experiment type alias")
+    algorithm_version: str = Field(..., description="Algorithm version")
+    input_data: Dict[str, Any] = Field(..., description="Validated input parameters")
+    server_computed_results: Dict[str, Any] = Field(..., description="Authoritative server-computed results")
+    client_supplied_metrics: Optional[Dict[str, Any]] = Field(None, description="Client metrics recorded for audit")
+    metrics: Dict[str, Any] = Field(..., description="Authoritative physics metrics")
+    timestamp: Union[int, float] = Field(..., description="Creation epoch timestamp")
+
+    model_config = {"extra": "allow"}
+
+
+class ExperimentSaveResponse(BaseModel):
+    status: str = Field(..., description="Save status ('saved')")
+    experiment: ExperimentRecord = Field(..., description="Persisted experiment record")
+    server_computed_results: Dict[str, Any] = Field(..., description="Authoritative server-computed physics results")
+
+
+class ExperimentHistoryResponse(BaseModel):
+    history: List[Dict[str, Any]] = Field(default_factory=list, description="List of user's saved experiment records")
+
+
+class ExperimentDetailResponse(BaseModel):
+    experiment: Dict[str, Any] = Field(..., description="Saved experiment record details")
+
+
+@router.post("/analyze/{exp_type}", response_model=ExperimentAnalysisResponse)
 def analyze_experiment(exp_type: str, data: Dict[str, Any]):
     """
     Analyzes physics kinematics simulations (e.g. free_fall, pendulum, collision, harmonic_motion).
@@ -133,7 +196,7 @@ def analyze_experiment(exp_type: str, data: Dict[str, Any]):
     return response_payload
 
 
-@router.post("/save")
+@router.post("/save", response_model=ExperimentSaveResponse)
 @limiter.limit("30/minute")
 def save_experiment(
     request: Request,
@@ -301,7 +364,7 @@ def save_experiment(
         )
 
 
-@router.get("/history")
+@router.get("/history", response_model=ExperimentHistoryResponse)
 def get_history(
     user_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
@@ -332,7 +395,7 @@ def get_history(
         )
 
 
-@router.get("/experiment/{experiment_id}")
+@router.get("/experiment/{experiment_id}", response_model=ExperimentDetailResponse)
 def get_experiment(
     experiment_id: str,
     current_user: dict = Depends(get_current_user),

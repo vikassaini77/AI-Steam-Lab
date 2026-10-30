@@ -60,6 +60,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "max-age=31536000; includeSubDomains; preload"
             )
 
+        # 6. Explicit API Version Contract
+        response.headers["X-API-Version"] = "1.0.0"
+
         # Note: X-XSS-Protection is intentionally omitted as it is obsolete and introduces security flaws in modern browsers.
 
         return response

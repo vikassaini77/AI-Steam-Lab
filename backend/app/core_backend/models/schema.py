@@ -159,28 +159,32 @@ class ChatRequest(BaseModel):
 
 
 class ExperimentData(BaseModel):
-    user_id: Optional[str] = None
-    type: Optional[str] = None
-    experiment_type: Optional[str] = None
-    name: Optional[str] = None
-    parameters: Optional[Dict[str, Any]] = None
-    metrics: Optional[Dict[str, Any]] = None
-    unit_system: Optional[str] = "SI"
-    height: Optional[float] = None
-    mass: Optional[float] = None
-    gravity: Optional[float] = None
-    length: Optional[float] = None
-    angle_deg: Optional[float] = None
-    damping: Optional[float] = None
-    mass_a: Optional[float] = None
-    mass_b: Optional[float] = None
-    vel_a: Optional[float] = None
-    vel_b: Optional[float] = None
-    collision_type: Optional[str] = None
-    amplitude: Optional[float] = None
-    angular_frequency: Optional[float] = None
-    phase: Optional[float] = None
-    time: Optional[float] = None
+    user_id: Optional[str] = Field(None, max_length=128, description="Canonical user ID")
+    type: Optional[str] = Field(None, max_length=50, description="Experiment type (free_fall, pendulum, collision, harmonic_motion)")
+    experiment_type: Optional[str] = Field(None, max_length=50, description="Alias for experiment type")
+    name: Optional[str] = Field(None, max_length=128, description="Experiment title or name")
+    parameters: Optional[Dict[str, Any]] = Field(None, description="Simulation parameters dictionary")
+    metrics: Optional[Dict[str, Any]] = Field(None, description="Simulation metrics dictionary")
+    unit_system: Optional[str] = Field("SI", max_length=20, description="Unit system: SI or Imperial")
+    height: Optional[float] = Field(None, gt=0.0, le=10000.0, description="Height in meters")
+    mass: Optional[float] = Field(None, gt=0.0, le=100000.0, description="Mass in kg")
+    gravity: Optional[float] = Field(None, gt=0.0, le=100.0, description="Gravity in m/s^2")
+    length: Optional[float] = Field(None, gt=0.0, le=1000.0, description="Length in meters")
+    angle_deg: Optional[float] = Field(None, ge=-90.0, le=90.0, description="Angle in degrees")
+    damping: Optional[float] = Field(None, ge=0.0, le=10.0, description="Damping factor")
+    mass_a: Optional[float] = Field(None, gt=0.0, le=100000.0, description="Mass A in kg")
+    mass_b: Optional[float] = Field(None, gt=0.0, le=100000.0, description="Mass B in kg")
+    vel_a: Optional[float] = Field(None, ge=-10000.0, le=10000.0, description="Velocity A in m/s")
+    vel_b: Optional[float] = Field(None, ge=-10000.0, le=10000.0, description="Velocity B in m/s")
+    collision_type: Optional[str] = Field(None, max_length=20, description="elastic or inelastic")
+    amplitude: Optional[float] = Field(None, gt=0.0, le=1000.0, description="Amplitude in meters")
+    angular_frequency: Optional[float] = Field(None, gt=0.0, le=1000.0, description="Angular frequency in rad/s")
+    phase: Optional[float] = Field(None, ge=-360.0, le=360.0, description="Phase angle in degrees")
+    time: Optional[float] = Field(None, ge=0.0, le=100000.0, description="Time in seconds")
+
+    model_config = {
+        "extra": "forbid",
+    }
 
 class GamificationXP(BaseModel):
     user_id: Optional[str] = None

@@ -1,9 +1,10 @@
 import time
 import asyncio
 from datetime import datetime, timezone
-from typing import Literal, Optional, Dict, Any
+from enum import Enum
+from typing import Literal, Optional, Dict, Any, List
 from fastapi import APIRouter, Request, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from app.core_backend.core.dependencies import get_current_user
 from app.core_backend.core.limiter import limiter
 from app.machine_learning.cv_service import (
@@ -23,19 +24,77 @@ _cv_concurrency_semaphore = asyncio.Semaphore(10)
 MAX_FRAME_PAYLOAD_BYTES = 5 * 1024 * 1024  # 5 MiB
 
 
+def check_frame_payload_limit(request: Request):
+    """Early content-length inspection before request body parsing."""
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_FRAME_PAYLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Payload too large: Video frame payload exceeds 5MB limit.",
+        )
+
+
+class TrackingMethod(str, Enum):
+    COLOR = "color"
+    OPTICAL_FLOW = "optical_flow"
+    YOLO = "yolo"
+
+
 class FrameProcessRequest(BaseModel):
-    image: Optional[str] = Field(None, description="Base64 encoded frame")
-    frame: Optional[str] = Field(None, description="Alternative key for base64 frame")
-    tracking_method: Optional[str] = "color"
-    color_target: Optional[str] = "red"
-    px_to_meters: Optional[float] = 0.005
-    confidence_threshold: Optional[float] = Field(0.25, ge=0.0, le=1.0)
-    nms_threshold: Optional[float] = Field(0.45, ge=0.0, le=1.0)
+    image: Optional[str] = Field(
+        None,
+        max_length=7_000_000,
+        description="Base64 encoded video frame",
+    )
+    frame: Optional[str] = Field(
+        None,
+        max_length=7_000_000,
+        description="Alternative key for base64 encoded frame",
+    )
+    tracking_method: Optional[TrackingMethod] = Field(
+        default=TrackingMethod.COLOR,
+        description="Tracking algorithm (color, optical_flow, yolo)",
+    )
+    color_target: Optional[str] = Field(
+        default="red",
+        max_length=50,
+        description="Color target for HSV tracking (red, green, blue)",
+    )
+    px_to_meters: Optional[float] = Field(
+        default=0.005,
+        gt=0.0,
+        le=10.0,
+        description="Pixel to meters conversion scale factor",
+    )
+    confidence_threshold: Optional[float] = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence score threshold",
+    )
+    nms_threshold: Optional[float] = Field(
+        default=0.45,
+        ge=0.0,
+        le=1.0,
+        description="Non-maximum suppression threshold",
+    )
+
+    model_config = {
+        "extra": "forbid",
+    }
+
+    @model_validator(mode="after")
+    def validate_image_present(self):
+        img = self.image or self.frame
+        if not img or not img.strip():
+            raise ValueError("Missing image data: payload must include 'image' or 'frame' string.")
+        return self
 
 
 class EngagementEvent(BaseModel):
     user_id: Optional[str] = Field(
         None,
+        max_length=128,
         description="Optional client-provided user ID (verified against authenticated identity)",
     )
     state: Literal[
@@ -54,13 +113,75 @@ class EngagementEvent(BaseModel):
     model_version: Optional[str] = Field(default="v1.0.0-cv-heuristics", max_length=50)
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
+    model_config = {
+        "extra": "forbid",
+    }
 
-@router.get("/")
+
+# Response Models
+class CVStatusResponse(BaseModel):
+    status: str = Field(..., description="Service status message")
+
+
+class CVReadinessResponse(BaseModel):
+    ready: bool = Field(..., description="Whether CV model inference is ready")
+    active_model: str = Field(..., description="Name of the active detection model")
+    yolo_loaded: bool = Field(..., description="Whether YOLOv8 weights are loaded")
+    classes_count: int = Field(..., ge=0, description="Detectable classes count")
+    supported_methods: List[str] = Field(..., description="List of supported tracking methods")
+
+
+class ResetTrackerResponse(BaseModel):
+    status: str = Field(..., description="Operation status (success)")
+    message: str = Field(..., description="Status description")
+
+
+class PhysicsTrackingMetrics(BaseModel):
+    x_meters: Optional[float] = Field(None, description="Displacement along x axis in meters")
+    y_meters: Optional[float] = Field(None, description="Displacement along y axis in meters")
+    velocity_mps: Optional[float] = Field(0.0, description="Estimated velocity in m/s")
+    acceleration_mps2: Optional[float] = Field(0.0, description="Estimated acceleration in m/s^2")
+    track_id: Optional[int] = Field(None, description="Persistent tracking ID")
+
+
+class FrameProcessResponse(BaseModel):
+    timestamp_ms: int = Field(..., description="Timestamp of the frame in milliseconds")
+    detections: List[Detection] = Field(default_factory=list, description="List of validated detections")
+    centroid: Optional[List[int]] = Field(None, description="Centroid [x, y] of primary object or None")
+    contours_found: int = Field(0, description="Number of contours / candidates found")
+    width: int = Field(..., description="Image width in pixels")
+    height: int = Field(..., description="Image height in pixels")
+    physics: Optional[PhysicsTrackingMetrics] = Field(None, description="Extracted kinematics and trajectory physics")
+    model_name: str = Field(..., description="Inference model or detector used")
+    inference_latency_ms: float = Field(..., description="Inference execution duration in milliseconds")
+    user_id: Optional[str] = Field(None, description="Authenticated user ID who submitted the frame")
+
+    model_config = {"extra": "allow"}
+
+
+class EngagementRecord(BaseModel):
+    user_id: str = Field(..., description="User ID")
+    state: str = Field(..., description="Engagement classification state")
+    confidence: float = Field(..., description="Confidence score")
+    timestamp: float = Field(..., description="Epoch timestamp in seconds")
+    recorded_at: str = Field(..., description="ISO 8601 recorded timestamp")
+    model_version: str = Field(..., description="Model version")
+    session_id: Optional[str] = Field(None, description="Session ID")
+    is_estimate: bool = Field(True, description="Indicates this is an estimated heuristic")
+    disclaimer: str = Field(..., description="Heuristic disclaimer")
+
+
+class EngagementResponse(BaseModel):
+    status: str = Field(..., description="Operation status (success)")
+    event: EngagementRecord = Field(..., description="Recorded engagement event")
+
+
+@router.get("/", response_model=CVStatusResponse)
 def get_cv_tracker_status():
     return {"status": "CV Tracker endpoint is active."}
 
 
-@router.get("/readiness")
+@router.get("/readiness", response_model=CVReadinessResponse)
 def check_cv_readiness():
     """
     Explicit model-loading and readiness verification endpoint.
@@ -69,7 +190,7 @@ def check_cv_readiness():
     return cv_tracker.check_readiness()
 
 
-@router.post("/reset-tracker")
+@router.post("/reset-tracker", response_model=ResetTrackerResponse)
 def reset_cv_tracker(current_user: dict = Depends(get_current_user)):
     """
     Resets object trajectory tracking history and clears persistent IDs.
@@ -78,10 +199,15 @@ def reset_cv_tracker(current_user: dict = Depends(get_current_user)):
     return {"status": "success", "message": "Object trajectory tracker reset."}
 
 
-@router.post("/process-frame")
+@router.post(
+    "/process-frame",
+    response_model=FrameProcessResponse,
+    dependencies=[Depends(check_frame_payload_limit)],
+)
 @limiter.limit("120/minute")
 async def process_frame(
     request: Request,
+    payload: FrameProcessRequest,
     current_user: dict = Depends(get_current_user),
 ):
     """
@@ -92,27 +218,7 @@ async def process_frame(
     4. Enforces resolution limit (max 1920x1080).
     5. Rejects corrupt or invalid images with 422.
     """
-    content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > MAX_FRAME_PAYLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Payload too large: Video frame payload exceeds 5MB limit.",
-        )
-
-    try:
-        data = await request.json()
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid JSON payload format.",
-        )
-
-    encoded_img = data.get("image") or data.get("frame")
-    if not encoded_img:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Missing image data: payload must include 'image' or 'frame' string.",
-        )
+    encoded_img = payload.image or payload.frame
 
     # Concurrency control & execution timeout
     try:
@@ -124,15 +230,20 @@ async def process_frame(
         )
 
     try:
+        tracking_val = (
+            payload.tracking_method.value
+            if hasattr(payload.tracking_method, "value")
+            else str(payload.tracking_method)
+        )
         results = await asyncio.wait_for(
             asyncio.to_thread(
                 cv_tracker.process_frame,
                 base64_img=encoded_img,
-                tracking_method=data.get("tracking_method", "color"),
-                color_target=data.get("color_target", "red"),
-                px_to_meters=data.get("px_to_meters", 0.005),
-                confidence_threshold=data.get("confidence_threshold", 0.25),
-                nms_threshold=data.get("nms_threshold", 0.45),
+                tracking_method=tracking_val,
+                color_target=payload.color_target,
+                px_to_meters=payload.px_to_meters,
+                confidence_threshold=payload.confidence_threshold,
+                nms_threshold=payload.nms_threshold,
             ),
             timeout=5.0,
         )
@@ -163,7 +274,7 @@ async def process_frame(
         _cv_concurrency_semaphore.release()
 
 
-@router.post("/process-frame-binary")
+@router.post("/process-frame-binary", response_model=FrameProcessResponse)
 @limiter.limit("120/minute")
 async def process_frame_binary(
     request: Request,
@@ -197,7 +308,7 @@ async def process_frame_binary(
         )
 
 
-@router.post("/engagement")
+@router.post("/engagement", response_model=EngagementResponse)
 @limiter.limit("60/minute")
 async def log_engagement(
     request: Request,

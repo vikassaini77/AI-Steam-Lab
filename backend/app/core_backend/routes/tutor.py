@@ -1,9 +1,11 @@
 import os
 import json
+from datetime import datetime
+from enum import Enum
 from typing import List, Optional, Dict, Any, Union
 from fastapi import APIRouter, Request, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from app.ai_agent.tutor_service import AITutorService
 from app.ai_agent.learning_evaluation import EvaluationResult
 from app.core_backend.core.dependencies import (
@@ -36,6 +38,64 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+class ChatRole(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"
+    SYSTEM = "system"
+    MODEL = "model"
+
+
+class ChatHistoryTurn(BaseModel):
+    role: ChatRole = Field(
+        ...,
+        description="Role of conversational turn participant (user, assistant, system, model)",
+    )
+    content: Optional[str] = Field(None, max_length=4000, description="Message content")
+    text: Optional[str] = Field(None, max_length=4000, description="Alternative field for message text")
+    timestamp: Optional[float] = Field(None, ge=0.0, description="Turn epoch timestamp in seconds")
+
+    model_config = {
+        "extra": "forbid",
+    }
+
+    @model_validator(mode="after")
+    def validate_content_presence(self):
+        if not (self.content or self.text):
+            raise ValueError("ChatHistoryTurn must contain non-empty 'content' or 'text'.")
+        return self
+
+
+class ExperimentStateContext(BaseModel):
+    experiment_type: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="Type of active physics experiment (e.g. free_fall, pendulum, collision)",
+    )
+    parameters: Optional[Dict[str, Union[float, int, str, bool]]] = Field(
+        None,
+        description="Active simulation parameters map",
+    )
+    current_metrics: Optional[Dict[str, Union[float, int, str]]] = Field(
+        None,
+        description="Observed simulation metrics map",
+    )
+    time_elapsed: Optional[float] = Field(
+        None,
+        ge=0.0,
+        le=100000.0,
+        description="Simulation elapsed time in seconds",
+    )
+    status: Optional[str] = Field(
+        None,
+        max_length=50,
+        description="Simulation status (running, paused, completed)",
+    )
+
+    model_config = {
+        "extra": "forbid",
+    }
+
+
 class ChatRequest(BaseModel):
     prompt: str = Field(
         ...,
@@ -43,15 +103,22 @@ class ChatRequest(BaseModel):
         max_length=2000,
         description="Prompt capped at 2,000 characters to prevent token exhaustion",
     )
-    history: Optional[List[Dict[str, Any]]] = Field(
+    history: Optional[List[ChatHistoryTurn]] = Field(
         None,
         max_length=20,
-        description="Conversation history capped at 20 turns",
+        description="Conversation history capped at 20 turns with typed roles and content",
     )
-    experiment_state: Optional[Dict[str, Any]] = None
-    session_id: Optional[str] = Field(None, max_length=100)
-    concept: Optional[str] = Field(None, max_length=100)
-    question: Optional[str] = Field(None, max_length=500)
+    experiment_state: Optional[ExperimentStateContext] = Field(
+        None,
+        description="Validated experiment simulation state and metrics",
+    )
+    session_id: Optional[str] = Field(None, max_length=100, description="Client session identifier")
+    concept: Optional[str] = Field(None, max_length=100, description="Physics concept being discussed")
+    question: Optional[str] = Field(None, max_length=500, description="Active question prompt")
+
+    model_config = {
+        "extra": "forbid",
+    }
 
 
 class ConceptEvaluationRequest(BaseModel):
@@ -59,8 +126,47 @@ class ConceptEvaluationRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=500, description="The conceptual question presented to student")
     answer: str = Field(..., min_length=1, max_length=1000, description="Student's answer text")
 
+    model_config = {
+        "extra": "forbid",
+    }
 
-@router.get("/")
+
+# Response Models for non-streaming endpoints
+class TutorStatusResponse(BaseModel):
+    status: str = Field(..., description="Service status message")
+
+
+class DeleteMemoriesResponse(BaseModel):
+    status: str = Field(..., description="Operation status (success)")
+    message: str = Field(..., description="Human-readable result summary")
+    deleted_count: int = Field(..., ge=0, description="Number of deleted memory records")
+
+
+class DeleteSingleMemoryResponse(BaseModel):
+    status: str = Field(..., description="Operation status (success)")
+    message: str = Field(..., description="Human-readable result summary")
+
+
+class ExportedMemoryItem(BaseModel):
+    id: Optional[int] = Field(None, description="Memory record ID")
+    content: Optional[str] = Field(None, description="Memory text content")
+    session_id: Optional[str] = Field(None, description="Associated session ID")
+    user_id: Optional[str] = Field(None, description="Owning user ID")
+    created_at: Optional[Union[str, datetime]] = Field(None, description="Creation timestamp")
+    similarity: Optional[float] = Field(None, description="Similarity score if retrieved via vector search")
+    rank: Optional[float] = Field(None, description="Combined search ranking score")
+
+    model_config = {"extra": "allow"}
+
+
+class ExportMemoriesResponse(BaseModel):
+    status: str = Field(..., description="Operation status (success)")
+    user_id: str = Field(..., description="Canonical user ID")
+    count: int = Field(..., ge=0, description="Total number of exported memory records")
+    memories: List[ExportedMemoryItem] = Field(default_factory=list, description="List of user memory records")
+
+
+@router.get("/", response_model=TutorStatusResponse)
 def get_tutor_status():
     return {"status": "Tutor endpoint is active."}
 
@@ -133,7 +239,7 @@ async def chat_with_tutor(
     )
 
 
-@router.delete("/memories")
+@router.delete("/memories", response_model=DeleteMemoriesResponse)
 @limiter.limit("10/minute")
 async def delete_user_memories(
     request: Request,
@@ -162,7 +268,7 @@ async def delete_user_memories(
         )
 
 
-@router.delete("/memories/{memory_id}")
+@router.delete("/memories/{memory_id}", response_model=DeleteSingleMemoryResponse)
 @limiter.limit("30/minute")
 async def delete_single_memory(
     request: Request,
@@ -192,7 +298,7 @@ async def delete_single_memory(
         )
 
 
-@router.get("/memories/export")
+@router.get("/memories/export", response_model=ExportMemoriesResponse)
 @limiter.limit("5/minute")
 async def export_user_memories(
     request: Request,
