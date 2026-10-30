@@ -650,6 +650,8 @@ class PGVectorManager:
             )
             return {
                 "status": status_str,
+                "criticality": "required",
+                "policy": "required_for_durable_writes",
                 "mode": "in-memory-fallback" if getattr(self, "is_in_memory_fallback", False) else "unconfigured",
                 "connected": False,
                 "error": err_detail,
@@ -685,6 +687,8 @@ class PGVectorManager:
 
             return {
                 "status": "ready",
+                "criticality": "required",
+                "policy": "required_for_durable_writes",
                 "connected": True,
                 "schema_status": "up_to_date",
                 "schema_version": current_version,
@@ -707,6 +711,8 @@ class PGVectorManager:
                     self.fallback_xp = {}
                 return {
                     "status": "degraded",
+                    "criticality": "required",
+                    "policy": "required_for_durable_writes",
                     "mode": "in-memory-fallback",
                     "connected": False,
                     "error": f"Operating in development in-memory fallback: {e}",
@@ -714,6 +720,8 @@ class PGVectorManager:
                 }
             return {
                 "status": "unhealthy",
+                "criticality": "required",
+                "policy": "required_for_durable_writes",
                 "connected": False,
                 "error": str(e),
                 "metrics": self.get_metrics(),

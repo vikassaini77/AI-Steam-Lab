@@ -454,3 +454,4 @@ def test_compare_observed_vs_theoretical_inconsistent_motion(engine):
 
     assert comp["is_consistent_with_theory"] is False
     assert comp["rmse_meters"] > 1.0
+

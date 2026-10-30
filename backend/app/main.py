@@ -35,14 +35,24 @@ from app.ai_agent.tutor_service import (
 )
 
 # Initialize Sentry for APM and Error Tracking
+# Policy: Optional for core functionality, but failures should be observable
 SENTRY_DSN = os.getenv("SENTRY_DSN")
+SENTRY_STATUS: dict = {"configured": bool(SENTRY_DSN), "initialized": False, "error": None}
 if SENTRY_DSN:
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        traces_sample_rate=1.0,
-        profiles_sample_rate=1.0,
-    )
-    logger.info("Sentry APM initialized")
+    try:
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            traces_sample_rate=1.0,
+            profiles_sample_rate=1.0,
+        )
+        SENTRY_STATUS["initialized"] = True
+        logger.info("Sentry APM initialized successfully")
+    except Exception as sentry_err:
+        SENTRY_STATUS["error"] = str(sentry_err)
+        logger.warning(
+            f"Sentry APM initialization failed ({type(sentry_err).__name__}): {sentry_err}. "
+            "Continuing application startup without Sentry APM (safe degradation)."
+        )
 
 def validate_production_configuration():
     """
@@ -205,6 +215,17 @@ def get_db_metrics(request: Request):
     """
     from app.core_backend.database.pgvector_db import get_database_metrics
     return {"status": "ok", "metrics": get_database_metrics()}
+
+@app.get("/api/dependencies")
+@app.get("/api/system/dependencies")
+@limiter.limit("60/minute")
+async def get_dependency_status(request: Request):
+    """
+    Exposes explicit dependency criticality policies, failure behaviors, and live health status.
+    Problem 30: Clearly separates essential services from optional dependencies.
+    """
+    from app.core_backend.core.dependency_policies import get_system_dependency_health
+    return await get_system_dependency_health()
 
 if __name__ == "__main__":
     import uvicorn
