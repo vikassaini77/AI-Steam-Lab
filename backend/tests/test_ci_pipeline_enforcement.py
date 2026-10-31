@@ -195,3 +195,64 @@ class TestProblem40DeterministicDependencyVersions:
         raw_wf = load_ci_workflow_raw()
         assert "npm ci || npm install" not in raw_wf
         assert "npm ci" in raw_wf
+
+
+class TestProblem41FullDeploymentIntegrationJob:
+    """Verifies that CI defines an end-to-end integration test job for the complete Compose stack."""
+
+    def test_ci_contains_compose_deployment_integration_job(self):
+        """Workflow must contain compose-deployment-integration job."""
+        wf = load_ci_workflow()
+        assert "compose-deployment-integration" in wf.get("jobs", {})
+
+    def test_job_builds_frontend_and_backend_images(self):
+        """Job builds both frontend and backend images via docker compose build."""
+        wf = load_ci_workflow()
+        job = wf["jobs"]["compose-deployment-integration"]
+        build_step = next((s for s in job["steps"] if "docker compose build" in s.get("run", "")), None)
+        assert build_step is not None
+
+    def test_job_applies_database_migrations_before_api(self):
+        """Job runs database migrations as an explicit pre-start step."""
+        wf = load_ci_workflow()
+        job = wf["jobs"]["compose-deployment-integration"]
+        migration_step = next((s for s in job["steps"] if "run --rm migration" in s.get("run", "")), None)
+        assert migration_step is not None
+
+    def test_job_starts_api_worker_and_proxy(self):
+        """Job starts backend, celery_worker, frontend, and proxy services."""
+        wf = load_ci_workflow()
+        job = wf["jobs"]["compose-deployment-integration"]
+        start_step = next((s for s in job["steps"] if "up -d backend" in s.get("run", "")), None)
+        assert start_step is not None
+        assert "celery_worker" in start_step["run"]
+        assert "proxy" in start_step["run"]
+
+    def test_job_polls_readiness_through_proxy(self):
+        """Job waits for readiness at http://localhost:8080/ready through the proxy."""
+        wf = load_ci_workflow()
+        job = wf["jobs"]["compose-deployment-integration"]
+        readiness_step = next((s for s in job["steps"] if "wait_for_stack_readiness.py" in s.get("run", "")), None)
+        assert readiness_step is not None
+        assert "http://localhost:8080/ready" in readiness_step["run"]
+
+    def test_job_executes_e2e_integration_tests(self):
+        """Job runs the full end-to-end test suite (test_e2e_compose_deployment.py)."""
+        wf = load_ci_workflow()
+        job = wf["jobs"]["compose-deployment-integration"]
+        test_step = next((s for s in job["steps"] if "test_e2e_compose_deployment.py" in s.get("run", "")), None)
+        assert test_step is not None
+
+    def test_job_shuts_down_stack_and_uploads_logs_on_completion(self):
+        """Job dumps logs, uploads artifact, and runs docker compose down -v with if: always()."""
+        wf = load_ci_workflow()
+        job = wf["jobs"]["compose-deployment-integration"]
+        down_step = next((s for s in job["steps"] if "docker compose down" in s.get("run", "")), None)
+        assert down_step is not None
+        assert down_step.get("if") == "always()"
+        assert "-v" in down_step["run"]
+
+        upload_step = next((s for s in job["steps"] if "upload-artifact" in s.get("uses", "")), None)
+        assert upload_step is not None
+        assert upload_step.get("if") == "always()"
+        assert upload_step["with"]["name"] == "compose-deployment-logs"
