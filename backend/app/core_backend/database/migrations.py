@@ -12,8 +12,17 @@ from app.logger import logger
 REQUIRED_SCHEMA_VERSION = 5
 
 MIGRATION_V1_SQL = """
--- 1. Enable pgvector extension
-CREATE EXTENSION IF NOT EXISTS vector;
+-- 1. Enable pgvector extension where supported
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector') THEN
+        CREATE EXTENSION IF NOT EXISTS vector;
+    ELSE
+        RAISE WARNING 'pgvector extension is not present in pg_available_extensions on this PostgreSQL instance.';
+    END IF;
+EXCEPTION WHEN OTHERS THEN
+    RAISE WARNING 'Could not install pgvector extension: %', SQLERRM;
+END $$;
 
 -- 2. Schema migrations metadata table
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -23,18 +32,36 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 );
 
 -- 3. Memories table for semantic & keyword RAG
-CREATE TABLE IF NOT EXISTS memories (
-    id SERIAL PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    user_id TEXT,
-    experiment_id TEXT,
-    text TEXT NOT NULL,
-    embedding VECTOR(768),
-    embedding_model_version TEXT DEFAULT 'text-embedding-004',
-    expires_at TIMESTAMP WITH TIME ZONE,
-    is_deleted BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') THEN
+        CREATE TABLE IF NOT EXISTS memories (
+            id SERIAL PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            user_id TEXT,
+            experiment_id TEXT,
+            text TEXT NOT NULL,
+            embedding VECTOR(768),
+            embedding_model_version TEXT DEFAULT 'text-embedding-004',
+            expires_at TIMESTAMP WITH TIME ZONE,
+            is_deleted BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+    ELSE
+        CREATE TABLE IF NOT EXISTS memories (
+            id SERIAL PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            user_id TEXT,
+            experiment_id TEXT,
+            text TEXT NOT NULL,
+            embedding TEXT,
+            embedding_model_version TEXT DEFAULT 'text-embedding-004',
+            expires_at TIMESTAMP WITH TIME ZONE,
+            is_deleted BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+    END IF;
+END $$;
 
 -- 4. User XP gamification table
 CREATE TABLE IF NOT EXISTS user_xp (
@@ -101,15 +128,21 @@ MIGRATION_V3_SQL = """
 -- 1. Full-text search GIN index for fast keyword retrieval and cover density ranking
 CREATE INDEX IF NOT EXISTS idx_memories_text_fts ON memories USING gin(to_tsvector('english', text));
 
--- 2. pgvector HNSW index for fast semantic cosine retrieval
+-- 2. pgvector HNSW index for fast semantic cosine retrieval (where vector type is present)
 -- Compatible operator class: vector_cosine_ops for <=> cosine distance queries
 DO $$
 BEGIN
-    BEGIN
-        CREATE INDEX IF NOT EXISTS idx_memories_embedding_hnsw ON memories USING hnsw (embedding vector_cosine_ops);
-    EXCEPTION WHEN undefined_object OR feature_not_supported THEN
-        CREATE INDEX IF NOT EXISTS idx_memories_embedding_ivfflat ON memories USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-    END;
+    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') THEN
+        BEGIN
+            CREATE INDEX IF NOT EXISTS idx_memories_embedding_hnsw ON memories USING hnsw (embedding vector_cosine_ops);
+        EXCEPTION WHEN undefined_object OR feature_not_supported THEN
+            BEGIN
+                CREATE INDEX IF NOT EXISTS idx_memories_embedding_ivfflat ON memories USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+            EXCEPTION WHEN undefined_object OR feature_not_supported THEN
+                RAISE WARNING 'Vector index creation skipped: %', SQLERRM;
+            END;
+        END;
+    END IF;
 END $$;
 """
 
@@ -154,6 +187,42 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
     (4, "004_auditable_xp_ledger", MIGRATION_V4_SQL),
     (5, "005_user_achievements_and_badges", MIGRATION_V5_SQL),
 ]
+
+
+def check_pgvector_availability(conn) -> Dict[str, Any]:
+    """
+    Checks pgvector extension availability and installation status on the PostgreSQL instance.
+    Returns:
+        {
+            "available": bool,        # True if pgvector exists in pg_available_extensions
+            "installed": bool,        # True if CREATE EXTENSION vector is installed in pg_extension
+            "version": Optional[str], # Version string if installed or default version in catalog
+        }
+    """
+    result: Dict[str, Any] = {
+        "available": False,
+        "installed": False,
+        "version": None,
+    }
+    try:
+        with conn.cursor() as cur:
+            # Check if installed in pg_extension
+            cur.execute("SELECT extversion FROM pg_extension WHERE extname = 'vector';")
+            row = cur.fetchone()
+            if row:
+                result["installed"] = True
+                result["version"] = str(row[0])
+
+            # Check if available in pg_available_extensions catalog
+            cur.execute("SELECT default_version FROM pg_available_extensions WHERE name = 'vector';")
+            avail_row = cur.fetchone()
+            if avail_row:
+                result["available"] = True
+                if not result["version"]:
+                    result["version"] = str(avail_row[0])
+    except Exception as e:
+        logger.warning(f"Could not query pgvector availability: {e}")
+    return result
 
 
 def get_current_schema_version(conn) -> int:
@@ -282,6 +351,13 @@ def run_migrations(url: Optional[str] = None, target_version: Optional[int] = No
                 logger.info(f"Migration v{version} ({name}) successfully applied.")
 
         final_v = get_current_schema_version(conn)
+        pgv_status = check_pgvector_availability(conn)
+        if pgv_status["installed"]:
+            logger.info(f"pgvector extension active (version: {pgv_status.get('version')}).")
+        elif pgv_status["available"]:
+            logger.info(f"pgvector extension available in catalog (version: {pgv_status.get('version')}) but not installed.")
+        else:
+            logger.warning("pgvector extension is not present in pg_available_extensions on this database.")
         logger.info(f"Database migrations finished. Current version: {final_v} ({applied_count} applied).")
         return final_v
     except Exception as e:

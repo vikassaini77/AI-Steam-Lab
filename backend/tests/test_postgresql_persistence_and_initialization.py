@@ -231,3 +231,4 @@ def test_corrupted_backup_rejected_by_integrity_verifier():
         with pytest.raises(ValueError) as exc_info:
             verify_backup_integrity(corrupt_file)
         assert "Corrupt or invalid backup file" in str(exc_info.value)
+

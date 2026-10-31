@@ -418,17 +418,23 @@ def is_container_environment() -> bool:
 def get_database_url() -> str:
     """
     Retrieves and validates the PostgreSQL database connection URL.
+    - Inspects POSTGRES_URL or DATABASE_URL (supports Render/Heroku provisions).
+    - Normalizes 'postgres://' scheme to 'postgresql://'.
     - In production (ENVIRONMENT=production or REQUIRE_POSTGRES=true):
-      Requires explicit configuration; fails fast if POSTGRES_URL is missing.
+      Requires explicit configuration; fails fast if POSTGRES_URL/DATABASE_URL is missing.
     - Never uses hardcoded default credentials ('postgres:postgres').
     - Detects container networking issues: if running inside a container,
       'localhost' refers to the backend container itself rather than the Compose
       service 'db:5432'.
     - If POSTGRES_URL is missing, raises ConfigurationError rather than connecting to an unintended database.
     """
-    url = os.getenv("POSTGRES_URL")
+    url = os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
     if not url:
         raise ConfigurationError("POSTGRES_URL must be configured")
+
+    # Normalize Render / Heroku postgres:// scheme to postgresql://
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
 
     # Strictly disallow known insecure/default credentials
     if "postgres:postgres@" in url:
@@ -664,8 +670,13 @@ class PGVectorManager:
                     cur.execute("SELECT 1;")
                     cur.fetchone()
 
-                from app.core_backend.database.migrations import verify_schema_version, REQUIRED_SCHEMA_VERSION
+                from app.core_backend.database.migrations import (
+                    verify_schema_version,
+                    REQUIRED_SCHEMA_VERSION,
+                    check_pgvector_availability,
+                )
                 is_valid_schema, current_version = verify_schema_version(conn, REQUIRED_SCHEMA_VERSION)
+                pgv_status = check_pgvector_availability(conn)
 
             latency_ms = round((time.perf_counter() - start) * 1000, 2)
             host = self.url.split("@")[-1].split("/")[0] if "@" in self.url else "configured"
@@ -679,6 +690,7 @@ class PGVectorManager:
                     "schema_status": "migration_pending",
                     "current_schema_version": current_version,
                     "required_schema_version": REQUIRED_SCHEMA_VERSION,
+                    "pgvector": pgv_status,
                     "latency_ms": latency_ms,
                     "database_host": host,
                     "error": f"Schema migration pending: current version {current_version} < required {REQUIRED_SCHEMA_VERSION}. Run database migrations.",
@@ -692,6 +704,7 @@ class PGVectorManager:
                 "connected": True,
                 "schema_status": "up_to_date",
                 "schema_version": current_version,
+                "pgvector": pgv_status,
                 "latency_ms": latency_ms,
                 "database_host": host,
                 "pool": self.get_pool_status(),

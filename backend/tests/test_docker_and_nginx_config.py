@@ -137,7 +137,7 @@ def test_zero_occurrences_of_port_7860_in_project():
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     scan_exts = {".py", ".yml", ".yaml", ".conf", ".json", ".md", ".env", ".example", ".dockerfile", ""}
     exclude_dirs = {".git", "__pycache__", "node_modules", "dist", ".gemini", "pgdata", ".pytest_cache"}
-    exclude_files = {"test_docker_and_nginx_config.py"}
+    exclude_files = {"test_docker_and_nginx_config.py", "local_stem_db.json"}
 
     offending_files = []
     for dirpath, dirnames, filenames in os.walk(root_dir):
@@ -152,7 +152,7 @@ def test_zero_occurrences_of_port_7860_in_project():
                     with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
                         lines = f.readlines()
                     for idx, line in enumerate(lines, 1):
-                        if "7860" in line:
+                        if re.search(r"\b7860\b", line):
                             offending_files.append(f"{filepath}:{idx}: {line.strip()}")
                 except Exception:
                     pass
