@@ -15,6 +15,7 @@ from app.logger import logger
 from app.core_backend.core.limiter import limiter
 from app.core_backend.core.metrics_auth import verify_metrics_access
 from app.core_backend.core.security_headers import SecurityHeadersMiddleware
+from app.core_backend.core.config import settings
 
 from app.core_backend.routes.tutor import router as tutor_router
 from app.core_backend.routes.cv_tracker import router as cv_tracker_router
@@ -56,37 +57,10 @@ if SENTRY_DSN:
 
 def validate_production_configuration():
     """
-    Validates required production environment configuration on application startup.
+    Validates required configuration on application startup according to the configuration contract.
     Fails fast in production if required secrets, origins, or database configurations are missing/insecure.
     """
-    environment = os.getenv("ENVIRONMENT", "development").lower()
-    if environment == "production":
-        # 1. Database Configuration
-        supabase_url = os.getenv("SUPABASE_URL")
-        supabase_key = os.getenv("SUPABASE_KEY")
-        postgres_url = os.getenv("POSTGRES_URL")
-
-        if not (supabase_url and supabase_key) and not postgres_url:
-            raise RuntimeError(
-                "Production Startup Failure: Database configuration missing. "
-                "Either SUPABASE_URL and SUPABASE_KEY or POSTGRES_URL must be configured."
-            )
-
-        if postgres_url:
-            if "postgres:postgres@" in postgres_url:
-                raise RuntimeError(
-                    "Production Startup Failure: Insecure default credentials ('postgres:postgres') detected in POSTGRES_URL."
-                )
-            if ("@localhost:" in postgres_url or "@127.0.0.1:" in postgres_url) and os.getenv("IS_CONTAINER", "").lower() in ("true", "1"):
-                raise RuntimeError(
-                    "Production Startup Failure: POSTGRES_URL points to 'localhost' inside a container. Use the Compose service hostname 'db:5432' instead."
-                )
-
-        # 2. Check CORS origins
-        if "*" in ALLOWED_ORIGINS:
-            raise RuntimeError(
-                "Production Startup Failure: Wildcard '*' in ALLOWED_ORIGINS is prohibited when allow_credentials=True."
-            )
+    settings.validate_startup()
 
 
 @asynccontextmanager
@@ -160,7 +134,10 @@ app.add_middleware(SecurityHeadersMiddleware)
 # Strict CORS configuration
 ALLOWED_ORIGINS = [
     origin.strip().rstrip("/")
-    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:80,http://127.0.0.1:5173").split(",")
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://localhost:80,http://127.0.0.1:5173",
+    ).split(",")
     if origin.strip()
 ]
 

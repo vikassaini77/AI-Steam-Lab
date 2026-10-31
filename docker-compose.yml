@@ -1,5 +1,21 @@
 version: '3.8'
 
+# ==============================================================================
+# NeuroLab AI: Docker Compose Configuration
+# Problem 32: Explicit Configuration Contract for Services
+# ==============================================================================
+
+x-service-config-contract: &service-config-contract
+  description: "Canonical configuration contract for NeuroLab AI backend and worker services"
+  environment:
+    - ENVIRONMENT=${ENVIRONMENT:-development}
+    - IS_CONTAINER=true
+    - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    - POSTGRES_URL=${POSTGRES_URL:?Set POSTGRES_URL in .env (e.g. postgresql://${POSTGRES_USER:-stemlab_app}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-stemlab})}
+    - GEMINI_API_KEY=${GEMINI_API_KEY}
+    - SUPABASE_URL=${SUPABASE_URL}
+    - SUPABASE_KEY=${SUPABASE_KEY}
+
 services:
   backend:
     build:
@@ -15,7 +31,7 @@ services:
       - POSTGRES_URL=${POSTGRES_URL:?Set POSTGRES_URL in .env (e.g. postgresql://${POSTGRES_USER:-stemlab_app}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-stemlab})}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - METRICS_TOKEN=${METRICS_TOKEN}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173}
       - IS_CONTAINER=true
       - ENVIRONMENT=${ENVIRONMENT:-development}
     volumes:
