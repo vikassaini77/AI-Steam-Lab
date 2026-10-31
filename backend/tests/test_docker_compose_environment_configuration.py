@@ -157,3 +157,4 @@ def test_settings_parsed_allowed_origins():
         "http://127.0.0.1:8080",
         "https://neurolab.ai",
     ]
+

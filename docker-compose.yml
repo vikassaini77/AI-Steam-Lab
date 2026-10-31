@@ -2,7 +2,7 @@ version: '3.8'
 
 # ==============================================================================
 # NeuroLab AI: Docker Compose Configuration
-# Problem 32: Explicit Configuration Contract for Services
+# Problem 32 & 33: Explicit Configuration Contract, Hardened Persistence & Lifecycle
 # ==============================================================================
 
 x-service-config-contract: &service-config-contract
@@ -17,11 +17,47 @@ x-service-config-contract: &service-config-contract
     - SUPABASE_KEY=${SUPABASE_KEY}
 
 services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-stemlab_app}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Error: POSTGRES_PASSWORD environment variable must be set in .env}
+      - POSTGRES_DB=${POSTGRES_DB:-stemlab}
+    expose:
+      - "5432"
+    volumes:
+      # Problem 33: Durable named volume persistence replacing ephemeral bind mounts
+      - pgdata:/var/lib/postgresql/data
+      - db_backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stemlab_app} -d ${POSTGRES_DB:-stemlab}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - neurolab_net
+
+  migration:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["python", "-m", "app.core_backend.database.migrations"]
+    environment:
+      - POSTGRES_URL=${POSTGRES_URL:?Set POSTGRES_URL in .env (e.g. postgresql://${POSTGRES_USER:-stemlab_app}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-stemlab})}
+      - IS_CONTAINER=true
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - neurolab_net
+    restart: "no"
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    # Ports removed to prevent direct host access bypassing the proxy
     expose:
       - "8000"
     environment:
@@ -39,39 +75,30 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
       redis:
         condition: service_started
+    networks:
+      - neurolab_net
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    # Ports removed to prevent direct host access
     expose:
       - "8080"
     depends_on:
       - backend
+    networks:
+      - neurolab_net
 
   redis:
     image: redis:7-alpine
     expose:
       - "6379"
-
-  db:
-    image: pgvector/pgvector:pg16
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-stemlab_app}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Error: POSTGRES_PASSWORD environment variable must be set in .env}
-      - POSTGRES_DB=${POSTGRES_DB:-stemlab}
-    expose:
-      - "5432"
-    volumes:
-      - ./pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-stemlab_app} -d ${POSTGRES_DB:-stemlab}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    networks:
+      - neurolab_net
 
   celery_worker:
     build:
@@ -89,10 +116,34 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migration:
+        condition: service_completed_successfully
       redis:
         condition: service_started
       backend:
         condition: service_started
+    networks:
+      - neurolab_net
+
+  db_backup:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["python", "-m", "app.core_backend.database.backup", "create", "--dir", "/backups"]
+    environment:
+      - POSTGRES_URL=${POSTGRES_URL:?Set POSTGRES_URL in .env (e.g. postgresql://${POSTGRES_USER:-stemlab_app}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-stemlab})}
+      - IS_CONTAINER=true
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    volumes:
+      - db_backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - neurolab_net
+    profiles:
+      - backup
+    restart: "no"
 
   proxy:
     image: nginxinc/nginx-unprivileged:alpine
@@ -103,3 +154,15 @@ services:
     depends_on:
       - frontend
       - backend
+    networks:
+      - neurolab_net
+
+volumes:
+  pgdata:
+    driver: local
+  db_backups:
+    driver: local
+
+networks:
+  neurolab_net:
+    driver: bridge
