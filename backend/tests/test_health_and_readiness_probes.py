@@ -246,3 +246,4 @@ class TestNginxProxyHealthRouteConfiguration:
             "nginx.conf must configure proxy forwarding for /ready, /live, and /healthz"
         )
         assert "proxy_pass http://backend_service;" in nginx_conf
+
