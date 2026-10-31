@@ -603,7 +603,7 @@ class PGVectorManager:
         raise classified_err
 
     @contextmanager
-    def get_connection(self):
+    def get_connection(self, timeout: Optional[float] = None):
         """
         Acquires a pooled connection with transaction and statement timeouts.
         Releases the connection back to the pool on exit.
@@ -613,7 +613,7 @@ class PGVectorManager:
 
         custom_pool = getattr(self, "_custom_pool", None)
         pool = custom_pool or get_database_pool(self.url)
-        with pool.acquire() as conn:
+        with pool.acquire(timeout=timeout) as conn:
             yield conn
 
     def _get_conn(self):
@@ -638,10 +638,11 @@ class PGVectorManager:
         if getattr(self, "url", None) and not getattr(self, "is_in_memory_fallback", False):
             self.run_migrations()
 
-    def check_readiness(self) -> Dict[str, Any]:
+    def check_readiness(self, timeout: Optional[float] = 1.0) -> Dict[str, Any]:
         """
         Validates live database connectivity by executing 'SELECT 1;' and
         verifies that required database schema migrations are applied.
+        Uses a short bounded acquisition timeout (default 1.0s) to prevent hanging probes.
         Returns connection status, latency in milliseconds, database host, schema status, and telemetry metrics.
         In production, if operating in fallback mode or disconnected, status is 'unhealthy'.
         """
@@ -665,7 +666,11 @@ class PGVectorManager:
             }
         try:
             start = time.perf_counter()
-            with self.get_connection() as conn:
+            try:
+                conn_ctx = self.get_connection(timeout=timeout)
+            except TypeError:
+                conn_ctx = self.get_connection()
+            with conn_ctx as conn:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1;")
                     cur.fetchone()
@@ -2348,15 +2353,16 @@ class PGVectorManager:
             return _fallback_daily_usage()
 
 
-def check_database_readiness() -> Dict[str, Any]:
+def check_database_readiness(timeout: Optional[float] = 1.0) -> Dict[str, Any]:
     """
     Performs a real database readiness check across configured database providers.
+    Uses bounded short timeout to prevent blocking probes during network or database hangs.
     Returns status dictionary with 'status': 'ready' | 'degraded' | 'unhealthy'.
     """
-    postgres_url = os.getenv("POSTGRES_URL")
+    postgres_url = os.getenv("POSTGRES_URL") or os.getenv("DATABASE_URL")
     if postgres_url:
         manager = PGVectorManager(url=postgres_url)
-        return manager.check_readiness()
+        return manager.check_readiness(timeout=timeout)
 
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_KEY")

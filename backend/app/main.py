@@ -166,19 +166,57 @@ v1_router.include_router(auth_router, prefix="/auth", tags=["Authentication (v1)
 app.include_router(v1_router)
 
 @app.get("/")
-@limiter.limit("10/minute")
+@limiter.limit("60/minute")
 def health_check(request: Request):
-    return {"status": "ok", "message": "NeuroLab AI is securely running."}
+    """
+    Root application inspection route.
+    Problem 35: Separates Liveness from Readiness and evaluates operational state of dependencies.
+    """
+    from app.core_backend.core.health import check_liveness, check_readiness
+
+    live_info = check_liveness()
+    ready_info = check_readiness(timeout_seconds=0.5)
+
+    return {
+        "status": "ok",
+        "service": "neurolab-backend",
+        "message": "NeuroLab AI is securely running.",
+        "version": "1.0.0",
+        "liveness": live_info,
+        "readiness": {
+            "status": ready_info.get("status", "unknown"),
+            "connected": ready_info.get("connected", False),
+            "database": ready_info.get("dependencies", {}).get("database", {}).get("status"),
+            "model_provider": ready_info.get("dependencies", {}).get("model_provider", {}).get("status"),
+        },
+        "dependencies": ready_info.get("dependencies", {}),
+    }
+
+
+@app.get("/live")
+@app.get("/healthz")
+@limiter.limit("120/minute")
+def liveness_check(request: Request):
+    """
+    Liveness probe: verifies the application process is alive and responsive.
+    Kubernetes / Docker use this probe to detect deadlocks.
+    Does NOT depend on external dependencies (e.g. Gemini, database) to prevent endless container restart storms.
+    """
+    from app.core_backend.core.health import check_liveness
+    return check_liveness()
+
 
 @app.get("/ready")
-@limiter.limit("30/minute")
+@app.get("/health/ready")
+@limiter.limit("60/minute")
 def readiness_check(request: Request, response: Response):
     """
-    Readiness probe validating real database connectivity.
+    Readiness probe validating whether this instance can serve its required workload.
+    Checks essential dependencies (PostgreSQL, task broker, model configuration) using short timeouts.
     Returns 200 when database is healthy/ready, 503 if unreachable in production.
     """
-    from app.core_backend.database.pgvector_db import check_database_readiness
-    readiness = check_database_readiness()
+    from app.core_backend.core.health import check_readiness
+    readiness = check_readiness(timeout_seconds=1.0)
     if readiness.get("status") == "unhealthy":
         response.status_code = 503
     return readiness
