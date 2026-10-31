@@ -201,6 +201,10 @@ class AlertManager:
         with self._lock:
             return [alert.to_dict() for alert in self._alerts.values() if alert.active]
 
+    def is_alert_active(self, alert_name: str) -> bool:
+        with self._lock:
+            return alert_name in self._alerts and self._alerts[alert_name].active
+
     def has_critical_alerts(self) -> bool:
         with self._lock:
             return any(a.severity.upper() == "CRITICAL" and a.active for a in self._alerts.values())
@@ -277,7 +281,7 @@ def record_cache_failure(operation: str, error_type: str, error_msg: str = "", c
     ratio = (hits / total) if total > 0 else 0.0
     CACHE_HIT_RATIO.set(round(ratio, 4))
 
-    if consecutive_errors >= 3:
+    if consecutive_errors >= 3 and not alert_manager.is_alert_active("REDIS_CACHE_OUTAGE_DETECTED"):
         alert_manager.trigger_alert(
             alert_name="REDIS_CACHE_OUTAGE_DETECTED",
             severity="WARNING",

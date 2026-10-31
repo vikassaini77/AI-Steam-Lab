@@ -1,16 +1,18 @@
-import os
-import math
-import hashlib
 import asyncio
-from typing import List, Optional
-import numpy as np
+import hashlib
+import math
+import os
+from typing import List
+
 import google.generativeai as genai
+import numpy as np
+
 from app.cache import (
-    get_cache,
-    set_cache,
-    build_versioned_cache_key,
     CacheTTL,
+    build_versioned_cache_key,
+    get_cache,
     is_placeholder_or_synthetic_embedding,
+    set_cache,
 )
 from app.logger import logger
 
@@ -54,7 +56,7 @@ async def generate_embedding(
 ) -> List[float]:
     """
     Generates real, normalized semantic embeddings using Gemini models.
-    
+
     1. Validates input text.
     2. Checks versioned, namespaced cache (never caches placeholders or failures).
     3. Generates embedding via Google Gemini API with exact 768 dimensionality.
@@ -112,8 +114,8 @@ async def generate_embedding(
             ),
             timeout=15.0,
         )
-    except (asyncio.TimeoutError, TimeoutError):
-        raise EmbeddingError(f"Embedding request to '{model}' timed out after 15 seconds.")
+    except (asyncio.TimeoutError, TimeoutError) as to_err:
+        raise EmbeddingError(f"Embedding request to '{model}' timed out after 15 seconds.") from to_err
     except Exception as err:
         if os.getenv("ALLOW_FAKE_VECTORS", "false").lower() in ("true", "1") and (
             api_key.startswith("test-") or api_key.startswith("mock-")

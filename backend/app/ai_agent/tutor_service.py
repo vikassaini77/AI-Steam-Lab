@@ -1,35 +1,37 @@
-import os
-import time
-import json
-import uuid
+"""
+AITutorService - Modular Application Facade
+Problem 45: Service boundaries separation.
+Unified facade coordinating AI layer, Retrieval layer, Persistence layer,
+and Application orchestration while preserving 100% backward compatibility.
+"""
 import asyncio
-import hashlib
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Optional, AsyncGenerator, Union, Any
-from fastapi import Request
+from typing import Any, AsyncGenerator, List, Optional
+
 import google.generativeai as genai
-from app.core_backend.database.supabase_db import DatabaseManager
-from app.cache import get_cache, set_cache
-from app.core_backend.knowledge_graph import kg_manager
-from app.ai_agent.embedding_service import (
-    generate_embedding as generate_real_embedding,
-    EmbeddingError,
-    EXPECTED_EMBEDDING_DIM,
-)
+from fastapi import Request
+
+from app.ai_agent.ai_client import _DEFAULT_MODEL, GeminiAIClient
 from app.ai_agent.learning_evaluation import (
-    LearningState,
     EvaluationResult,
+    LearningState,
     evaluate_learning_interaction,
 )
+from app.ai_agent.retrieval_service import TutorRetrievalService
+from app.application.tutor_orchestrator import (
+    MAX_CONCURRENT_GENERATIONS,
+    TutorOrchestrator,
+)
+from app.core_backend.database.supabase_db import DatabaseManager
+from app.core_backend.repositories.memory_repository import MemoryRepository
 from app.logger import logger
 
-MAX_CONCURRENT_GENERATIONS = int(os.getenv("MAX_CONCURRENT_GENERATIONS", "5"))
 MAX_WORKER_THREADS = int(os.getenv("TUTOR_MAX_THREADS", "8"))
 MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "1024"))
-MODEL_TIMEOUT_SECONDS = float(os.getenv("MODEL_TIMEOUT_SECONDS", "30.0"))
 
-# Thread pool for isolating synchronous model / DB calls from the event loop
+# Shared ThreadPoolExecutor for isolating synchronous background tasks
 _tutor_executor: Optional[ThreadPoolExecutor] = None
 _executor_lock = threading.Lock()
 
@@ -55,52 +57,7 @@ def shutdown_tutor_executor(wait: bool = False):
             _tutor_executor = None
 
 
-class SSEEventName:
-    METADATA = "metadata"
-    TOKEN = "token"
-    ERROR = "error"
-    DONE = "done"
-    EVALUATION = "evaluation"
-    MASTERY = "mastery"
-
-
-def make_sse_event(
-    payload: dict,
-    event: Optional[str] = None,
-    event_id: Optional[Union[int, str]] = None,
-) -> str:
-    """
-    Formats a compliant Server-Sent Events (SSE) data frame adhering to the formal protocol:
-    event: <event_name>
-    id: <event_id>
-    data: <json_string>
-
-    Ensures both standard EventSource parser compliance and backward compatibility
-    with consumers reading data JSON payload directly.
-    """
-    if event is None:
-        if payload.get("done") is True:
-            event = SSEEventName.DONE
-        elif payload.get("error") or payload.get("status") == "error":
-            event = SSEEventName.ERROR
-        elif "token" in payload or "text" in payload:
-            event = SSEEventName.TOKEN
-        elif "evaluation" in payload:
-            event = SSEEventName.EVALUATION
-        elif "kg_update" in payload:
-            event = SSEEventName.MASTERY
-        else:
-            event = payload.get("event", "message")
-
-    payload["event"] = event
-
-    lines = [f"event: {event}"]
-    if event_id is not None:
-        lines.append(f"id: {event_id}")
-    lines.append(f"data: {json.dumps(payload, default=str)}")
-    return "\n".join(lines) + "\n\n"
-
-
+# Backward-compatible _stream_model_chunks function for existing test suites
 async def _stream_model_chunks(
     model,
     prompt: str,
@@ -109,13 +66,7 @@ async def _stream_model_chunks(
     timeout_seconds: float,
     request: Optional[Request] = None,
 ) -> AsyncGenerator[str, None]:
-    """
-    Streams model response chunks without blocking the asyncio event loop:
-    1. Uses native async streaming (generate_content_async) when available.
-    2. If the model is synchronous, isolates generation in a bounded thread pool
-       and pipes chunks through an asyncio.Queue.
-    3. Enforces upstream timeout per chunk / request and handles cancellation.
-    """
+    """Streams model response chunks without blocking the event loop."""
     use_async = (
         isinstance(model, genai.GenerativeModel)
         or (
@@ -141,10 +92,9 @@ async def _stream_model_chunks(
                 text = getattr(chunk, "text", "")
                 if text:
                     yield text
-        except (asyncio.TimeoutError, TimeoutError):
-            raise TimeoutError(f"Model generation timed out after {timeout_seconds}s")
+        except (asyncio.TimeoutError, TimeoutError) as to_err:
+            raise TimeoutError(f"Model generation timed out after {timeout_seconds}s") from to_err
     else:
-        # Synchronous fallback isolated in bounded thread pool
         queue: asyncio.Queue = asyncio.Queue()
         loop = asyncio.get_running_loop()
         sentinel = object()
@@ -171,8 +121,8 @@ async def _stream_model_chunks(
                 break
             try:
                 msg_type, val = await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
-            except (asyncio.TimeoutError, TimeoutError):
-                raise TimeoutError(f"Model generation timed out after {timeout_seconds}s")
+            except (asyncio.TimeoutError, TimeoutError) as to_err:
+                raise TimeoutError(f"Model generation timed out after {timeout_seconds}s") from to_err
 
             if msg_type == "chunk":
                 if val:
@@ -184,50 +134,82 @@ async def _stream_model_chunks(
 
 
 class AITutorService:
+    """
+    Modular Facade composing:
+    - AI Layer: GeminiAIClient
+    - Retrieval Layer: TutorRetrievalService
+    - Persistence Layer: MemoryRepository
+    - Application Layer: TutorOrchestrator
+    """
     def __init__(
         self,
         db=None,
         executor: Optional[ThreadPoolExecutor] = None,
-        model: Optional[Any] = None,
+        model: Any = _DEFAULT_MODEL,
     ):
-        if model is not None:
-            self.model = model
-        else:
-            api_key = os.getenv("GEMINI_API_KEY")
-            if api_key:
-                genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel(
-                    "gemini-2.5-flash",
-                    generation_config={
-                        "max_output_tokens": MAX_OUTPUT_TOKENS,
-                        "temperature": 0.7,
-                    },
-                )
-                logger.info("Gemini API Client initialized with output token limits.")
-            else:
-                self.model = None
+        self._executor = executor or get_tutor_executor()
 
+        # 1. Resolve Persistence Layer
         if db is not None:
-            self.db = db
+            resolved_db = db
         elif os.getenv("USE_PGVECTOR", "false").lower() in ("true", "1") or os.getenv("POSTGRES_URL"):
             try:
                 from app.core_backend.database.pgvector_db import PGVectorManager
-                self.db = PGVectorManager()
+                resolved_db = PGVectorManager()
             except Exception as e:
                 logger.warning(f"Falling back to DatabaseManager: {e}")
-                self.db = DatabaseManager()
+                resolved_db = DatabaseManager()
         else:
-            self.db = DatabaseManager()
+            resolved_db = DatabaseManager()
 
+        self._db = resolved_db
+        self.memory_repository = MemoryRepository(self._db)
+
+        # 2. Resolve AI Layer
+        self.ai_client = GeminiAIClient(model=model, executor=self._executor)
+
+        # 3. Resolve Retrieval Layer
+        self.retrieval_service = TutorRetrievalService(
+            repository=self.memory_repository,
+            executor=self._executor,
+        )
+
+        # 4. Resolve Concurrency & Orchestrator
         self._concurrency_semaphore = asyncio.Semaphore(MAX_CONCURRENT_GENERATIONS)
-        self._executor = executor or get_tutor_executor()
+        self.orchestrator = TutorOrchestrator(
+            ai_client=self.ai_client,
+            retrieval_service=self.retrieval_service,
+            memory_repository=self.memory_repository,
+            concurrency_semaphore=self._concurrency_semaphore,
+            executor=self._executor,
+        )
 
-    async def generate_embedding(self, text: str):
-        """
-        Generates real 768-dimensional semantic embeddings using the configured embedding model.
-        Fails explicitly or handles degraded mode rather than returning fake constant vectors.
-        """
-        return await generate_real_embedding(text)
+    @property
+    def model(self) -> Any:
+        return self.ai_client.model if getattr(self, "ai_client", None) else None
+
+    @model.setter
+    def model(self, val: Any):
+        self.ai_client = GeminiAIClient(model=val, executor=self._executor)
+        if hasattr(self, "orchestrator") and self.orchestrator:
+            self.orchestrator.ai_client = self.ai_client
+
+    @property
+    def db(self) -> Any:
+        return self._db
+
+    @db.setter
+    def db(self, val: Any):
+        self._db = val
+        self.memory_repository = MemoryRepository(val)
+        if hasattr(self, "retrieval_service") and self.retrieval_service:
+            self.retrieval_service._repository = self.memory_repository
+        if hasattr(self, "orchestrator") and self.orchestrator:
+            self.orchestrator.memory_repository = self.memory_repository
+
+    async def generate_embedding(self, text: str) -> List[float]:
+        """Delegates to Retrieval Layer embedding generation."""
+        return await self.retrieval_service.generate_query_embedding(text)
 
     async def retrieve_memories(
         self,
@@ -238,17 +220,13 @@ class AITutorService:
         top_k: int = 3,
         return_metadata: bool = True,
     ):
-        """
-        Executes hybrid retrieval combining semantic vector search and keyword/BM25 search via RRF.
-        Offloads synchronous database search to bounded thread pool to avoid blocking event loop.
-        Records scores and document IDs for evaluation.
-        """
+        """Delegates hybrid memory retrieval to Retrieval Layer."""
         normalized_query = " ".join(prompt.strip().split())
         q_emb = await self.generate_embedding(normalized_query)
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             self._executor,
-            lambda: self.db.search_memories(
+            lambda: self.memory_repository.search_memories(
                 query_embedding=q_emb,
                 query_text=normalized_query,
                 user_id=user_id,
@@ -266,12 +244,7 @@ class AITutorService:
         question: str,
         answer: str,
     ) -> EvaluationResult:
-        """
-        Authoritatively evaluates a student's answer against a concept and question.
-        Uses pedagogical rubrics and AI model evaluation.
-        Authoritative XP rewards are server-side validated and strictly idempotent.
-        """
-        # Decouple evaluation judgment from state mutation
+        """Evaluates student answer against concept rubric and records validated mastery."""
         eval_result = await evaluate_learning_interaction(
             model=self.model,
             concept=concept,
@@ -279,16 +252,11 @@ class AITutorService:
             student_answer=answer,
         )
 
-        # Authoritative database mutation occurs ONLY upon validated mastery
         if eval_result.is_correct and eval_result.confidence >= 0.80:
-            loop = asyncio.get_running_loop()
-            newly_awarded, _ = await loop.run_in_executor(
-                self._executor,
-                lambda: self.db.award_mastery_xp(
-                    user_id=user_id,
-                    concept=concept,
-                    amount=100,
-                ),
+            newly_awarded, _ = self.memory_repository.award_mastery_xp(
+                user_id=user_id,
+                concept=concept,
+                amount=100,
             )
             eval_result.mastery_awarded = newly_awarded
             eval_result.xp_awarded = 100 if newly_awarded else 0
@@ -307,327 +275,23 @@ class AITutorService:
         request: Optional[Request] = None,
         last_event_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
-        request_id = f"req_{uuid.uuid4().hex[:10]}"
-        event_counter = 0
-        start_time = time.perf_counter()
+        """Delegates use case orchestration to TutorOrchestrator in the Application Layer."""
+        prompt = getattr(req, "prompt", None) or getattr(req, "message", "")
+        session_id = getattr(req, "session_id", None)
+        concept = getattr(req, "concept", None)
+        question = getattr(req, "question", None)
 
-        def emit(event_type: str, data: dict) -> str:
-            nonlocal event_counter
-            event_counter += 1
-            return make_sse_event(payload=data, event=event_type, event_id=event_counter)
-
-        if not self.model:
-            logger.warning(f"[{request_id}] Tutor request rejected: Model not configured (missing GEMINI_API_KEY).")
-            yield emit(SSEEventName.ERROR, {
-                "error": "The tutor is temporarily unavailable.",
-                "error_code": "MODEL_UNCONFIGURED",
-                "text": "The tutor is temporarily unavailable. Please contact your administrator.",
-                "request_id": request_id,
-                "status": "error",
-            })
-            return
-
-        acquired = False
-        try:
-            # 1. Acquire concurrency slot with short timeout
-            try:
-                await asyncio.wait_for(self._concurrency_semaphore.acquire(), timeout=1.5)
-                acquired = True
-                try:
-                    from app.core_backend.core.observability import update_queue_depth
-                    active = MAX_CONCURRENT_GENERATIONS - getattr(self._concurrency_semaphore, "_value", MAX_CONCURRENT_GENERATIONS)
-                    update_queue_depth("tutor_concurrency", float(max(0, active)))
-                except Exception:
-                    pass
-            except (asyncio.TimeoutError, TimeoutError):
-                logger.warning(f"[{request_id}] Concurrency ceiling reached: worker generations at capacity.")
-                yield emit(SSEEventName.ERROR, {
-                    "error": "The tutor is currently at maximum capacity. Please retry in a few moments.",
-                    "error_code": "CONCURRENCY_LIMIT_EXCEEDED",
-                    "text": "The tutor is currently busy assisting other students. Please try again shortly.",
-                    "request_id": request_id,
-                    "status": "error",
-                })
-                return
-
-            # Check if caller already disconnected before model call
-            if request and await request.is_disconnected():
-                logger.info(f"[{request_id}] Client disconnected early before generation started.")
-                return
-
-            # Emit initial metadata frame containing safe request and model metadata
-            session_id = str(getattr(req, "session_id", None) or f"sess_{user_id[:8]}")
-            raw_model_name = getattr(self.model, "model_name", None)
-            if isinstance(raw_model_name, str):
-                model_name = raw_model_name
-            else:
-                model_name = "gemini-2.5-flash" if self.model else "unknown"
-            yield emit(SSEEventName.METADATA, {
-                "request_id": request_id,
-                "model": model_name,
-                "session_id": session_id,
-                "reconnect_last_event_id": last_event_id,
-                "timestamp": time.time(),
-                "status": "started",
-            })
-
-            prompt_lower = req.prompt.lower()
-
-            # If explicit concept evaluation is requested in this interaction
-            target_concept = getattr(req, "concept", None)
-            target_question = getattr(req, "question", None)
-            eval_context_note = ""
-
-            if target_concept and target_question:
-                eval_res = await self.evaluate_answer(
-                    user_id=user_id,
-                    concept=target_concept,
-                    question=target_question,
-                    answer=req.prompt,
-                )
-                yield emit(SSEEventName.EVALUATION, {
-                    "evaluation": eval_res.model_dump(),
-                    "request_id": request_id,
-                })
-                if eval_res.mastery_awarded:
-                    yield emit(SSEEventName.MASTERY, {
-                        "kg_update": f"{target_concept} Mastered",
-                        "xp_awarded": eval_res.xp_awarded,
-                        "request_id": request_id,
-                    })
-
-                eval_context_note = (
-                    f"\nLearning Evaluation State:\n"
-                    f"- Concept: {target_concept}\n"
-                    f"- Question: {target_question}\n"
-                    f"- Result is_correct: {eval_res.is_correct} (confidence: {eval_res.confidence})\n"
-                    f"- Feedback: {eval_res.feedback}\n"
-                    f"Use this evaluation to guide your Socratic response."
-                )
-
-            # --- Hybrid RAG Retrieval (Semantic + Keyword via RRF) ---
-            try:
-                normalized_query = " ".join(req.prompt.strip().split())
-                q_emb = await self.generate_embedding(normalized_query)
-                loop = asyncio.get_running_loop()
-                past_context = await loop.run_in_executor(
-                    self._executor,
-                    lambda: self.db.search_memories(
-                        query_embedding=q_emb,
-                        query_text=normalized_query,
-                        user_id=user_id,
-                        top_k=3,
-                    ),
-                )
-            except Exception as retrieval_err:
-                # Log diagnostic information on server, but do not crash or leak internal details to client
-                logger.warning(f"[{request_id}] Hybrid memory retrieval degraded mode ({type(retrieval_err).__name__}): {retrieval_err}")
-                past_context = ""
-
-            sys_prompt = (
-                "You are a friendly and adaptive AI physics tutor. "
-                "Provide simple, clear explanations with intuitive analogies. "
-                "Keep responses concise and bounded."
-            )
-            if eval_context_note:
-                sys_prompt += f"\n{eval_context_note}"
-
-            if past_context and "[LOW_CONFIDENCE]" in past_context[0]:
-                sys_prompt += "\nSystem Note: Low confidence. Use knowledge graph prerequisites."
-                if "newton" in prompt_lower:
-                    loop = asyncio.get_running_loop()
-                    prereqs = await loop.run_in_executor(
-                        self._executor,
-                        lambda: kg_manager.get_prerequisites("Newton's 3rd Law"),
-                    )
-                    sys_prompt += f"\nSuggest prerequisites first: {', '.join(prereqs)}"
-            elif past_context:
-                sys_prompt += f"\nUser historical context: {past_context}"
-
-            # --- Model Call with Timeout, Non-blocking Streaming, and Cancellation ---
-            try:
-                full_text = ""
-                chunk_count = 0
-                async for chunk_text in _stream_model_chunks(
-                    model=self.model,
-                    prompt=f"{sys_prompt}\nUser: {req.prompt}",
-                    generation_config={
-                        "max_output_tokens": MAX_OUTPUT_TOKENS,
-                        "temperature": 0.7,
-                    },
-                    executor=self._executor,
-                    timeout_seconds=MODEL_TIMEOUT_SECONDS,
-                    request=request,
-                ):
-                    chunk_count += 1
-                    full_text += chunk_text
-                    yield emit(SSEEventName.TOKEN, {
-                        "token": chunk_text,
-                        "text": chunk_text,
-                        "delta": chunk_text,
-                        "index": chunk_count,
-                        "request_id": request_id,
-                    })
-
-                # Terminal Completion Event with full usage statistics
-                duration = round(time.perf_counter() - start_time, 3)
-                prompt_tokens = max(1, len(req.prompt) // 4)
-                completion_tokens = max(1, len(full_text) // 4)
-                total_tokens = max(1, (len(req.prompt) + len(full_text)) // 4)
-
-                try:
-                    from app.core_backend.core.observability import record_model_inference_metrics
-                    record_model_inference_metrics(
-                        model=model_name,
-                        operation="chat_stream",
-                        duration_seconds=duration,
-                        token_usage={
-                            "prompt_tokens": prompt_tokens,
-                            "completion_tokens": completion_tokens,
-                        },
-                        status="success",
-                    )
-                except Exception:
-                    pass
-
-                yield emit(SSEEventName.DONE, {
-                    "done": True,
-                    "status": "completed",
-                    "finish_reason": "stop",
-                    "request_id": request_id,
-                    "usage": {
-                        "prompt_tokens_est": prompt_tokens,
-                        "completion_tokens_est": completion_tokens,
-                        "total_tokens_est": total_tokens,
-                        "duration_seconds": duration,
-                        "chunks_emitted": chunk_count,
-                    },
-                    "timestamp": time.time(),
-                })
-
-                # Save memory in bounded executor without blocking event loop
-                try:
-                    session_id = str(getattr(req, "session_id", None) or f"sess_{user_id[:8]}")
-                    emb = await self.generate_embedding(full_text)
-                    loop = asyncio.get_running_loop()
-                    await loop.run_in_executor(
-                        self._executor,
-                        lambda: self.db.save_memory(
-                            session_id=session_id,
-                            text=f"Q: {req.prompt} A: {full_text}",
-                            embedding=emb,
-                            user_id=user_id,
-                        ),
-                    )
-                except Exception as save_err:
-                    logger.exception(f"[{request_id}] Error persisting conversation memory: {type(save_err).__name__}")
-
-            except (asyncio.TimeoutError, TimeoutError):
-                duration = round(time.perf_counter() - start_time, 3)
-                try:
-                    from app.core_backend.core.observability import record_model_inference_metrics
-                    record_model_inference_metrics(
-                        model=model_name,
-                        operation="chat_stream",
-                        duration_seconds=duration,
-                        status="timeout",
-                        error_message="timeout",
-                    )
-                except Exception:
-                    pass
-                logger.warning(f"[{request_id}] Model generation timed out after {MODEL_TIMEOUT_SECONDS}s")
-                yield emit(SSEEventName.ERROR, {
-                    "error": "The tutor took too long to respond.",
-                    "error_code": "MODEL_TIMEOUT",
-                    "text": "The tutor took too long to respond. Please try again.",
-                    "request_id": request_id,
-                    "status": "error",
-                })
-            except Exception as model_err:
-                duration = round(time.perf_counter() - start_time, 3)
-                err_lower = str(model_err).lower()
-                if "timeout" in err_lower or "timed out" in err_lower or "deadline" in err_lower:
-                    try:
-                        from app.core_backend.core.observability import record_model_inference_metrics
-                        record_model_inference_metrics(
-                            model=model_name,
-                            operation="chat_stream",
-                            duration_seconds=duration,
-                            status="timeout",
-                            error_message="timeout",
-                        )
-                    except Exception:
-                        pass
-                    logger.warning(f"[{request_id}] Upstream model request timed out")
-                    yield emit(SSEEventName.ERROR, {
-                        "error": "The tutor took too long to respond.",
-                        "error_code": "MODEL_TIMEOUT",
-                        "text": "The tutor took too long to respond. Please try again.",
-                        "request_id": request_id,
-                        "status": "error",
-                    })
-                elif "quota" in err_lower or "resource_exhausted" in err_lower or "429" in err_lower:
-                    try:
-                        from app.core_backend.core.observability import record_model_inference_metrics
-                        record_model_inference_metrics(
-                            model=model_name,
-                            operation="chat_stream",
-                            duration_seconds=duration,
-                            status="quota_exhausted",
-                            error_message=str(model_err),
-                        )
-                    except Exception:
-                        pass
-                    logger.warning(f"[{request_id}] Upstream AI model quota exhausted: {type(model_err).__name__}")
-                    yield emit(SSEEventName.ERROR, {
-                        "error": "The tutor is currently experiencing high demand. Please try again shortly.",
-                        "error_code": "QUOTA_EXHAUSTED",
-                        "text": "The tutor is currently experiencing high demand. Please try again shortly.",
-                        "request_id": request_id,
-                        "status": "error",
-                    })
-                else:
-                    try:
-                        from app.core_backend.core.observability import record_model_inference_metrics
-                        record_model_inference_metrics(
-                            model=model_name,
-                            operation="chat_stream",
-                            duration_seconds=duration,
-                            status="error",
-                            error_message=str(model_err),
-                        )
-                    except Exception:
-                        pass
-                    logger.exception(f"[{request_id}] Unexpected model failure mid-stream: {type(model_err).__name__}")
-                    yield emit(SSEEventName.ERROR, {
-                        "error": "The tutor is temporarily unavailable.",
-                        "error_code": "MODEL_STREAM_ERROR",
-                        "text": "The tutor is temporarily unavailable. Please try again later.",
-                        "request_id": request_id,
-                        "status": "error",
-                    })
-
-        except asyncio.CancelledError:
-            logger.info(f"[{request_id}] Client disconnected: stream cancelled.")
-            return
-        except Exception as unexpected_err:
-            logger.exception(f"[{request_id}] Critical failure in tutor stream handler: {type(unexpected_err).__name__}")
-            yield make_sse_event({
-                "error": "The tutor is temporarily unavailable.",
-                "error_code": "INTERNAL_STREAM_FAILURE",
-                "text": "The tutor is temporarily unavailable. Please try again later.",
-                "request_id": request_id,
-                "status": "error",
-            }, event=SSEEventName.ERROR)
-        finally:
-            if acquired:
-                self._concurrency_semaphore.release()
-            try:
-                from app.core_backend.core.observability import update_queue_depth
-                active = MAX_CONCURRENT_GENERATIONS - getattr(self._concurrency_semaphore, "_value", MAX_CONCURRENT_GENERATIONS)
-                update_queue_depth("tutor_concurrency", float(max(0, active)))
-            except Exception:
-                pass
+        async for event_chunk in self.orchestrator.execute_tutor_stream(
+            prompt=prompt,
+            user_id=user_id,
+            session_id=session_id,
+            concept=concept,
+            question=question,
+            request=request,
+            last_event_id=last_event_id,
+            generate_embedding_fn=self.generate_embedding,
+        ):
+            yield event_chunk
 
 
 def __getattr__(name: str):
@@ -635,4 +299,3 @@ def __getattr__(name: str):
     if name == "tutor_executor":
         return get_tutor_executor()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-

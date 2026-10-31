@@ -36,9 +36,19 @@ def reset_global_observability_alerts():
         alert_manager.clear()
     except Exception:
         pass
+    try:
+        from app.cache import clear_local_cache
+        clear_local_cache()
+    except Exception:
+        pass
     yield
     try:
         from app.core_backend.core.observability import alert_manager
         alert_manager.clear()
+    except Exception:
+        pass
+    try:
+        from app.cache import clear_local_cache
+        clear_local_cache()
     except Exception:
         pass

@@ -25,7 +25,7 @@ class DatabaseManager:
     def _init_local_db(self):
         if not os.path.exists(self.local_db_path):
             with open(self.local_db_path, "w") as f:
-                json.dump({"experiments": [], "memories": [], "xp": {}}, f, indent=2)
+                json.dump({"experiments": [], "memories": [], "xp": {}}, f)
 
     def _read_local(self) -> dict:
         try:
@@ -35,8 +35,12 @@ class DatabaseManager:
             return {"experiments": [], "memories": [], "xp": {}}
 
     def _write_local(self, data: dict):
+        # Bound in-memory test artifacts to prevent disk bloat across regression suites
+        if os.getenv("TESTING") == "true" or os.getenv("ENVIRONMENT") == "test":
+            if "memories" in data and len(data["memories"]) > 100:
+                data["memories"] = data["memories"][-50:]
         with open(self.local_db_path, "w") as f:
-            json.dump(data, f, indent=2)
+            json.dump(data, f)
 
     def save_experiment(
         self,

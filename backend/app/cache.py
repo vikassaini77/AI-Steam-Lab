@@ -8,12 +8,13 @@ Problem 44: Redis cache failures must never be silently swallowed.
 - Deliberate expiration policies mapped by data volatility.
 - Strictly prevent caching of failed, placeholder, or synthetic embeddings.
 """
-import os
-import json
-import time
-import math
 import asyncio
-from typing import Optional, Any, Dict, Tuple, List
+import json
+import math
+import os
+import time
+from typing import Any, Dict, Optional, Tuple
+
 import redis.asyncio as redis
 from redis.asyncio.retry import Retry
 from redis.backoff import ExponentialBackoff
@@ -30,6 +31,7 @@ REDIS_SOCKET_TIMEOUT = float(os.getenv("REDIS_SOCKET_TIMEOUT", "0.5"))
 REDIS_RETRY_ATTEMPTS = int(os.getenv("REDIS_RETRY_ATTEMPTS", "2"))
 REDIS_MAX_CONNECTIONS = int(os.getenv("REDIS_MAX_CONNECTIONS", "20"))
 REDIS_OUTAGE_THRESHOLD = int(os.getenv("REDIS_OUTAGE_THRESHOLD", "3"))
+REDIS_CIRCUIT_BREAKER_COOLDOWN = float(os.getenv("REDIS_CIRCUIT_BREAKER_COOLDOWN", "5.0"))
 
 
 # ==============================================================================
@@ -105,7 +107,11 @@ CACHE_METRICS: Dict[str, Any] = {
 def _record_telemetry(op: str, status: str, error_type: Optional[str] = None, error_msg: Optional[str] = None):
     """Safely updates central observability Prometheus instruments and alert manager."""
     try:
-        from app.core_backend.core.observability import record_cache_metric, record_cache_failure, alert_manager
+        from app.core_backend.core.observability import (
+            alert_manager,
+            record_cache_failure,
+            record_cache_metric,
+        )
         if status == "error":
             record_cache_failure(
                 operation=op,
@@ -240,9 +246,32 @@ async def get_cache(
         raise CacheKeyError(f"Invalid cache key: expected non-empty string, got {key!r}")
 
     CACHE_METRICS["total_operations"] += 1
+
+    # Circuit breaker: fast-fallback or fast-fail during active Redis outage to protect event loop
+    now = time.time()
+    circuit_open = (
+        CACHE_METRICS.get("consecutive_errors", 0) >= REDIS_OUTAGE_THRESHOLD
+        and (now - (CACHE_METRICS.get("last_error_time") or 0.0)) < REDIS_CIRCUIT_BREAKER_COOLDOWN
+    )
+    if circuit_open:
+        if not bypassable or raise_on_error:
+            raise CacheOperationError(
+                f"Redis cache outage active (circuit breaker open) on non-bypassable operation for key '{key}'"
+            )
+        if key in _memory_cache:
+            val, expiry = _memory_cache[key]
+            if expiry > now:
+                if (key.startswith("emb:") or ":emb:" in key) and is_placeholder_or_synthetic_embedding(val):
+                    _memory_cache.pop(key, None)
+                    return default
+                CACHE_METRICS["memory_fallback_hits"] += 1
+                return val
+            else:
+                _memory_cache.pop(key, None)
+        CACHE_METRICS["memory_fallback_misses"] += 1
+        return default
+
     client = get_redis_client()
-    redis_failed = False
-    error_obj: Optional[Exception] = None
 
     try:
         data = await client.get(key)
@@ -268,8 +297,6 @@ async def get_cache(
             CACHE_METRICS["consecutive_errors"] = 0
             _record_telemetry("read", "miss")
     except Exception as e:
-        redis_failed = True
-        error_obj = e
         err_type = type(e).__name__
         CACHE_METRICS["redis_errors"] += 1
         CACHE_METRICS["consecutive_errors"] += 1
@@ -294,11 +321,12 @@ async def get_cache(
         }
 
         if consec >= REDIS_OUTAGE_THRESHOLD:
-            CACHE_METRICS["outage_alert_active"] = True
-            logger.error(
-                f"Persistent Redis cache outage detected: {consec} consecutive failures. Read failed for key '{key}': {e}",
-                extra=log_payload,
-            )
+            if not CACHE_METRICS.get("outage_alert_active"):
+                CACHE_METRICS["outage_alert_active"] = True
+                logger.error(
+                    f"Persistent Redis cache outage detected: {consec} consecutive failures. Read failed for key '{key}': {e}",
+                    extra=log_payload,
+                )
         else:
             logger.warning(
                 f"Redis cache read failed for key '{key}' ({err_type}): {e}. Degraded fallback active.",
@@ -381,6 +409,19 @@ async def set_cache(
     # Store in memory fallback
     _memory_cache[key] = (value, time.time() + ttl_seconds)
 
+    # Circuit breaker: fast-fallback or fast-fail during active Redis outage to protect event loop
+    now = time.time()
+    circuit_open = (
+        CACHE_METRICS.get("consecutive_errors", 0) >= REDIS_OUTAGE_THRESHOLD
+        and (now - (CACHE_METRICS.get("last_error_time") or 0.0)) < REDIS_CIRCUIT_BREAKER_COOLDOWN
+    )
+    if circuit_open:
+        if not bypassable or raise_on_error:
+            raise CacheOperationError(
+                f"Redis cache outage active (circuit breaker open) on non-bypassable write for key '{key}'"
+            )
+        return True
+
     client = get_redis_client()
     try:
         await client.set(key, json.dumps(value), ex=ttl_seconds)
@@ -413,11 +454,12 @@ async def set_cache(
         }
 
         if consec >= REDIS_OUTAGE_THRESHOLD:
-            CACHE_METRICS["outage_alert_active"] = True
-            logger.error(
-                f"Persistent Redis cache outage detected: {consec} consecutive failures. Write failed for key '{key}': {e}",
-                extra=log_payload,
-            )
+            if not CACHE_METRICS.get("outage_alert_active"):
+                CACHE_METRICS["outage_alert_active"] = True
+                logger.error(
+                    f"Persistent Redis cache outage detected: {consec} consecutive failures. Write failed for key '{key}': {e}",
+                    extra=log_payload,
+                )
         else:
             logger.warning(
                 f"Redis cache write failed for key '{key}' ({err_type}): {e}. Stored in local fallback.",
@@ -450,6 +492,19 @@ async def delete_cache(
     CACHE_METRICS["total_operations"] += 1
     _memory_cache.pop(key, None)
 
+    # Circuit breaker: fast-fallback or fast-fail during active Redis outage to protect event loop
+    now = time.time()
+    circuit_open = (
+        CACHE_METRICS.get("consecutive_errors", 0) >= REDIS_OUTAGE_THRESHOLD
+        and (now - (CACHE_METRICS.get("last_error_time") or 0.0)) < REDIS_CIRCUIT_BREAKER_COOLDOWN
+    )
+    if circuit_open:
+        if not bypassable or raise_on_error:
+            raise CacheOperationError(
+                f"Redis cache outage active (circuit breaker open) on non-bypassable delete for key '{key}'"
+            )
+        return True
+
     client = get_redis_client()
     try:
         await client.delete(key)
@@ -481,11 +536,12 @@ async def delete_cache(
         }
 
         if consec >= REDIS_OUTAGE_THRESHOLD:
-            CACHE_METRICS["outage_alert_active"] = True
-            logger.error(
-                f"Persistent Redis cache outage detected: {consec} consecutive failures. Delete failed for key '{key}': {e}",
-                extra=log_payload,
-            )
+            if not CACHE_METRICS.get("outage_alert_active"):
+                CACHE_METRICS["outage_alert_active"] = True
+                logger.error(
+                    f"Persistent Redis cache outage detected: {consec} consecutive failures. Delete failed for key '{key}': {e}",
+                    extra=log_payload,
+                )
         else:
             logger.warning(
                 f"Redis cache delete failed for key '{key}' ({err_type}): {e}.",

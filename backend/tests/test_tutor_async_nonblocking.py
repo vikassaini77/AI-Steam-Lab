@@ -72,7 +72,7 @@ async def test_database_calls_execute_off_main_thread():
 
 
 @pytest.mark.asyncio
-async def test_event_loop_lag_under_concurrent_chat_requests():
+async def test_event_loop_lag_under_concurrent_chat_requests(monkeypatch):
     """
     Verification: Sends concurrent chat requests and monitors event loop lag.
     Event loop lag must remain minimal (< 50ms) because operations are offloaded.
@@ -92,6 +92,12 @@ async def test_event_loop_lag_under_concurrent_chat_requests():
     mock_model.generate_content.side_effect = slow_sync_generate
     tutor = AITutorService()
     tutor.model = mock_model
+
+    # Mock embedding generation to isolate local worker/pipeline latency from external network jitter
+    dummy_vec = [0.05] * 768
+    async def fast_emb(*args, **kwargs):
+        return dummy_vec
+    monkeypatch.setattr(tutor, "generate_embedding", fast_emb)
 
     # Monitor event loop responsiveness concurrently
     loop_lags = []
