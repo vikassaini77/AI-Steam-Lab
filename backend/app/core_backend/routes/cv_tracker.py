@@ -174,6 +174,13 @@ class FrameProcessResponse(BaseModel):
     model_name: str = Field(..., description="Inference model or detector used")
     inference_latency_ms: float = Field(..., description="Inference execution duration in milliseconds")
     user_id: Optional[str] = Field(None, description="Authenticated user ID who submitted the frame")
+    model_version: Optional[str] = Field(default="v1.0.0", description="Semantic model version")
+    configuration_version: Optional[str] = Field(default="cv_config_v1.0", description="Configuration version")
+    preprocessing_version: Optional[str] = Field(default="bgr_to_hsv_v1", description="Preprocessing version")
+    calibration: Optional[Dict[str, Any]] = Field(None, description="Calibration parameters and measurement units")
+    inference_status: Optional[str] = Field(default="completed", description="Inference execution status")
+    raw_footage_stored: Optional[bool] = Field(default=False, description="Privacy flag: whether raw footage was persisted")
+    provenance: Optional[Dict[str, Any]] = Field(None, description="Inference and calibration provenance")
 
     model_config = {"extra": "allow"}
 

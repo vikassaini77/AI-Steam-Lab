@@ -15,6 +15,18 @@ from app.core_backend.models.schema import (
     HarmonicMotionInputSchema,
     normalize_experiment_type,
 )
+from app.core_backend.models.provenance import (
+    ModelIdentifier,
+    CalibrationParameters,
+    FrameMetadata,
+    ExperimentProvenance,
+    ReproductionReport,
+    compute_input_hash,
+    compute_output_hash,
+    strip_raw_footage,
+    reproduce_experiment_metrics,
+)
+from datetime import datetime, timezone
 from app.core_backend.database.supabase_db import DatabaseManager
 from app.core_backend.database.pgvector_db import DatabasePersistenceError
 from app.core_backend.core.dependencies import (
@@ -66,6 +78,13 @@ class ExperimentAnalysisResponse(BaseModel):
     status: str = Field(..., description="Analysis status ('success')")
     experiment_type: str = Field(..., description="Normalized experiment type")
     algorithm_version: str = Field(..., description="Physics algorithm version")
+    model_name: Optional[str] = Field("PhysicsEngine", description="Model identifier")
+    model_version: Optional[str] = Field("physics_engine_v1.2.0", description="Model version")
+    configuration_version: Optional[str] = Field("config_v1.0", description="Configuration schema version")
+    preprocessing_version: Optional[str] = Field("norm_v1.0", description="Preprocessing version")
+    calibration: Optional[Dict[str, Any]] = Field(None, description="Calibration parameters")
+    measurement_units: Optional[Dict[str, str]] = Field(None, description="Measurement units mapping")
+    provenance: Optional[Dict[str, Any]] = Field(None, description="Experiment provenance and cryptographic lineage")
     validated_inputs: Dict[str, Any] = Field(..., description="Validated physics input parameters")
     computed_results: Dict[str, Any] = Field(..., description="Authoritative server-computed physics results")
     parameters: Dict[str, Any] = Field(..., description="Simulation parameters")
@@ -78,7 +97,18 @@ class ExperimentRecord(BaseModel):
     user_id: str = Field(..., description="Owner user ID")
     experiment_type: str = Field(..., description="Experiment type")
     type: Optional[str] = Field(None, description="Experiment type alias")
+    model_name: Optional[str] = Field("PhysicsEngine", description="Model identifier")
+    model_version: Optional[str] = Field("physics_engine_v1.2.0", description="Model version")
     algorithm_version: str = Field(..., description="Algorithm version")
+    configuration_version: Optional[str] = Field("config_v1.0", description="Configuration schema version")
+    preprocessing_version: Optional[str] = Field("norm_v1.0", description="Preprocessing version")
+    computation_version: Optional[str] = Field("kinematics_analytical_v1", description="Exact computation version")
+    calibration: Optional[Dict[str, Any]] = Field(None, description="Calibration parameters")
+    measurement_units: Optional[Dict[str, str]] = Field(None, description="Measurement units mapping")
+    frame_metadata: Optional[Dict[str, Any]] = Field(None, description="Frame metadata and privacy flags")
+    inference_status: Optional[str] = Field("completed", description="Inference status")
+    error_info: Optional[Dict[str, Any]] = Field(None, description="Error information")
+    provenance: Optional[Dict[str, Any]] = Field(None, description="Experiment provenance and cryptographic lineage")
     input_data: Dict[str, Any] = Field(..., description="Validated input parameters")
     server_computed_results: Dict[str, Any] = Field(..., description="Authoritative server-computed results")
     client_supplied_metrics: Optional[Dict[str, Any]] = Field(None, description="Client metrics recorded for audit")
@@ -181,10 +211,49 @@ def analyze_experiment(exp_type: str, data: Dict[str, Any]):
             detail=f"Physics validation error: {str(ve)}",
         )
 
+    calib = CalibrationParameters(
+        unit_system=validated_inputs.get("unit_system", "SI"),
+    ).model_dump()
+    in_hash = compute_input_hash(validated_inputs, algorithm_version="physics_engine_v1.0", config_version="config_v1.0")
+    out_hash = compute_output_hash(computed)
+
+    formula_map = {
+        ExperimentType.FREE_FALL: "v = sqrt(2*g*h), t = sqrt(2*h/g)",
+        ExperimentType.PENDULUM: "T = 2*pi*sqrt(L/g) * (1 + 1/16*theta^2)",
+        ExperimentType.COLLISION: "m1*v1 + m2*v2 = m1*v1' + m2*v2'",
+        ExperimentType.HARMONIC_MOTION: "x(t) = A * cos(omega*t + phi)",
+    }
+    formula_desc = formula_map.get(exp_type_enum, "exact theoretical formulation")
+
+    prov = {
+        "id": f"prov_{uuid.uuid4().hex[:12]}",
+        "experiment_id": f"ana_{uuid.uuid4().hex[:8]}",
+        "model": {"name": "PhysicsEngine", "version": "physics_engine_v1.2.0", "family": "physics_solver"},
+        "algorithm_version": "physics_engine_v1.0",
+        "configuration_version": "config_v1.0",
+        "preprocessing_version": "norm_v1.0",
+        "computation_version": "kinematics_analytical_v1",
+        "calibration": calib,
+        "inference_status": "completed",
+        "source": "simulation",
+        "input_hash": in_hash,
+        "output_hash": out_hash,
+        "reproducible": True,
+        "reproduction_formula": formula_desc,
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+    }
+
     response_payload = {
         "status": "success",
         "experiment_type": exp_type_enum.value,
         "algorithm_version": "physics_engine_v1.0",
+        "model_name": "PhysicsEngine",
+        "model_version": "physics_engine_v1.2.0",
+        "configuration_version": "config_v1.0",
+        "preprocessing_version": "norm_v1.0",
+        "calibration": calib,
+        "measurement_units": calib.get("measurement_units", {}),
+        "provenance": prov,
         "validated_inputs": validated_inputs,
         "computed_results": computed,
         "parameters": computed.get("parameters", validated_inputs),
@@ -335,13 +404,80 @@ def save_experiment(
     # Persist input data, algorithm/model version, and computed results separately!
     # Server-computed results are authoritative; client metrics stored separately for audit
     record_id = f"exp_{uuid.uuid4().hex[:12]}"
+
+    # Privacy guard: strip raw video footage or images unless explicit consent provided
+    consent_given = bool(getattr(data, "consent_to_record", False))
+    clean_params, stripped_raw = strip_raw_footage(validated_inputs, consent_to_record=consent_given)
+
+    algo_version = "physics_engine_v1.0"
+    model_version = getattr(data, "model_version", None) or "physics_engine_v1.2.0"
+    config_version = "config_v1.0"
+    preprocess_version = "norm_v1.0"
+    comp_version = "kinematics_analytical_v1"
+
+    in_hash = compute_input_hash(clean_params, algorithm_version=algo_version, config_version=config_version)
+    out_hash = compute_output_hash(server_results)
+
+    calib = getattr(data, "calibration", None) or CalibrationParameters(
+        unit_system=getattr(data, "unit_system", "SI") or "SI",
+    ).model_dump()
+
+    frame_meta = getattr(data, "frame_metadata", None) or FrameMetadata(
+        raw_footage_stored=False,
+        consent_to_record=consent_given,
+        retention_policy="ephemeral_discard" if not consent_given else "user_consent_retained",
+    ).model_dump()
+
+    formula_map = {
+        ExperimentType.FREE_FALL: "v = sqrt(2*g*h), t = sqrt(2*h/g)",
+        ExperimentType.PENDULUM: "T = 2*pi*sqrt(L/g) * (1 + 1/16*theta^2)",
+        ExperimentType.COLLISION: "m1*v1 + m2*v2 = m1*v1' + m2*v2'",
+        ExperimentType.HARMONIC_MOTION: "x(t) = A * cos(omega*t + phi)",
+    }
+    formula_desc = formula_map.get(exp_type_enum, "exact theoretical formulation")
+
+    prov_record = {
+        "id": f"prov_{uuid.uuid4().hex[:12]}",
+        "experiment_id": record_id,
+        "model": {
+            "name": "PhysicsEngine",
+            "version": model_version,
+            "family": "physics_solver",
+        },
+        "algorithm_version": algo_version,
+        "configuration_version": config_version,
+        "preprocessing_version": preprocess_version,
+        "computation_version": comp_version,
+        "calibration": calib,
+        "frame_metadata": frame_meta,
+        "inference_status": "completed",
+        "error_info": None,
+        "source": "simulation",
+        "input_hash": in_hash,
+        "output_hash": out_hash,
+        "reproducible": True,
+        "reproduction_formula": formula_desc,
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+    }
+
     record_payload = {
         "id": record_id,
         "user_id": canonical_uid,
         "experiment_type": exp_type_enum.value,
         "type": exp_type_enum.value,
-        "algorithm_version": "physics_engine_v1.0",
-        "input_data": validated_inputs,
+        "model_name": "PhysicsEngine",
+        "model_version": model_version,
+        "algorithm_version": algo_version,
+        "configuration_version": config_version,
+        "preprocessing_version": preprocess_version,
+        "computation_version": comp_version,
+        "calibration": calib,
+        "measurement_units": calib.get("measurement_units", {}),
+        "frame_metadata": frame_meta,
+        "inference_status": "completed",
+        "error_info": None,
+        "provenance": prov_record,
+        "input_data": clean_params,
         "server_computed_results": server_results,
         "client_supplied_metrics": data.metrics or {},
         "metrics": server_results,  # Authoritative results override client claims
@@ -429,3 +565,53 @@ def get_experiment(
         )
 
     return {"experiment": target_exp}
+
+
+@router.post("/reproduce/{experiment_id}", response_model=ReproductionReport)
+def reproduce_saved_experiment(
+    experiment_id: str,
+    current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
+):
+    """
+    Verification: Reproduces a stored experiment's derived metrics from its recorded
+    inputs, calibration parameters, and algorithm configuration.
+    Confirms mathematical integrity and cryptographic audit hashes.
+    """
+    canonical_uid = str(current_user["id"])
+    active_db = active_db or get_db()
+    try:
+        target_exp = active_db.get_experiment_by_id(experiment_id)
+    except DatabasePersistenceError as pe:
+        logger.error(f"Failed to query experiment for reproduction: {pe}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database persistence unavailable.",
+        )
+
+    if not target_exp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Experiment not found.",
+        )
+
+    if str(target_exp.get("user_id")) != canonical_uid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not own this experiment resource.",
+        )
+
+    report = reproduce_experiment_metrics(target_exp)
+    return report
+
+
+@router.post("/reproduce", response_model=ReproductionReport)
+def reproduce_experiment_from_payload(
+    record: Dict[str, Any],
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Reproduces experiment metrics on-demand from any provided historical experiment payload.
+    """
+    report = reproduce_experiment_metrics(record)
+    return report

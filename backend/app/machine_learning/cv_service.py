@@ -69,6 +69,13 @@ class FrameResult(BaseModel):
     physics: Optional[Dict[str, Any]] = None
     model_name: str = Field(default="yolov8n", description="Inference model or detector used")
     inference_latency_ms: float = Field(0.0, description="Inference execution duration in milliseconds")
+    model_version: str = Field(default="v1.0.0", description="Semantic model version")
+    configuration_version: str = Field(default="cv_config_v1.0", description="CV configuration version")
+    preprocessing_version: str = Field(default="bgr_to_hsv_v1.0", description="Preprocessing version")
+    calibration: Optional[Dict[str, Any]] = None
+    inference_status: str = Field(default="completed", description="Inference status: completed or degraded")
+    raw_footage_stored: bool = Field(default=False, description="Privacy flag: whether raw footage was persisted")
+    provenance: Optional[Dict[str, Any]] = None
 
 
 # ==============================================================================
@@ -417,7 +424,33 @@ class CVTracker:
             "track_id": track_id,
         }
 
-        # Build schema result
+        # Model provenance metadata
+        is_yolo = (method == "yolo" and self.yolo_model is not None)
+        model_ver = "yolov8n-v8.1.0" if is_yolo else "hsv_blob_tracker_v1.0.0"
+        preprocess_ver = "letterbox_rgb_norm_v1" if is_yolo else "bgr_to_hsv_v1"
+
+        calibration_info = {
+            "px_to_meters": px_to_meters,
+            "unit_system": "SI",
+            "origin": [0.0, 0.0],
+            "units": {
+                "position": "meters (m)",
+                "velocity": "meters/second (m/s)",
+                "acceleration": "meters/second^2 (m/s^2)",
+            },
+        }
+
+        prov_info = {
+            "source": "client_webcam_stream",
+            "raw_footage_stored": False,
+            "retention_policy": "ephemeral_discard",
+            "model_version": model_ver,
+            "configuration_version": "cv_config_v1.0",
+            "preprocessing_version": preprocess_ver,
+            "reproducible": True,
+        }
+
+        # Build schema result with full model provenance and privacy flag
         frame_result = FrameResult(
             timestamp_ms=timestamp_ms,
             detections=detections,
@@ -428,6 +461,13 @@ class CVTracker:
             physics=physics,
             model_name=active_model,
             inference_latency_ms=latency_ms,
+            model_version=model_ver,
+            configuration_version="cv_config_v1.0",
+            preprocessing_version=preprocess_ver,
+            calibration=calibration_info,
+            inference_status="completed",
+            raw_footage_stored=False,
+            provenance=prov_info,
         )
 
         return frame_result.model_dump()

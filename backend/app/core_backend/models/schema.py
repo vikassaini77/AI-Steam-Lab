@@ -181,6 +181,13 @@ class ExperimentData(BaseModel):
     angular_frequency: Optional[float] = Field(None, gt=0.0, le=1000.0, description="Angular frequency in rad/s")
     phase: Optional[float] = Field(None, ge=-360.0, le=360.0, description="Phase angle in degrees")
     time: Optional[float] = Field(None, ge=0.0, le=100000.0, description="Time in seconds")
+    image: Optional[str] = Field(None, description="Optional raw video frame (stripped per privacy policy)")
+    frame: Optional[str] = Field(None, description="Optional raw video frame (stripped per privacy policy)")
+    model_version: Optional[str] = Field(None, max_length=100, description="Model version")
+    calibration: Optional[Dict[str, Any]] = Field(None, description="Calibration parameters")
+    frame_metadata: Optional[Dict[str, Any]] = Field(None, description="Frame metadata")
+    consent_to_record: Optional[bool] = Field(False, description="Consent to record raw footage")
+    provenance: Optional[Dict[str, Any]] = Field(None, description="Provenance audit metadata")
 
     model_config = {
         "extra": "forbid",
