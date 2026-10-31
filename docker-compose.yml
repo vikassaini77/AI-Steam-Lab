@@ -55,6 +55,7 @@ services:
     restart: "no"
 
   backend:
+    image: ai-stem-lab-assistant-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile

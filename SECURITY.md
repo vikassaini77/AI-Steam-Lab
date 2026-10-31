@@ -118,6 +118,21 @@ We treat educational data with the highest level of care:
 
 ---
 
+## Container Security & Automated Vulnerability Scanning (CI/CD)
+
+NeuroLab AI enforces continuous container vulnerability management across all deployment pipelines:
+
+* **Automated Trivy Scanning**: All container images are automatically scanned for operating system and application library vulnerabilities during GitHub Actions CI/CD prior to deployment.
+* **Deliberate Severity Threshold**: Unsuppressed **CRITICAL** and **HIGH** severity vulnerabilities automatically fail the build (`exit-code: 1`), preventing vulnerable code from reaching staging or production.
+* **Pinned Supply Chain Dependencies**: Third-party GitHub Actions are pinned to full-length immutable commit hashes with version annotations to mitigate supply-chain compromises.
+* **Machine-Readable Audit Trail**: Every CI run generates and retains a standardized SARIF (Static Analysis Results Interchange Format) artifact for at least 30 days and syncs findings directly to the GitHub Security / Code Scanning dashboard.
+* **Formal Exception & Suppression Lifecycle**:
+  * Vulnerability exceptions require formal review and sign-off by the Security Lead.
+  * Approved suppressions are tracked in `.trivyignore` with mandatory metadata: Vulnerability ID, technical justification, compensating control description, designated approver, and an explicit expiration date (`# Expiry: YYYY-MM-DD` and `# exp:YYYY-MM-DD`, capped at 90 days maximum).
+  * Automated pre-scan validation rejects expired or malformed suppressions, immediately restoring the blocking threshold.
+
+---
+
 ## Privacy Commitment
 
 NeuroLab AI is deeply committed to ethical technology use in education:

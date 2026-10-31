@@ -1,0 +1,27 @@
+# ==============================================================================
+# NeuroLab AI - Trivy Vulnerability Suppressions Policy (.trivyignore)
+# ==============================================================================
+# Security Policy Requirement (Problem 37):
+# Unsuppressed CRITICAL and HIGH vulnerabilities will fail the CI/CD pipeline (exit-code: 1).
+#
+# Process for Approved Exceptions & Expiring Suppressions:
+# 1. Any exception must be formally reviewed and approved by the Security Lead.
+# 2. Every entry MUST include:
+#    - Valid Vulnerability ID (CVE-YYYY-XXXXX, GHSA-XXXX-XXXX-XXXX, etc.)
+#    - Business/Technical justification (Reason)
+#    - Compensating control description
+#    - Approved-By email / identity
+#    - Strict expiration date (Expiry: YYYY-MM-DD, max 90 days from granting)
+#    - Native Trivy expiration comment (exp:YYYY-MM-DD)
+# 3. Expired suppressions are rejected by CI and will immediately block releases.
+#
+# Schema Template:
+# CVE-YYYY-NNNNN
+# # Description: Example description
+# # Reason: Upstream fix in progress; component not reachable from network
+# # Compensating-Control: Strict ingress firewall and input validation
+# # Approved-By: security-lead@neurolab.ai
+# # Expiry: 2026-12-31
+# # exp:2026-12-31
+# ==============================================================================
+
