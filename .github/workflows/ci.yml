@@ -8,7 +8,32 @@ on:
 
 jobs:
   backend-tests:
+    name: Backend Test Suite & Linting
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_stemlab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -18,32 +43,61 @@ jobs:
       with:
         python-version: "3.11"
         
-    - name: Install dependencies
+    - name: Install dependencies with locked versions
       working-directory: ./backend
       run: |
         python -m pip install --upgrade pip
-        pip install ruff pytest httpx
-        pip install -r requirements.txt
+        pip install ruff pytest pytest-cov httpx
+        pip install --no-cache-dir -r requirements.txt
         
-    - name: Lint with Ruff
+    - name: Enforce critical Ruff rules (Blocking)
       working-directory: ./backend
       run: |
-        # Stop the build if there are Python syntax errors or undefined names
-        ruff check . --select=E9,F63,F7,F82 --show-source
-        # exit-zero treats all errors as warnings
-        ruff check . --exit-zero
+        # Problem 39: Enforce critical syntax, bugbear, and correctness rules
+        ruff check . --select=E9,F821,F822,F823,F63,F7,E711,E712,E713,E714,E721,E722,B006,B007,B009,B010
+
+    - name: Informational lint report (Non-blocking)
+      working-directory: ./backend
+      continue-on-error: true
+      run: |
+        # Separate informational linting report from blocking quality gate
+        ruff check . --output-format=github
+
+    - name: Verify mandatory test suite presence
+      working-directory: ./backend
+      run: |
+        # Problem 38: Fail CI if mandatory unit, integration, or API authorization test suites are missing
+        python -m app.core_backend.core.test_suite_verifier --verify-all
         
-    - name: Test with pytest
+    - name: Run mandatory backend tests with coverage
       working-directory: ./backend
       env:
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+        # Problem 38: Run hermetically with isolated service containers and non-production credentials
+        ENVIRONMENT: test
+        TESTING: "true"
+        GEMINI_API_KEY: test-mock-gemini-key
+        SUPABASE_URL: https://mock-supabase.test
+        SUPABASE_KEY: test-mock-supabase-key
+        SUPABASE_JWT_SECRET: test-mock-jwt-secret-at-least-32-chars-long
+        POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/test_stemlab
+        REDIS_URL: redis://localhost:6379/0
+        METRICS_TOKEN: test-mock-metrics-token
+        ALLOW_FAKE_VECTORS: "true"
+        DISABLE_SENTRY: "true"
       run: |
-        # Only run if tests exist, else skip gracefully
-        if [ -d "tests" ]; then pytest tests/; else echo "No tests folder found, skipping."; fi
+        # Problem 38: Enforce mandatory execution and generate coverage report
+        pytest tests/ --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml
+
+    - name: Upload backend test coverage report
+      uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+      if: always()
+      with:
+        name: backend-test-coverage
+        path: backend/coverage.xml
+        retention-days: 30
 
   frontend-build:
+    name: Frontend Quality & Build Gate
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repository
@@ -54,15 +108,25 @@ jobs:
       with:
         node-version: "20"
         
-    - name: Install dependencies
+    - name: Install dependencies with locked versions
       working-directory: ./frontend
-      run: npm ci || npm install
+      run: |
+        # Problem 40: Use npm ci with committed package-lock.json for reproducible installs
+        npm ci
       
-    - name: TypeScript Linting
+    - name: TypeScript Type Checking (Blocking)
       working-directory: ./frontend
-      run: npm run lint --if-present
+      run: |
+        # Problem 39: Run TypeScript typecheck to enforce compile-time soundness
+        npm run typecheck
       
-    - name: Build React App
+    - name: Frontend ESLint (Blocking)
+      working-directory: ./frontend
+      run: |
+        # Problem 39: Run frontend linter without suppressing its exit status
+        npm run lint
+      
+    - name: Build React App (Reproducible)
       working-directory: ./frontend
       run: npm run build
       

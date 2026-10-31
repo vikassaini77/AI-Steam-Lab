@@ -51,7 +51,7 @@ def test_rate_limit_exceeded_returns_429(monkeypatch):
 
     statuses = []
     # Fire 10 rapid requests (limit is 5/minute)
-    for i in range(10):
+    for _ in range(10):
         res = client.post(url, json=payload)
         statuses.append(res.status_code)
 

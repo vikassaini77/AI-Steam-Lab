@@ -1,6 +1,11 @@
 # General
 .DS_Store
 *.log
+# Testing & Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 .pytest_cache/
 **/.pytest_cache/
 __pycache__/
