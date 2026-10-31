@@ -16,6 +16,11 @@ from app.core_backend.core.limiter import limiter
 from app.core_backend.core.metrics_auth import verify_metrics_access
 from app.core_backend.core.security_headers import SecurityHeadersMiddleware
 from app.core_backend.core.config import settings
+from app.core_backend.core.observability import (
+    ObservabilityMiddleware,
+    sentry_traces_sampler,
+    alert_manager,
+)
 
 from app.core_backend.routes.tutor import router as tutor_router
 from app.core_backend.routes.cv_tracker import router as cv_tracker_router
@@ -43,7 +48,7 @@ if SENTRY_DSN:
     try:
         sentry_sdk.init(
             dsn=SENTRY_DSN,
-            traces_sample_rate=1.0,
+            traces_sampler=sentry_traces_sampler,
             profiles_sample_rate=1.0,
         )
         SENTRY_STATUS["initialized"] = True
@@ -149,6 +154,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Observability Middleware: Request/Trace ID injection, latency tracking, structured completion logging
+app.add_middleware(ObservabilityMiddleware)
+
 # Unversioned API routes (backward-compatible legacy surface)
 app.include_router(tutor_router, prefix="/api/tutor", tags=["Tutor"])
 app.include_router(cv_tracker_router, prefix="/api/cv", tags=["Computer Vision"])
@@ -213,13 +221,31 @@ def readiness_check(request: Request, response: Response):
     """
     Readiness probe validating whether this instance can serve its required workload.
     Checks essential dependencies (PostgreSQL, task broker, model configuration) using short timeouts.
-    Returns 200 when database is healthy/ready, 503 if unreachable in production.
+    Returns 200 when database is healthy/ready, 503 if unreachable in production or critical alert is active.
     """
     from app.core_backend.core.health import check_readiness
     readiness = check_readiness(timeout_seconds=1.0)
+    
+    # Check active operational alerts (e.g. database outage, quota exhaustion)
+    readiness["alerts"] = alert_manager.get_active_alerts()
+    if alert_manager.has_critical_alerts():
+        readiness["status"] = "unhealthy"
+
     if readiness.get("status") == "unhealthy":
         response.status_code = 503
     return readiness
+
+@app.get("/api/monitoring/alerts")
+@limiter.limit("60/minute")
+def get_operational_alerts(request: Request):
+    """
+    Exposes active operational alerts (quota exhaustion, DB outages, model timeouts).
+    """
+    return {
+        "status": "ok",
+        "alerts": alert_manager.get_active_alerts(),
+        "has_critical": alert_manager.has_critical_alerts(),
+    }
 
 @app.get("/metrics/database")
 @app.get("/api/monitoring/db-metrics")

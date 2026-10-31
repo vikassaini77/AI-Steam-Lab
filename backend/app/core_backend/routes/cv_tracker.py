@@ -24,6 +24,25 @@ _cv_concurrency_semaphore = asyncio.Semaphore(10)
 MAX_FRAME_PAYLOAD_BYTES = 5 * 1024 * 1024  # 5 MiB
 
 
+def _record_cv_telemetry(
+    method: str,
+    duration: float,
+    status: str = "success",
+    error_type: Optional[str] = None,
+):
+    """Safely updates CV inference latency and error metrics in Prometheus."""
+    try:
+        from app.core_backend.core.observability import record_cv_inference_metric
+        record_cv_inference_metric(
+            tracking_method=method,
+            duration_seconds=duration,
+            status=status,
+            error_type=error_type,
+        )
+    except Exception:
+        pass
+
+
 def check_frame_payload_limit(request: Request):
     """Early content-length inspection before request body parsing."""
     content_length = request.headers.get("content-length")
@@ -229,12 +248,13 @@ async def process_frame(
             detail="CV processing server busy: Maximum simultaneous frame tasks reached.",
         )
 
+    tracking_val = (
+        payload.tracking_method.value
+        if hasattr(payload.tracking_method, "value")
+        else str(payload.tracking_method)
+    )
+    start_time = time.perf_counter()
     try:
-        tracking_val = (
-            payload.tracking_method.value
-            if hasattr(payload.tracking_method, "value")
-            else str(payload.tracking_method)
-        )
         results = await asyncio.wait_for(
             asyncio.to_thread(
                 cv_tracker.process_frame,
@@ -247,24 +267,34 @@ async def process_frame(
             ),
             timeout=5.0,
         )
+        duration = time.perf_counter() - start_time
+        _record_cv_telemetry(tracking_val, duration, status="success")
         results["user_id"] = str(current_user["id"])
         return results
     except PayloadTooLargeError as e:
+        duration = time.perf_counter() - start_time
+        _record_cv_telemetry(tracking_val, duration, status="error", error_type="payload_too_large")
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=str(e),
         )
     except (InvalidImageError, DimensionLimitExceededError, ValueError) as e:
+        duration = time.perf_counter() - start_time
+        _record_cv_telemetry(tracking_val, duration, status="error", error_type="invalid_image")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
     except (asyncio.TimeoutError, TimeoutError):
+        duration = time.perf_counter() - start_time
+        _record_cv_telemetry(tracking_val, duration, status="timeout", error_type="timeout")
         raise HTTPException(
             status_code=status.HTTP_408_REQUEST_TIMEOUT,
             detail="Frame processing timed out.",
         )
     except Exception as e:
+        duration = time.perf_counter() - start_time
+        _record_cv_telemetry(tracking_val, duration, status="error", error_type=type(e).__name__)
         logger.exception(f"Unexpected error during frame processing: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -292,16 +322,23 @@ async def process_frame_binary(
         )
 
     raw_bytes = await request.body()
+    start_time = time.perf_counter()
     try:
         results = cv_tracker.process_binary_frame(raw_bytes)
+        duration = time.perf_counter() - start_time
+        _record_cv_telemetry("binary_stream", duration, status="success")
         results["user_id"] = str(current_user["id"])
         return results
     except PayloadTooLargeError as e:
+        duration = time.perf_counter() - start_time
+        _record_cv_telemetry("binary_stream", duration, status="error", error_type="payload_too_large")
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=str(e),
         )
     except (InvalidImageError, DimensionLimitExceededError, ValueError) as e:
+        duration = time.perf_counter() - start_time
+        _record_cv_telemetry("binary_stream", duration, status="error", error_type="invalid_image")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),

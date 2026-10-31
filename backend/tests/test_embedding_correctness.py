@@ -105,6 +105,10 @@ async def test_real_embedding_semantic_separation():
     Verification: Compare embeddings of related and unrelated physics questions.
     Related questions must have significantly higher cosine similarity than unrelated.
     """
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if api_key.startswith("test-") or api_key.startswith("mock-") or not api_key:
+        pytest.skip("Skipping live Gemini embedding test: non-production mock credentials in use.")
+
     # 1. Related physics questions
     q_physics_1 = "What is Newton's second law of motion relating force and acceleration?"
     q_physics_2 = "How does net force equal mass times acceleration in classical mechanics?"
@@ -130,6 +134,10 @@ async def test_labeled_retrieval_ranking():
     """
     Verification: Evaluate retrieval results against a labeled memory set.
     """
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if api_key.startswith("test-") or api_key.startswith("mock-") or not api_key:
+        pytest.skip("Skipping live Gemini embedding test: non-production mock credentials in use.")
+
     db = DatabaseManager()
     user_id = "test_user_eval_ranking"
 

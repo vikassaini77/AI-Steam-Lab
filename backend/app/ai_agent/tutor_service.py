@@ -333,6 +333,12 @@ class AITutorService:
             try:
                 await asyncio.wait_for(self._concurrency_semaphore.acquire(), timeout=1.5)
                 acquired = True
+                try:
+                    from app.core_backend.core.observability import update_queue_depth
+                    active = MAX_CONCURRENT_GENERATIONS - getattr(self._concurrency_semaphore, "_value", MAX_CONCURRENT_GENERATIONS)
+                    update_queue_depth("tutor_concurrency", float(max(0, active)))
+                except Exception:
+                    pass
             except (asyncio.TimeoutError, TimeoutError):
                 logger.warning(f"[{request_id}] Concurrency ceiling reached: worker generations at capacity.")
                 yield emit(SSEEventName.ERROR, {
@@ -465,15 +471,34 @@ class AITutorService:
 
                 # Terminal Completion Event with full usage statistics
                 duration = round(time.perf_counter() - start_time, 3)
+                prompt_tokens = max(1, len(req.prompt) // 4)
+                completion_tokens = max(1, len(full_text) // 4)
+                total_tokens = max(1, (len(req.prompt) + len(full_text)) // 4)
+
+                try:
+                    from app.core_backend.core.observability import record_model_inference_metrics
+                    record_model_inference_metrics(
+                        model=model_name,
+                        operation="chat_stream",
+                        duration_seconds=duration,
+                        token_usage={
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": completion_tokens,
+                        },
+                        status="success",
+                    )
+                except Exception:
+                    pass
+
                 yield emit(SSEEventName.DONE, {
                     "done": True,
                     "status": "completed",
                     "finish_reason": "stop",
                     "request_id": request_id,
                     "usage": {
-                        "prompt_tokens_est": max(1, len(req.prompt) // 4),
-                        "completion_tokens_est": max(1, len(full_text) // 4),
-                        "total_tokens_est": max(1, (len(req.prompt) + len(full_text)) // 4),
+                        "prompt_tokens_est": prompt_tokens,
+                        "completion_tokens_est": completion_tokens,
+                        "total_tokens_est": total_tokens,
                         "duration_seconds": duration,
                         "chunks_emitted": chunk_count,
                     },
@@ -498,6 +523,18 @@ class AITutorService:
                     logger.exception(f"[{request_id}] Error persisting conversation memory: {type(save_err).__name__}")
 
             except (asyncio.TimeoutError, TimeoutError):
+                duration = round(time.perf_counter() - start_time, 3)
+                try:
+                    from app.core_backend.core.observability import record_model_inference_metrics
+                    record_model_inference_metrics(
+                        model=model_name,
+                        operation="chat_stream",
+                        duration_seconds=duration,
+                        status="timeout",
+                        error_message="timeout",
+                    )
+                except Exception:
+                    pass
                 logger.warning(f"[{request_id}] Model generation timed out after {MODEL_TIMEOUT_SECONDS}s")
                 yield emit(SSEEventName.ERROR, {
                     "error": "The tutor took too long to respond.",
@@ -507,8 +544,20 @@ class AITutorService:
                     "status": "error",
                 })
             except Exception as model_err:
+                duration = round(time.perf_counter() - start_time, 3)
                 err_lower = str(model_err).lower()
                 if "timeout" in err_lower or "timed out" in err_lower or "deadline" in err_lower:
+                    try:
+                        from app.core_backend.core.observability import record_model_inference_metrics
+                        record_model_inference_metrics(
+                            model=model_name,
+                            operation="chat_stream",
+                            duration_seconds=duration,
+                            status="timeout",
+                            error_message="timeout",
+                        )
+                    except Exception:
+                        pass
                     logger.warning(f"[{request_id}] Upstream model request timed out")
                     yield emit(SSEEventName.ERROR, {
                         "error": "The tutor took too long to respond.",
@@ -518,6 +567,17 @@ class AITutorService:
                         "status": "error",
                     })
                 elif "quota" in err_lower or "resource_exhausted" in err_lower or "429" in err_lower:
+                    try:
+                        from app.core_backend.core.observability import record_model_inference_metrics
+                        record_model_inference_metrics(
+                            model=model_name,
+                            operation="chat_stream",
+                            duration_seconds=duration,
+                            status="quota_exhausted",
+                            error_message=str(model_err),
+                        )
+                    except Exception:
+                        pass
                     logger.warning(f"[{request_id}] Upstream AI model quota exhausted: {type(model_err).__name__}")
                     yield emit(SSEEventName.ERROR, {
                         "error": "The tutor is currently experiencing high demand. Please try again shortly.",
@@ -527,6 +587,17 @@ class AITutorService:
                         "status": "error",
                     })
                 else:
+                    try:
+                        from app.core_backend.core.observability import record_model_inference_metrics
+                        record_model_inference_metrics(
+                            model=model_name,
+                            operation="chat_stream",
+                            duration_seconds=duration,
+                            status="error",
+                            error_message=str(model_err),
+                        )
+                    except Exception:
+                        pass
                     logger.exception(f"[{request_id}] Unexpected model failure mid-stream: {type(model_err).__name__}")
                     yield emit(SSEEventName.ERROR, {
                         "error": "The tutor is temporarily unavailable.",
@@ -551,6 +622,12 @@ class AITutorService:
         finally:
             if acquired:
                 self._concurrency_semaphore.release()
+            try:
+                from app.core_backend.core.observability import update_queue_depth
+                active = MAX_CONCURRENT_GENERATIONS - getattr(self._concurrency_semaphore, "_value", MAX_CONCURRENT_GENERATIONS)
+                update_queue_depth("tutor_concurrency", float(max(0, active)))
+            except Exception:
+                pass
 
 
 def __getattr__(name: str):

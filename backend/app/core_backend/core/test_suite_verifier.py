@@ -15,6 +15,7 @@ REQUIRED_CATEGORIES: Dict[str, List[str]] = {
         "test_physics_engine.py",
         "test_health_and_readiness_probes.py",
         "test_metrics_and_headers_security.py",
+        "test_observability_and_diagnostics.py",
     ],
     "integration": [
         "test_docker_and_nginx_config.py",

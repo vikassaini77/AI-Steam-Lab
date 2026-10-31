@@ -64,6 +64,10 @@ async def test_paraphrase_query_retrieval():
     Verification: Query with a paraphrase that does NOT use the exact formula or words.
     Stage 1 (Semantic vector search) identifies conceptual similarity and RRF ranks target memory #1.
     """
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if api_key.startswith("test-") or api_key.startswith("mock-") or not api_key:
+        pytest.skip("Skipping live Gemini paraphrase test: non-production mock credentials in use.")
+
     user_id = "test_user_paraphrase"
     db = PGVectorManager()
 

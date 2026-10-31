@@ -24,3 +24,21 @@ os.environ.setdefault("SUPABASE_JWT_SECRET", "test-mock-jwt-secret-at-least-32-c
 os.environ.setdefault("METRICS_TOKEN", "test-mock-metrics-token")
 os.environ.setdefault("ALLOW_FAKE_VECTORS", "true")
 os.environ.setdefault("DISABLE_SENTRY", "true")
+os.environ.setdefault("ALLOW_IN_MEMORY_FALLBACK", "true")
+
+import pytest
+
+@pytest.fixture(autouse=True)
+def reset_global_observability_alerts():
+    """Resets alert manager and contextvars between tests to prevent test cross-contamination."""
+    try:
+        from app.core_backend.core.observability import alert_manager
+        alert_manager.clear()
+    except Exception:
+        pass
+    yield
+    try:
+        from app.core_backend.core.observability import alert_manager
+        alert_manager.clear()
+    except Exception:
+        pass

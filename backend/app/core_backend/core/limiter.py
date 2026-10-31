@@ -5,6 +5,8 @@ import jwt
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from app.logger import logger
+
 def get_user_or_ip_identifier(request: Request) -> str:
     """
     Extracts a canonical rate-limiting identifier:
@@ -67,7 +69,7 @@ def create_limiter() -> Limiter:
                 strategy="fixed-window",
             )
         except Exception as e:
-            print(f"Distributed Redis rate limiter failed to initialize: {e}. Falling back to in-memory.")
+            logger.warning(f"Distributed Redis rate limiter failed to initialize: {e}. Falling back to in-memory.")
 
     return Limiter(key_func=get_user_or_ip_identifier)
 

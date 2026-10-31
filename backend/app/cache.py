@@ -26,6 +26,14 @@ CACHE_METRICS: Dict[str, Any] = {
     "degraded_mode": False,
 }
 
+def _record_telemetry(op: str, status: str):
+    """Safely updates central observability Prometheus instruments."""
+    try:
+        from app.core_backend.core.observability import record_cache_metric
+        record_cache_metric(op, status)
+    except Exception:
+        pass
+
 _redis_client: Optional[redis.Redis] = None
 
 
@@ -58,13 +66,16 @@ async def get_cache(key: str) -> Optional[Any]:
         if data:
             CACHE_METRICS["redis_hits"] += 1
             CACHE_METRICS["degraded_mode"] = False
+            _record_telemetry("read", "hit")
             return json.loads(data)
         else:
             CACHE_METRICS["redis_misses"] += 1
+            _record_telemetry("read", "miss")
     except Exception as e:
         CACHE_METRICS["redis_errors"] += 1
         CACHE_METRICS["last_error"] = str(e)
         CACHE_METRICS["degraded_mode"] = True
+        _record_telemetry("read", "error")
         logger.warning(
             f"Redis cache read failed for key '{key}' ({type(e).__name__}): {e}. "
             "Safely degrading to in-memory cache fallback without affecting core service availability."
@@ -92,11 +103,13 @@ async def set_cache(key: str, value: Any, ttl_seconds: int = 3600) -> bool:
     try:
         await client.set(key, json.dumps(value), ex=ttl_seconds)
         CACHE_METRICS["degraded_mode"] = False
+        _record_telemetry("write", "success")
         return True
     except Exception as e:
         CACHE_METRICS["redis_errors"] += 1
         CACHE_METRICS["last_error"] = str(e)
         CACHE_METRICS["degraded_mode"] = True
+        _record_telemetry("write", "error")
         logger.warning(
             f"Redis cache write failed for key '{key}' ({type(e).__name__}): {e}. "
             "Stored in local memory cache fallback. Degraded performance safely preserved."
@@ -113,11 +126,13 @@ async def delete_cache(key: str) -> bool:
     client = get_redis_client()
     try:
         await client.delete(key)
+        _record_telemetry("delete", "success")
         return True
     except Exception as e:
         CACHE_METRICS["redis_errors"] += 1
         CACHE_METRICS["last_error"] = str(e)
         CACHE_METRICS["degraded_mode"] = True
+        _record_telemetry("delete", "error")
         logger.warning(f"Redis cache delete failed for key '{key}' ({type(e).__name__}): {e}.")
         return True
 

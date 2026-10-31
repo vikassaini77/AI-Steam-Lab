@@ -83,14 +83,37 @@ class DatabaseMetrics:
     def record_failed_write(self, op: str = ""):
         with self._lock:
             self.failed_writes += 1
+        try:
+            from app.core_backend.core.observability import record_database_failure
+            record_database_failure(operation=op or "write", error_type="failed_write")
+        except Exception:
+            pass
 
-    def record_connection_error(self, op: str = ""):
+    def record_connection_error(self, op: str = "", error_msg: str = ""):
         with self._lock:
             self.connection_errors += 1
+        try:
+            from app.core_backend.core.observability import record_database_failure
+            record_database_failure(
+                operation=op or "database",
+                error_type="connection_error",
+                error_msg=error_msg or "cannot connect",
+            )
+        except Exception:
+            pass
 
     def record_query_timeout(self, op: str = ""):
         with self._lock:
             self.query_timeouts += 1
+        try:
+            from app.core_backend.core.observability import record_database_failure
+            record_database_failure(
+                operation=op or "query",
+                error_type="timeout",
+                error_msg="statement timeout",
+            )
+        except Exception:
+            pass
 
     def record_retry(self, succeeded: bool = False):
         with self._lock:
@@ -99,11 +122,17 @@ class DatabaseMetrics:
             else:
                 self.retries_attempted += 1
 
-    def record_operation(self, success: bool = True):
+    def record_operation(self, success: bool = True, op: str = "database"):
         with self._lock:
             self.total_operations += 1
             if not success:
                 self.failed_operations += 1
+        try:
+            from app.core_backend.core.observability import DATABASE_OPERATIONS_TOTAL
+            status = "success" if success else "failed"
+            DATABASE_OPERATIONS_TOTAL.labels(operation=op, status=status).inc()
+        except Exception:
+            pass
 
     def get_metrics(self) -> Dict[str, Any]:
         with self._lock:
@@ -469,7 +498,7 @@ class PGVectorManager:
         self.last_retrieval_metadata: List[Dict[str, Any]] = []
         self.mode = get_database_mode()
         self.allow_in_memory_fallback = (
-            self.mode == DatabaseMode.DEVELOPMENT
+            self.mode in (DatabaseMode.DEVELOPMENT, DatabaseMode.TEST)
             and os.getenv("ALLOW_IN_MEMORY_FALLBACK", "true").lower() in ("true", "1", "yes")
         )
         self.is_in_memory_fallback = False

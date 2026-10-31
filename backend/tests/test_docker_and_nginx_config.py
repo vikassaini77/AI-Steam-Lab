@@ -137,7 +137,7 @@ def test_zero_occurrences_of_port_7860_in_project():
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     scan_exts = {".py", ".yml", ".yaml", ".conf", ".json", ".md", ".env", ".example", ".dockerfile", ""}
     exclude_dirs = {".git", "__pycache__", "node_modules", "dist", ".gemini", "pgdata", ".pytest_cache"}
-    exclude_files = {"test_docker_and_nginx_config.py", "local_stem_db.json"}
+    exclude_files = {"test_docker_and_nginx_config.py", "test_e2e_compose_deployment.py", "local_stem_db.json"}
 
     offending_files = []
     for dirpath, dirnames, filenames in os.walk(root_dir):
