@@ -401,3 +401,4 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
 
             # Clear contextvars
             clear_request_context()
+
