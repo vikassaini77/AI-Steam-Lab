@@ -5,7 +5,13 @@ import asyncio
 from typing import List, Optional
 import numpy as np
 import google.generativeai as genai
-from app.cache import get_cache, set_cache
+from app.cache import (
+    get_cache,
+    set_cache,
+    build_versioned_cache_key,
+    CacheTTL,
+    is_placeholder_or_synthetic_embedding,
+)
 from app.logger import logger
 
 EXPECTED_EMBEDDING_DIM = 768
@@ -61,9 +67,16 @@ async def generate_embedding(
 
     cleaned_text = text.strip()
 
-    # 1. Check versioned, namespaced cache
+    # 1. Check versioned, model-aware namespaced cache
     text_hash = hashlib.sha256(cleaned_text.encode("utf-8")).hexdigest()
-    cache_key = f"emb:{EMBEDDING_VERSION}:{text_hash}"
+    cache_key = build_versioned_cache_key(
+        namespace="emb",
+        version="v1",
+        model=model,
+        dim=expected_dim,
+        preprocessing_version="norm_strip_v1",
+        identifier=text_hash,
+    )
 
     cached_vector = await get_cache(cache_key)
     if cached_vector:
@@ -84,6 +97,8 @@ async def generate_embedding(
         raise EmbeddingError(
             "Embedding client not configured: GEMINI_API_KEY is missing from environment."
         )
+
+    is_synthetic = False
 
     # 3. Call embedding model via worker thread
     try:
@@ -117,6 +132,7 @@ async def generate_embedding(
                 vec = rng.randn(expected_dim).astype(np.float32)
                 vec = vec / np.linalg.norm(vec)
             response = {"embedding": vec.tolist()}
+            is_synthetic = True
         else:
             raise EmbeddingError(f"Failed to generate embedding from '{model}': {str(err)}") from err
 
@@ -139,8 +155,27 @@ async def generate_embedding(
     if is_placeholder_embedding(vector):
         raise EmbeddingError("Provider returned a placeholder/uniform constant vector.")
 
-    # 7. Cache verified successful results (7-day TTL)
-    await set_cache(cache_key, vector, ttl_seconds=604800)
+    # 7. Do not cache failed or synthetic embeddings
+    if is_synthetic:
+        logger.info(
+            f"Bypassing cache for synthetic/simulated embedding (key: '{cache_key}'). "
+            "Policy: Failed or synthetic embeddings must never be cached."
+        )
+        return vector
+
+    # Guard: never cache placeholder or synthetic embeddings
+    if is_placeholder_or_synthetic_embedding(vector, expected_dim=expected_dim):
+        logger.warning(f"Refusing to cache placeholder or synthetic embedding for key: {cache_key}")
+        return vector
+
+    # Only cache verified real production embeddings (7-day deliberate TTL)
+    await set_cache(
+        cache_key,
+        vector,
+        ttl_seconds=CacheTTL.SEMANTIC_EMBEDDING,
+        bypassable=True,
+        is_synthetic=False,
+    )
 
     return vector
 

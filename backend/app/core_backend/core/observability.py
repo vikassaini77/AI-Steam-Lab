@@ -70,6 +70,12 @@ CACHE_HIT_RATIO = Gauge(
     "Redis cache hit ratio (0.0 to 1.0)",
 )
 
+CACHE_ERRORS_TOTAL = Counter(
+    "neurolab_cache_errors_total",
+    "Redis cache operation failures by operation and error type",
+    ["operation", "error_type"],
+)
+
 # Database Failures & Latency
 DATABASE_OPERATIONS_TOTAL = Counter(
     "neurolab_database_operations_total",
@@ -258,6 +264,32 @@ def record_cache_metric(operation: str, status: str):
     total = hits + misses
     ratio = (hits / total) if total > 0 else 0.0
     CACHE_HIT_RATIO.set(round(ratio, 4))
+
+
+def record_cache_failure(operation: str, error_type: str, error_msg: str = "", consecutive_errors: int = 1):
+    """Records a Redis cache failure, updates metrics, and triggers operational alert if outage is detected."""
+    CACHE_ERRORS_TOTAL.labels(operation=operation, error_type=error_type).inc()
+    CACHE_OPERATIONS_TOTAL.labels(operation=operation, status="error").inc()
+    from app.cache import CACHE_METRICS
+    hits = CACHE_METRICS.get("redis_hits", 0)
+    misses = CACHE_METRICS.get("redis_misses", 0)
+    total = hits + misses
+    ratio = (hits / total) if total > 0 else 0.0
+    CACHE_HIT_RATIO.set(round(ratio, 4))
+
+    if consecutive_errors >= 3:
+        alert_manager.trigger_alert(
+            alert_name="REDIS_CACHE_OUTAGE_DETECTED",
+            severity="WARNING",
+            message=f"Redis cache outage detected: {consecutive_errors} consecutive failures ({error_type}: {error_msg}).",
+            metadata={
+                "operation": operation,
+                "error_type": error_type,
+                "consecutive_errors": consecutive_errors,
+                "dependency": "redis_cache",
+                "policy": "optional_safe_degradation",
+            },
+        )
 
 
 def record_database_failure(operation: str, error_type: str, error_msg: str = ""):
