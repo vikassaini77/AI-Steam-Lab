@@ -402,25 +402,21 @@ export default function WebcamSection() {
     }
   };
 
-  // Trigger initial voice presentation
-  useEffect(() => {
-    const welcome = "Welcome to NeuroLab A I. I am Professor Nova, your real-time A I mentor. Click Launch Judge Demo to see our end-to-end physics synchronization in action!";
-    const timer = setTimeout(() => {
-      speakNovaText(welcome, 'en');
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Sync speak with language toggling
+  // Update default caption when language toggles without auto-speaking
   useEffect(() => {
     if (currentLang === 'hi') {
-      speakNovaText("नमस्ते! मैं प्रोफेसर नोवा हूं। आपकी एआई भौतिकी प्रयोगशाला में आपका स्वागत है।", 'hi');
+      setNovaCaption("नमस्ते! मैं प्रोफेसर नोवा हूं, आपका एआई वैज्ञानिक। वेबकैम चालू करें या जज डेमो मोड लॉन्च करें!");
     } else if (currentLang === 'es') {
-      speakNovaText("¡Hola! Soy la Profesora Nova. Bienvenido a su laboratorio de física de Inteligencia Artificial.", 'es');
+      setNovaCaption("¡Hola! Soy la Profesora Nova, tu científica de IA en tiempo real. ¡Activa la cámara o inicia el Modo Demo!");
     } else if (currentLang === 'fr') {
-      speakNovaText("Bonjour! Je suis le Professeur Nova. Bienvenue dans votre laboratoire de physique.", 'fr');
+      setNovaCaption("Bonjour! Je suis le Professeur Nova, votre scientifique IA. Activez la caméra ou lancez le mode démo!");
     } else {
-      speakNovaText("Welcome to the laboratory! I am Professor Nova.", 'en');
+      setNovaCaption("Hello! I am Professor Nova, your real-time AI scientist. Toggle webcam or launch Judge Demo Mode!");
+    }
+    // Cancel any active speech on language change to avoid overlapping speech
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      setIsNovaSpeaking(false);
     }
   }, [currentLang]);
 
@@ -1140,33 +1136,59 @@ export default function WebcamSection() {
 
   const handleSuggestedInquiry = (topic: string) => {
     let text = "";
-    if (topic === 'conservation') {
-      if (explainLevel === 'beginner') {
-        text = "Potential Energy is high at the peak, and Kinetic Energy is high at the bottom. They balance out as the pendulum swings!";
-      } else if (explainLevel === 'advanced') {
-        text = "According to Lagrangian mechanics, the Hamiltonian of a simple pendulum is conserved: H equals T plus V, where kinetic energy T is half m L-squared theta-dot-squared, and potential energy V is m g L times 1 minus cos theta. Since there are no non-conservative forces, the total mechanical energy remains absolutely constant at all angular displacements.";
+    if (currentLang === 'hi') {
+      if (topic === 'conservation') {
+        text = "यांत्रिक ऊर्जा संरक्षण नियम के अनुसार, लोलक के दोनों छोर पर संभावित ऊर्जा E = mgh अधिकतम होती है, और नीचे के बिंदु पर गतिज ऊर्जा अधिकतम होती है। कुल यांत्रिक ऊर्जा हमेशा स्थिर रहती है!";
+      } else if (topic === 'length') {
+        text = "लोलक की झूलने की गति केवल धागे की लंबाई और गुरुत्वाकर्षण पर निर्भर करती है: आवर्तकाल T = 2π√(L/g)। लोलक के द्रव्यमान से गति पर कोई प्रभाव नहीं पड़ता!";
       } else {
-        text = "Excellent inquiry! Potential Energy is maxed out at the peaks: E equals m g h. Kinetic Energy peaks at the vertical base: half m v squared. As potential energy drains, kinetic energy floods, perfectly conserving total mechanical energy at constant levels.";
+        text = "हमारे कंप्यूटर विज़न ने स्थानीय गुरुत्वाकर्षण त्वरण को ठीक 9.81 मीटर प्रति सेकंड वर्ग पर सत्यापित किया है!";
       }
-    } else if (topic === 'length') {
-      if (explainLevel === 'beginner') {
-        text = "The swing speed only changes with string length. Long strings swing slower, short strings swing faster. Mass doesn't matter!";
-      } else if (explainLevel === 'advanced') {
-        text = "The differential equation governing small-angle pendulum motion is d-squared-theta by dt-squared plus g over L times theta equals zero. Solving this yields a simple harmonic oscillation with angular frequency omega equals square root of g over L, proving the period T equals two pi times the square root of L over g, completely independent of the mass.";
+    } else if (currentLang === 'es') {
+      if (topic === 'conservation') {
+        text = "La energía mecánica se conserva: la energía potencial es máxima en los extremos y la energía cinética es máxima en el centro. ¡La energía total siempre permanece constante!";
+      } else if (topic === 'length') {
+        text = "El período del péndulo depende únicamente de la longitud de la cuerda y la gravedad: T = 2π√(L/g). ¡La masa no afecta el tiempo de oscilación!";
       } else {
-        text = "Intriguing! A pendulum's period depends purely on string length and gravitational pull: Period is two pi times the square root of L divided by g. The bob's mass has zero effect on the swing rate!";
+        text = "¡Excelente! Hemos verificado la aceleración de la gravedad en exactamente 9.81 metros por segundo al cuadrado.";
+      }
+    } else if (currentLang === 'fr') {
+      if (topic === 'conservation') {
+        text = "L'énergie mécanique est conservée : l'énergie potentielle est maximale aux sommets et l'énergie cinétique est maximale au centre. L'énergie totale reste constante !";
+      } else if (topic === 'length') {
+        text = "La période du pendule dépend uniquement de la longueur de la corde et de la gravité : T = 2π√(L/g). La masse n'a aucun effet sur la période !";
+      } else {
+        text = "Remarquable ! Nous avons vérifié l'accélération gravitationnelle à exactement 9.81 mètres par seconde carrée.";
       }
     } else {
-      if (explainLevel === 'beginner') {
-        text = "Everything falls because of gravity, which pulls things down at 9.81 meters per second squared!";
-      } else if (explainLevel === 'advanced') {
-        text = "By fitting a non-linear regression model to our trajectory points, we verify local gravitational acceleration at exactly 9.81 meters per second squared. Air resistance can be modeled with a linear damping coefficient, yielding a damped harmonic motion equation.";
+      if (topic === 'conservation') {
+        if (explainLevel === 'beginner') {
+          text = "Potential Energy is high at the peak, and Kinetic Energy is high at the bottom. They balance out as the pendulum swings!";
+        } else if (explainLevel === 'advanced') {
+          text = "According to Lagrangian mechanics, the Hamiltonian of a simple pendulum is conserved: H equals T plus V, where kinetic energy T is half m L-squared theta-dot-squared, and potential energy V is m g L times 1 minus cos theta. Since there are no non-conservative forces, the total mechanical energy remains absolutely constant at all angular displacements.";
+        } else {
+          text = "Excellent inquiry! Potential Energy is maxed out at the peaks: E equals m g h. Kinetic Energy peaks at the vertical base: half m v squared. As potential energy drains, kinetic energy floods, perfectly conserving total mechanical energy at constant levels.";
+        }
+      } else if (topic === 'length') {
+        if (explainLevel === 'beginner') {
+          text = "The swing speed only changes with string length. Long strings swing slower, short strings swing faster. Mass doesn't matter!";
+        } else if (explainLevel === 'advanced') {
+          text = "The differential equation governing small-angle pendulum motion is d-squared-theta by dt-squared plus g over L times theta equals zero. Solving this yields a simple harmonic oscillation with angular frequency omega equals square root of g over L, proving the period T equals two pi times the square root of L over g, completely independent of the mass.";
+        } else {
+          text = "Intriguing! A pendulum's period depends purely on string length and gravitational pull: Period is two pi times the square root of L divided by g. The bob's mass has zero effect on the swing rate!";
+        }
       } else {
-        text = "Splendid! I have calibrated our computer vision metrics with the local gravity constant. The bob accelerates downwards at exactly nine point eight one meters per second squared.";
+        if (explainLevel === 'beginner') {
+          text = "Everything falls because of gravity, which pulls things down at 9.81 meters per second squared!";
+        } else if (explainLevel === 'advanced') {
+          text = "By fitting a non-linear regression model to our trajectory points, we verify local gravitational acceleration at exactly 9.81 meters per second squared. Air resistance can be modeled with a linear damping coefficient, yielding a damped harmonic motion equation.";
+        } else {
+          text = "Splendid! I have calibrated our computer vision metrics with the local gravity constant. The bob accelerates downwards at exactly nine point eight one meters per second squared.";
+        }
       }
     }
     setNovaCaption(text);
-    speakNovaText(text);
+    speakNovaText(text, currentLang);
   };
 
   const downloadCompiledReport = async () => {
@@ -1921,17 +1943,36 @@ export default function WebcamSection() {
             <div className="absolute -right-16 -top-16 w-36 h-36 bg-cyan-500/10 rounded-full blur-3xl" />
             
             <div className="flex items-center gap-4">
-              {/* Particle breathing SVG avatar representing Professor Nova */}
-              <div className={`relative w-16 h-16 rounded-full flex items-center justify-center ${isNovaSpeaking ? 'animate-avatar-pulse border-2 border-cyan-400' : 'border border-cyan-500/25 bg-cyan-500/5'}`}>
+              {/* Particle breathing SVG avatar representing Professor Nova (click to speak or pause) */}
+              <div
+                onClick={() => {
+                  if (isNovaSpeaking) {
+                    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                      window.speechSynthesis.cancel();
+                    }
+                    setIsNovaSpeaking(false);
+                  } else {
+                    speakNovaText(novaCaption, currentLang);
+                  }
+                }}
+                className={`relative w-16 h-16 rounded-full flex items-center justify-center cursor-pointer transition-all hover:scale-105 ${
+                  isNovaSpeaking ? 'animate-avatar-pulse border-2 border-cyan-400 shadow-lg shadow-cyan-500/20' : 'border border-cyan-500/25 bg-cyan-500/5 hover:border-cyan-400/60'
+                }`}
+                title="Click Nova to speak or pause"
+              >
                 <svg className="w-12 h-12 text-cyan-400" viewBox="0 0 100 100">
                   <circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 4" className={isNovaSpeaking ? 'animate-spin' : ''} />
                   <path d="M 30,50 Q 50,20 70,50 T 30,50" fill="none" stroke="currentColor" strokeWidth="2" />
                   <circle cx="50" cy="55" r="8" fill="currentColor" className="animate-pulse" />
                 </svg>
-                {isNovaSpeaking && (
+                {isNovaSpeaking ? (
                   <span className="absolute -bottom-1 -right-1 flex h-4 w-4">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-4 w-4 bg-cyan-500 items-center justify-center text-[8px] font-black text-black">🎤</span>
+                  </span>
+                ) : (
+                  <span className="absolute -bottom-1 -right-1 flex h-4 w-4 rounded-full bg-cyan-500/20 border border-cyan-400/40 items-center justify-center text-[8px]">
+                    🔊
                   </span>
                 )}
               </div>
@@ -1945,9 +1986,38 @@ export default function WebcamSection() {
               </div>
             </div>
 
-            {/* Speaking captions bubble */}
+            {/* Speaking captions bubble with explicit click-to-speak button */}
             <div className="bg-[#13131d] border border-white/5 rounded-xl p-3 min-h-[80px]">
-              <span className="text-[8px] text-gray-500 uppercase font-black block mb-1">Live Caption</span>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[8px] text-gray-500 uppercase font-black block">Live Caption</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isNovaSpeaking) {
+                      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                        window.speechSynthesis.cancel();
+                      }
+                      setIsNovaSpeaking(false);
+                    } else {
+                      speakNovaText(novaCaption, currentLang);
+                    }
+                  }}
+                  className="flex items-center gap-1.5 text-[10px] px-2.5 py-0.5 rounded-full bg-cyan-500/10 hover:bg-cyan-500/25 text-cyan-400 border border-cyan-500/30 transition-all cursor-pointer font-bold"
+                  title="Click to speak or stop"
+                >
+                  {isNovaSpeaking ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                      <span>{currentLang === 'hi' ? 'रोकें' : currentLang === 'es' ? 'Detener' : currentLang === 'fr' ? 'Arrêter' : 'Stop'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🔊</span>
+                      <span>{currentLang === 'hi' ? 'सुनें' : currentLang === 'es' ? 'Escuchar' : currentLang === 'fr' ? 'Écouter' : 'Listen'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
               <p className="text-xs text-gray-300 leading-relaxed italic">"{novaCaption}"</p>
             </div>
 
@@ -1959,19 +2029,37 @@ export default function WebcamSection() {
                   onClick={() => handleSuggestedInquiry('conservation')}
                   className="w-full text-left p-2.5 bg-white/5 border border-white/10 hover:border-cyan-500/40 text-xs font-medium text-gray-300 hover:text-white rounded-xl transition-all"
                 >
-                  "Nova, explain mechanical energy conservation!"
+                  {currentLang === 'hi'
+                    ? '"नोवा, यांत्रिक ऊर्जा संरक्षण स्पष्ट करें!"'
+                    : currentLang === 'es'
+                    ? '"¡Nova, explica la conservación de energía!"'
+                    : currentLang === 'fr'
+                    ? '"Nova, explique la conservation de l\'énergie !"'
+                    : '"Nova, explain mechanical energy conservation!"'}
                 </button>
                 <button
                   onClick={() => handleSuggestedInquiry('length')}
                   className="w-full text-left p-2.5 bg-white/5 border border-white/10 hover:border-cyan-500/40 text-xs font-medium text-gray-300 hover:text-white rounded-xl transition-all"
                 >
-                  "How does string length impact the swing rate?"
+                  {currentLang === 'hi'
+                    ? '"धागे की लंबाई से झूलने की दर कैसे बदलती है?"'
+                    : currentLang === 'es'
+                    ? '"¿Cómo afecta la longitud de la cuerda?"'
+                    : currentLang === 'fr'
+                    ? '"Quel est l\'impact de la longueur du fil ?"'
+                    : '"How does string length impact the swing rate?"'}
                 </button>
                 <button
                   onClick={() => handleSuggestedInquiry('gravity')}
                   className="w-full text-left p-2.5 bg-white/5 border border-white/10 hover:border-cyan-500/40 text-xs font-medium text-gray-300 hover:text-white rounded-xl transition-all"
                 >
-                  "Nova, verify local gravitational acceleration!"
+                  {currentLang === 'hi'
+                    ? '"नोवा, स्थानीय गुरुत्वाकर्षण त्वरण सत्यापित करें!"'
+                    : currentLang === 'es'
+                    ? '"¡Nova, verifica la aceleración gravitacional!"'
+                    : currentLang === 'fr'
+                    ? '"Nova, vérifie l\'accélération de la gravité !"'
+                    : '"Nova, verify local gravitational acceleration!"'}
                 </button>
               </div>
             </div>
