@@ -37,13 +37,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: blob: https:; "
             "font-src 'self' data:; "
-            "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://ai-steam-lab.vercel.app http://localhost:8000 http://127.0.0.1:8000 https://*.onrender.com; "
+            "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com https://ai-steam-lab.vercel.app https://*.vercel.app http://localhost:8000 http://127.0.0.1:8000 https://*.onrender.com; "
             "media-src 'self' blob: data:; "
             "worker-src 'self' blob:; "
             "object-src 'none'; "
             "base-uri 'self'; "
             "form-action 'self'; "
-            "frame-ancestors 'self' https://huggingface.co https://*.huggingface.co https://ai-steam-lab.vercel.app;"
+            "frame-ancestors 'self' https://huggingface.co https://*.huggingface.co https://ai-steam-lab.vercel.app https://*.vercel.app;"
         )
         response.headers["Content-Security-Policy"] = os.getenv("CONTENT_SECURITY_POLICY", default_csp)
 
