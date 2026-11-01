@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
-# Create a non-root user group and user
-RUN groupadd -r neurolab && useradd -r -g neurolab neurolabuser
+# Create a non-root user group and user with a home directory
+RUN groupadd -r neurolab && useradd -m -r -g neurolab neurolabuser
 
 WORKDIR /app
 
@@ -23,6 +23,11 @@ RUN chown -R neurolabuser:neurolab /app
 USER neurolabuser
 
 ENV PYTHONPATH=/app
+ENV OMP_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV YOLO_CONFIG_DIR=/tmp/Ultralytics
+ENV ENABLE_YOLO=false
 EXPOSE 8000
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

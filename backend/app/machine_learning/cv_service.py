@@ -356,6 +356,10 @@ def validate_and_load_yolo_weights(weights_path: Optional[str] = None) -> Tuple[
         return None, YOLOWeightsStatus.WEIGHTS_MISSING.value, f"Could not access weights file: {err}"
 
     try:
+        os.environ.setdefault("YOLO_CONFIG_DIR", "/tmp/Ultralytics")
+        os.environ.setdefault("OMP_NUM_THREADS", "1")
+        os.environ.setdefault("MKL_NUM_THREADS", "1")
+        os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
         from ultralytics import YOLO
         model = YOLO(norm_path)
         if not hasattr(model, "names") or not model.names:
@@ -383,6 +387,22 @@ def get_shared_yolo_model_info(weights_path: Optional[str] = None) -> Tuple[Opti
     global _shared_yolo_model, _shared_yolo_status, _shared_yolo_error, _shared_yolo_loaded
     with _shared_yolo_lock:
         if _shared_yolo_loaded:
+            return _shared_yolo_model, _shared_yolo_status, _shared_yolo_error
+
+        # In memory-constrained environments (e.g. Render Free Tier 512MB RAM),
+        # disable YOLO neural network loading by default to prevent OOM termination.
+        enable_yolo_env = os.getenv("ENABLE_YOLO", "").lower().strip()
+        is_render = (
+            os.getenv("RENDER", "").lower().strip() == "true"
+            or bool(os.getenv("RENDER_SERVICE_ID"))
+            or bool(os.getenv("RENDER_INSTANCE_ID"))
+        )
+        if enable_yolo_env in ("false", "0", "no", "off") or (enable_yolo_env != "true" and is_render):
+            _shared_yolo_model = None
+            _shared_yolo_status = YOLOWeightsStatus.UNCONFIGURED.value
+            _shared_yolo_error = "YOLO neural network disabled in 512MB memory boundary; active vision pipeline using OpenCV color and Lucas-Kanade optical flow."
+            _shared_yolo_loaded = True
+            logger.info("YOLO disabled for 512MB memory boundary. Running genuine real-time OpenCV color and optical flow kinematics.")
             return _shared_yolo_model, _shared_yolo_status, _shared_yolo_error
 
         weights = weights_path or os.getenv("YOLO_WEIGHTS_PATH")
