@@ -155,7 +155,7 @@ def get_database_manager():
     Factory for database manager instance based on environment configuration.
     Side-effect free until invoked.
     """
-    if os.getenv("POSTGRES_URL") or os.getenv("ENVIRONMENT") == "production":
+    if os.getenv("POSTGRES_URL") or os.getenv("USE_PGVECTOR", "false").lower() in ("true", "1"):
         from app.core_backend.database.pgvector_db import PGVectorManager
         return PGVectorManager()
     from app.core_backend.database.supabase_db import DatabaseManager

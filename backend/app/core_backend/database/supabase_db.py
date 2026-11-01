@@ -150,8 +150,8 @@ class DatabaseManager:
         clean_action = str(action or "general_award").strip().lower()
         evt_key = str(event_id) if event_id else f"evt_{canonical_uid}_{clean_action}_{uuid.uuid4().hex[:12]}"
 
-        # Problem 14: In production or when PostgreSQL is configured, delegate to ACID transaction
-        if os.getenv("ENVIRONMENT") == "production" or os.getenv("POSTGRES_URL") or os.getenv("USE_PGVECTOR", "false").lower() in ("true", "1"):
+        # Problem 14: When PostgreSQL is configured, delegate to ACID transaction
+        if os.getenv("POSTGRES_URL") or os.getenv("USE_PGVECTOR", "false").lower() in ("true", "1"):
             try:
                 from app.core_backend.database.pgvector_db import get_pgvector_db, DatabasePersistenceError
                 pg = get_pgvector_db()
