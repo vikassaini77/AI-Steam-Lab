@@ -192,6 +192,42 @@ const translations = {
   }
 };
 
+const demoSpeeches = {
+  en: {
+    step1: "Welcome judges! Initiating the Live Lab calibration for the physical pendulum system. Locking computer vision target and calibrating coordinates.",
+    step2: "Synchronizing the virtual Digital Twin. Our computer vision tracks physical coordinates, calculating velocity, displacement, and mechanical energy conservation in real time.",
+    step3: "Success! Physical experiment verified at 99.4% accuracy rate. Simple Harmonic Motion is fully confirmed. Unlocking your Rare Gravity Pioneer Achievement Badge.",
+    step4: "Compiling complete scientific lab observations. Directly initiating download of the custom PDF Lab Report compiled via FastAPI and ReportLab!",
+    wrap: "Judge demonstration complete! The live Digital Twin mirrors physical mechanics and compiles complete metrics. What else would you like to explore today?",
+  },
+  hi: {
+    step1: "माननीय जजों का स्वागत है! भौतिक लोलक प्रणाली के लिए लाइव लैब अंशांकन शुरू किया जा रहा है। कंप्यूटर विज़न लक्ष्य को लॉक कर रहा है।",
+    step2: "डिजिटल ट्विन सिंक्रनाइज़ हो रहा है। हमारा कंप्यूटर विज़न वास्तविक समय में वेग, विस्थापन और यांत्रिक ऊर्जा संरक्षण की गणना कर रहा है।",
+    step3: "सफलता! 99.4% सटीकता के साथ भौतिक प्रयोग सत्यापित हुआ। सरल आवर्त गति की पुष्टि हो गई है। ग्रैविटी पायनियर बैज अनलॉक हो गया है।",
+    step4: "वैज्ञानिक अवलोकन संकलित किए जा रहे हैं। फास्टएपीआई और रिपोर्टलैब द्वारा कस्टम पीडीएफ लैब रिपोर्ट तैयार की जा रही है!",
+    wrap: "डेमो पूरा हुआ! डिजिटल ट्विन भौतिकी को सटीकता से दर्शाता है। क्या आप कुछ और जानना चाहते हैं?",
+    step1_phonetic: "Namaste judges! Live Lab calibration shuru ho rahi hai. Computer vision target lock ho gaya hai.",
+    step2_phonetic: "Digital Twin synchronize ho raha hai. Computer vision velocity aur mechanical energy calculate kar raha hai.",
+    step3_phonetic: "Success! Prayog verify ho gaya hai. Gravity Pioneer badge unlock ho gaya hai.",
+    step4_phonetic: "Vaigyanik observations compile ho rahe hain. Custom PDF report tayar ho rahi hai.",
+    wrap_phonetic: "Judge demo poora hua! Digital Twin physics ko darshata hai. Aap aage kya dekhna chahte hain?",
+  },
+  es: {
+    step1: "¡Bienvenidos jueces! Iniciando la calibración del laboratorio en vivo para el péndulo físico. Fijando objetivo y calibrando coordenadas.",
+    step2: "Sincronizando el Digital Twin. Nuestra visión computacional calcula velocidad, desplazamiento y conservación de energía mecánica.",
+    step3: "¡Éxito! Experimento físico verificado al 99.4%. Movimiento Armónico Simple confirmado. Desbloqueando la insignia Gravity Pioneer.",
+    step4: "Compilando observaciones científicas. Descargando el informe de laboratorio PDF generado con FastAPI y ReportLab.",
+    wrap: "¡Demostración completada! El Digital Twin replica la física en tiempo real. ¿Qué más desea explorar hoy?",
+  },
+  fr: {
+    step1: "Bienvenue aux juges ! Initialisation de l'étalonnage du pendule physique. Verrouillage de la cible par vision par ordinateur.",
+    step2: "Synchronisation du jumeau numérique. Notre vision par ordinateur calcule la vitesse, le déplacement et l'énergie en temps réel.",
+    step3: "Succès ! Expérience vérifiée à 99.4% de précision. Mouvement harmonique simple confirmé. Badge Gravity Pioneer débloqué.",
+    step4: "Compilation des observations scientifiques. Téléchargement du rapport PDF généré via FastAPI et ReportLab.",
+    wrap: "Démonstration terminée ! Le jumeau numérique reproduit la physique avec précision. Que souhaitez-vous explorer d'autre ?",
+  },
+};
+
 export default function WebcamSection() {
   const navigate = useNavigate();
   const { botVoiceURI } = useChatStore();
@@ -272,46 +308,92 @@ export default function WebcamSection() {
   const [demoActive, setDemoActive] = useState<boolean>(false);
   const [demoStep, setDemoStep] = useState<number>(0);
   const demoIntervalRef = useRef<ReturnType<typeof setInterval>>();
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  // Pre-load and cache browser voices when SpeechSynthesis becomes ready
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      const loadVoices = () => {
+        const v = window.speechSynthesis.getVoices();
+        if (v && v.length > 0) {
+          setAvailableVoices(v);
+        }
+      };
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+      return () => {
+        if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = null;
+      };
+    }
+  }, []);
 
   // Speech helper specifically mapped to Professor Nova
-  const speakNovaText = (text: string) => {
-    if (!voiceEnabled) return;
+  const speakNovaText = (text: string, forceLang?: 'en' | 'hi' | 'es' | 'fr') => {
+    if (!voiceEnabled || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     try {
       window.speechSynthesis.cancel();
+      const lang = forceLang || currentLang || 'en';
+
       // Clean LaTeX & mathematical syntax for fluent speech outputs
-      const clean = text
+      let clean = text
         .replace(/[\$\#\*\_]/g, '')
         .replace(/\\pi/g, 'pi')
         .replace(/\\sqrt/g, 'square root of ')
         .replace(/KE/g, 'kinetic energy')
         .replace(/PE/g, 'potential energy')
         .replace(/E_total/g, 'total energy');
-      
-      const utterance = new SpeechSynthesisUtterance(clean);
-      
-      // Select appropriate voice based on selected language and AI voice setting
-      if (window.speechSynthesis.getVoices().length > 0) {
-        const voices = window.speechSynthesis.getVoices();
-        let targetVoice = null;
-        
-        // If a specific voice is selected in AI Tutor Settings, prioritize it
+
+      const voices = window.speechSynthesis.getVoices().length > 0 
+        ? window.speechSynthesis.getVoices() 
+        : availableVoices;
+
+      let targetVoice: SpeechSynthesisVoice | null = null;
+      let speechLang = 'en-US';
+
+      if (lang === 'hi') {
+        speechLang = 'hi-IN';
+        // Priority: Genuine Hindi voices (explicitly avoiding en-IN which is English phonetics)
+        targetVoice = voices.find(v => {
+          const l = v.lang.toLowerCase();
+          const n = v.name.toLowerCase();
+          const isHindiLang = l.startsWith('hi') || l.includes('hi-') || l.includes('hi_');
+          const isHindiName = n.includes('hindi') || n.includes('swara') || n.includes('madhur') || n.includes('kalpana') || n.includes('hemant');
+          return (isHindiLang || isHindiName) && !l.startsWith('en');
+        }) || null;
+
+        // If no native Hindi voice is installed on user's OS,
+        // transliterate to phonetic Latin so the default voice speaks intelligible Hindi instead of complete silence!
+        if (!targetVoice && /[\u0900-\u097F]/.test(clean)) {
+          if (clean.includes("नमस्ते")) {
+            clean = "Namaste! Main Professor Nova hoon. Aapki A I Bhautiki prayogshala mein aapka swaagat hai.";
+          }
+        }
+      } else if (lang === 'es') {
+        speechLang = 'es-ES';
+        targetVoice = voices.find(v => v.lang.toLowerCase().startsWith('es')) || null;
+      } else if (lang === 'fr') {
+        speechLang = 'fr-FR';
+        targetVoice = voices.find(v => v.lang.toLowerCase().startsWith('fr')) || null;
+      } else {
+        speechLang = 'en-US';
         if (botVoiceURI) {
-          targetVoice = voices.find(v => v.voiceURI === botVoiceURI);
+          targetVoice = voices.find(v => v.voiceURI === botVoiceURI) || null;
         }
-        
-        // Fallback to language-based voice if not specifically configured
         if (!targetVoice) {
-          if (currentLang === 'hi') targetVoice = voices.find(v => v.lang.includes('hi') || v.lang.includes('IN'));
-          else if (currentLang === 'es') targetVoice = voices.find(v => v.lang.includes('es') || v.lang.includes('ES'));
-          else if (currentLang === 'fr') targetVoice = voices.find(v => v.lang.includes('fr') || v.lang.includes('FR'));
+          targetVoice = voices.find(v => v.lang.toLowerCase().startsWith('en')) || null;
         }
-        
-        if (targetVoice) utterance.voice = targetVoice;
       }
+
+      const utterance = new SpeechSynthesisUtterance(clean);
+      utterance.lang = speechLang;
+      if (targetVoice) utterance.voice = targetVoice;
 
       utterance.onstart = () => setIsNovaSpeaking(true);
       utterance.onend = () => setIsNovaSpeaking(false);
-      utterance.onerror = () => setIsNovaSpeaking(false);
+      utterance.onerror = (err) => {
+        console.warn('Speech synthesis utterance error:', err);
+        setIsNovaSpeaking(false);
+      };
       
       window.speechSynthesis.speak(utterance);
     } catch (e) {
@@ -324,7 +406,7 @@ export default function WebcamSection() {
   useEffect(() => {
     const welcome = "Welcome to NeuroLab A I. I am Professor Nova, your real-time A I mentor. Click Launch Judge Demo to see our end-to-end physics synchronization in action!";
     const timer = setTimeout(() => {
-      speakNovaText(welcome);
+      speakNovaText(welcome, 'en');
     }, 1500);
     return () => clearTimeout(timer);
   }, []);
@@ -332,13 +414,13 @@ export default function WebcamSection() {
   // Sync speak with language toggling
   useEffect(() => {
     if (currentLang === 'hi') {
-      speakNovaText("नमस्ते! मैं प्रोफेसर नोवा हूं। आपकी एआई भौतिकी प्रयोगशाला में आपका स्वागत है।");
+      speakNovaText("नमस्ते! मैं प्रोफेसर नोवा हूं। आपकी एआई भौतिकी प्रयोगशाला में आपका स्वागत है।", 'hi');
     } else if (currentLang === 'es') {
-      speakNovaText("¡Hola! Soy la Profesora Nova. Bienvenido a su laboratorio de física de Inteligencia Artificial.");
+      speakNovaText("¡Hola! Soy la Profesora Nova. Bienvenido a su laboratorio de física de Inteligencia Artificial.", 'es');
     } else if (currentLang === 'fr') {
-      speakNovaText("Bonjour! Je suis le Professeur Nova. Bienvenue dans votre laboratoire de physique.");
+      speakNovaText("Bonjour! Je suis le Professeur Nova. Bienvenue dans votre laboratoire de physique.", 'fr');
     } else {
-      speakNovaText("Welcome to the laboratory! I am Professor Nova.");
+      speakNovaText("Welcome to the laboratory! I am Professor Nova.", 'en');
     }
   }, [currentLang]);
 
@@ -359,9 +441,25 @@ export default function WebcamSection() {
     setTime(0);
     setChartData([]);
     
-    const step1Speech = "Welcome judges! Initiating the Live Lab calibration for the physical pendulum system. Locking computer vision target and calibrating coordinates.";
-    setNovaCaption(step1Speech);
-    speakNovaText(step1Speech);
+    const currentDemo = demoSpeeches[currentLang] || demoSpeeches.en;
+    const voices = typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis.getVoices() : [];
+    const hasHindiVoice = voices.some(v => {
+      const l = v.lang.toLowerCase();
+      const n = v.name.toLowerCase();
+      return (l.startsWith('hi') || n.includes('hindi')) && !l.startsWith('en');
+    });
+
+    const getStepSpeech = (stepKey: 'step1' | 'step2' | 'step3' | 'step4' | 'wrap') => {
+      if (currentLang === 'hi' && !hasHindiVoice) {
+        const phoneticKey = `${stepKey}_phonetic` as keyof typeof currentDemo;
+        return (currentDemo as any)[phoneticKey] || (currentDemo as any)[stepKey];
+      }
+      return (currentDemo as any)[stepKey];
+    };
+
+    const step1Speech = getStepSpeech('step1');
+    setNovaCaption(currentDemo.step1);
+    speakNovaText(step1Speech, currentLang);
 
     let progress = 1;
     if (demoIntervalRef.current) clearInterval(demoIntervalRef.current);
@@ -374,9 +472,9 @@ export default function WebcamSection() {
         // Step 2: Digital twin synchronization
         setCvBobDetected(true);
         setVerificationPercent(78);
-        const step2Speech = "Synchronizing the virtual Digital Twin. Our computer vision tracks physical coordinates, calculating velocity, displacement, and mechanical energy conservation in real time.";
-        setNovaCaption(step2Speech);
-        speakNovaText(step2Speech);
+        const step2Speech = getStepSpeech('step2');
+        setNovaCaption(currentDemo.step2);
+        speakNovaText(step2Speech, currentLang);
         setSimSync(99.8);
         setAccuracy(99.5);
       } 
@@ -386,9 +484,9 @@ export default function WebcamSection() {
         setCvKinematicsVerified(true);
         setVerificationPercent(99.4);
         
-        const step3Speech = "Success! Physical experiment verified at 99.4% accuracy rate. Simple Harmonic Motion is fully confirmed. Unlocking your Rare Gravity Pioneer Achievement Badge.";
-        setNovaCaption(step3Speech);
-        speakNovaText(step3Speech);
+        const step3Speech = getStepSpeech('step3');
+        setNovaCaption(currentDemo.step3);
+        speakNovaText(step3Speech, currentLang);
         
         setAchievementToast({
           title: 'Gravity Pioneer',
@@ -396,15 +494,15 @@ export default function WebcamSection() {
         });
 
         // Trigger local notification sound or message
-        handleAutoSaveAction("Rare badge unlocked: Gravity Pioneer! 🏆");
+        handleAutoSaveAction(currentLang === 'hi' ? "दुर्लभ बैज अनलॉक: ग्रैविटी पायनियर! 🏆" : "Rare badge unlocked: Gravity Pioneer! 🏆");
       }
       else if (progress === 4) {
         // Step 4: PDF Compilation and Direct Download Trigger
-        const step4Speech = "Compiling complete scientific lab observations. Directly initiating download of the custom PDF Lab Report compiled via FastAPI and ReportLab!";
-        setNovaCaption(step4Speech);
-        speakNovaText(step4Speech);
+        const step4Speech = getStepSpeech('step4');
+        setNovaCaption(currentDemo.step4);
+        speakNovaText(step4Speech, currentLang);
 
-        handleAutoSaveAction("FastAPI backend compiling scientific PDF report... 📄");
+        handleAutoSaveAction(currentLang === 'hi' ? "फास्टएपीआई बैकएंड रिपोर्ट संकलित कर रहा है... 📄" : "FastAPI backend compiling scientific PDF report... 📄");
 
         try {
           const apiHost = getApiBaseUrl();
@@ -435,20 +533,20 @@ export default function WebcamSection() {
             document.body.appendChild(a);
             a.click();
             a.remove();
-            handleAutoSaveAction('Lab Report PDF downloaded successfully! 📄');
+            handleAutoSaveAction(currentLang === 'hi' ? 'लैब रिपोर्ट पीडीएफ डाउनलोड हो गई! 📄' : 'Lab Report PDF downloaded successfully! 📄');
           } else {
             throw new Error("FastAPI build failed");
           }
         } catch (err) {
           console.warn("FastAPI fallback report download simulation", err);
-          handleAutoSaveAction('Offline Fallback: STEM Report Compiled!');
+          handleAutoSaveAction(currentLang === 'hi' ? 'ऑफ़लाइन फ़ॉलबैक: STEM रिपोर्ट तैयार!' : 'Offline Fallback: STEM Report Compiled!');
         }
       }
       else if (progress === 5) {
         // Step 5: Wrap-up
-        const wrapSpeech = "Judge demonstration complete! The live Digital Twin mirrors physical mechanics and compiles complete metrics. What else would you like to explore today?";
-        setNovaCaption(wrapSpeech);
-        speakNovaText(wrapSpeech);
+        const wrapSpeech = getStepSpeech('wrap');
+        setNovaCaption(currentDemo.wrap);
+        speakNovaText(wrapSpeech, currentLang);
         
         setDemoActive(false);
         setAiStatus('Analyzing');

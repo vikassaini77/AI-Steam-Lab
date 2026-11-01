@@ -166,19 +166,45 @@ export default function AITutorPanel() {
   };
 
   const handleSpeak = (text: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
     // Clean markdown bold/italic asterisks before speaking
     const cleanText = text.replace(/[*#]/g, '');
+    const isHindi = /[\u0900-\u097F]/.test(cleanText);
+    const isSpanish = /[áéíóúñ¿¡]/i.test(cleanText);
+    const isFrench = /[àâçéèêëîïôûùüÿœæ]/i.test(cleanText);
+
+    let speechLang = 'en-US';
+    if (isHindi) speechLang = 'hi-IN';
+    else if (isSpanish) speechLang = 'es-ES';
+    else if (isFrench) speechLang = 'fr-FR';
+
     const utterance = new SpeechSynthesisUtterance(cleanText);
-    
-    if (botVoiceURI) {
-      const voices = window.speechSynthesis.getVoices();
-      const selectedVoice = voices.find(v => v.voiceURI === botVoiceURI);
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-      }
+    utterance.lang = speechLang;
+
+    const voices = window.speechSynthesis.getVoices();
+    let targetVoice: SpeechSynthesisVoice | null = null;
+
+    if (isHindi) {
+      targetVoice = voices.find(v => {
+        const l = v.lang.toLowerCase();
+        const n = v.name.toLowerCase();
+        const isH = l.startsWith('hi') || l.includes('hi-') || l.includes('hi_');
+        const isHN = n.includes('hindi') || n.includes('swara') || n.includes('madhur') || n.includes('kalpana') || n.includes('hemant');
+        return (isH || isHN) && !l.startsWith('en');
+      }) || null;
+    } else if (isSpanish) {
+      targetVoice = voices.find(v => v.lang.toLowerCase().startsWith('es')) || null;
+    } else if (isFrench) {
+      targetVoice = voices.find(v => v.lang.toLowerCase().startsWith('fr')) || null;
+    } else if (botVoiceURI) {
+      targetVoice = voices.find(v => v.voiceURI === botVoiceURI) || null;
     }
-    
+
+    if (targetVoice) {
+      utterance.voice = targetVoice;
+    }
+
     window.speechSynthesis.speak(utterance);
   };
 
