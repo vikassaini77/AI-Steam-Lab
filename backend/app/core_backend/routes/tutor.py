@@ -194,7 +194,7 @@ def get_tutor_status():
 async def evaluate_student_answer(
     request: Request,
     eval_req: ConceptEvaluationRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_optional_current_user),
     tutor_svc: AITutorService = Depends(get_tutor_service),
 ):
     """
@@ -218,7 +218,7 @@ async def evaluate_student_answer(
 async def chat_with_tutor(
     request: Request,
     req: ChatRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_optional_current_user),
     tutor_svc: AITutorService = Depends(get_tutor_service),
     db_manager = Depends(get_db),
 ):
@@ -262,7 +262,7 @@ async def chat_with_tutor(
 async def delete_user_memories(
     request: Request,
     session_id: Optional[str] = None,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_optional_current_user),
     active_db = Depends(get_db),
 ):
     """
@@ -296,7 +296,7 @@ async def delete_user_memories(
 async def delete_single_memory(
     request: Request,
     memory_id: int,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_optional_current_user),
     active_db = Depends(get_db),
 ):
     """
@@ -330,7 +330,7 @@ async def delete_single_memory(
 @limiter.limit("5/minute")
 async def export_user_memories(
     request: Request,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_optional_current_user),
     active_db = Depends(get_db),
 ):
     """
@@ -361,7 +361,7 @@ async def list_user_memories(
     session_id: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_optional_current_user),
     active_db = Depends(get_db),
 ):
     """
@@ -400,7 +400,7 @@ async def list_user_memories(
 async def get_session_history_endpoint(
     request: Request,
     session_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_optional_current_user),
     active_db = Depends(get_db),
 ):
     """
