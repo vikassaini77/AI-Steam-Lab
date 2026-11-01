@@ -437,15 +437,15 @@ All pull requests and commits to `main` must pass the continuous integration pip
 
 ```mermaid
 graph LR
-    A[Push / PR] --> B[Ruff Linter Check]
-    A --> C[TypeScript Typecheck & ESLint]
-    B --> D[Pytest Regression Suite (535+ Tests)]
-    C --> E[Frontend Vite Build]
-    D --> F[Mandatory Test Verifier]
-    E --> G[Docker Multi-Stage Build]
-    F --> H[Trivy Security Vulnerability Scan]
+    A["Push / PR"] --> B["Ruff Linter Check"]
+    A --> C["TypeScript Typecheck & ESLint"]
+    B --> D["Pytest Regression Suite (535+ Tests)"]
+    C --> E["Frontend Vite Build"]
+    D --> F["Mandatory Test Verifier"]
+    E --> G["Docker Multi-Stage Build"]
+    F --> H["Trivy Security Vulnerability Scan"]
     G --> H
-    H -->|0 Critical / High Vulnerabilities| I[Ready for Release]
+    H -->|"0 Critical / High Vulnerabilities"| I["Ready for Release"]
 ```
 
 ### Running Tests and Linting Locally:
@@ -455,24 +455,6 @@ pytest backend/tests/ -v
 
 # Run reproducible performance benchmark suite
 python backend/scripts/run_benchmarks.py --runs 30 --warmup 5
-
-# Verify mandatory test coverage across categories
-python -m app.core_backend.core.test_suite_verifier --verify-all
-
-# Run Ruff Python linter
-ruff check backend/app
-
-# Run Frontend typecheck and linting
-cd frontend && npm run typecheck && npm run lint
-```
-    G --> H
-    H -->|0 Critical / High Vulnerabilities| I[Ready for Release]
-```
-
-### Running Tests and Linting Locally:
-```bash
-# Run complete test suite (400+ unit and integration tests)
-pytest backend/tests/ -v
 
 # Verify mandatory test coverage across categories
 python -m app.core_backend.core.test_suite_verifier --verify-all
