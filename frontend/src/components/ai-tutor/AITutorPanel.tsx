@@ -4,6 +4,7 @@ import { Send, Mic, Sparkles, Plus, Square, Download, Share, CheckCircle2, Refre
 import { useChatStore } from '../../lib/chatStore';
 import type { Message } from '../../lib/chatStore';
 import ReactMarkdown from 'react-markdown';
+import { getApiBaseUrl, getAuthHeaders } from '../../lib/api';
 
 export default function AITutorPanel() {
   const { chats = [], activeChatId, addMessage, updateMessage, createNewChat, setMessages, botName, botVoiceURI } = useChatStore();
@@ -245,15 +246,12 @@ export default function AITutorPanel() {
         if (stored) experimentState = JSON.parse(stored);
       } catch (err) {}
 
-      const apiHost = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? `${window.location.protocol}//${window.location.hostname}:8000`
-        : window.location.origin);
+      const apiHost = getApiBaseUrl();
+      const headers = await getAuthHeaders();
 
       const response = await fetch(`${apiHost}/api/tutor/chat/stream`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers,
         body: JSON.stringify({
           prompt: userPrompt,
           history: formattedHistory,

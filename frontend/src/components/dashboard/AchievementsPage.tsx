@@ -7,6 +7,7 @@ import { pushNotification } from "../../lib/notificationStore";
 import { useUserStore } from "../../store/useUserStore";
 import { usePhysicsStore } from "../../store/usePhysicsStore";
 import { UserAvatar } from "./DashboardLayout";
+import { getApiBaseUrl } from "../../lib/api";
 
 function AchievementsPage() {
   const [activeTab, setActiveTab] = useState<'badges' | 'leaderboard'>('badges');
@@ -48,7 +49,7 @@ function AchievementsPage() {
 
     const fetchLeaderboard = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const API_URL = getApiBaseUrl();
         const response = await fetch(`${API_URL}/api/gamification/leaderboard`);
         if (response.ok) {
           const data = await response.json();

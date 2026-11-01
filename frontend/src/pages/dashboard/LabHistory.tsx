@@ -16,6 +16,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { pushNotification } from '../../lib/notificationStore';
+import { getApiBaseUrl, getAuthHeaders } from '../../lib/api';
 
 interface Experiment {
   id: string;
@@ -44,14 +45,13 @@ export default function LabHistory() {
   const [loading, setLoading] = useState<boolean>(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const apiHost = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? `${window.location.protocol}//${window.location.hostname}:8000`
-    : window.location.origin);
+  const apiHost = getApiBaseUrl();
 
   const fetchHistory = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${apiHost}/api/experiments/history`);
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${apiHost}/api/experiments/history`, { headers });
       if (res.ok) {
         const data = await res.json();
         // Handle both array and {history: array} response formats

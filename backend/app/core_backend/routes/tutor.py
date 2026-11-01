@@ -11,6 +11,7 @@ from app.ai_agent.tutor_service import AITutorService
 from app.ai_agent.learning_evaluation import EvaluationResult
 from app.core_backend.core.dependencies import (
     get_current_user,
+    get_optional_current_user,
     get_db,
     get_tutor_service,
     get_database_manager,

@@ -34,6 +34,7 @@ import {
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 import { pushNotification } from '../../lib/notificationStore';
 import { useChatStore } from '../../lib/chatStore';
+import { getApiBaseUrl, getAuthHeaders } from '../../lib/api';
 
 // Comprehensive multi-language resource pack
 const translations = {
@@ -406,13 +407,12 @@ export default function WebcamSection() {
         handleAutoSaveAction("FastAPI backend compiling scientific PDF report... 📄");
 
         try {
-          const apiHost = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-            ? `${window.location.protocol}//${window.location.hostname}:8000`
-            : window.location.origin);
+          const apiHost = getApiBaseUrl();
+          const headers = await getAuthHeaders();
             
           const response = await fetch(`${apiHost}/api/experiments/generate-report`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({
               experiment_name: 'Pendulum Harmonic Motion',
               student_name: 'Hackathon Judge',
@@ -907,11 +907,12 @@ export default function WebcamSection() {
 
     // ── Tier 2: HTTP POST fallback ──
     const tryHttpFallback = async () => {
-      const apiHost = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`;
+      const apiHost = getApiBaseUrl();
+      const headers = await getAuthHeaders();
       try {
         const res = await fetch(`${apiHost}/api/cv/process-frame`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({ image: 'data:image/jpeg;base64,/9j/', tracking_method: 'color', color_target: 'red', px_to_meters: 0.005 }),
           signal: AbortSignal.timeout(2000)
         });
@@ -1099,9 +1100,8 @@ export default function WebcamSection() {
   const saveExperimentSession = async () => {
     handleAutoSaveAction("💾 Archiving live session to lab database...");
     try {
-      const apiHost = import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? `${window.location.protocol}//${window.location.hostname}:8000`
-        : window.location.origin);
+      const apiHost = getApiBaseUrl();
+      const headers = await getAuthHeaders();
 
       const calcPeakVel = cameraActive && realPhysics ? realPhysics.speed : (amplitude * (Math.PI / 180) * Math.sqrt(9.81 / length) * length);
       const calcMaxDisp = cameraActive && realPhysics ? (realPhysics.distance || 0.6) : (length * Math.sin(amplitude * Math.PI / 180));
@@ -1110,7 +1110,7 @@ export default function WebcamSection() {
 
       const response = await fetch(`${apiHost}/api/experiments/save`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           name: 'Live Pendulum Oscillation',
           metrics: {

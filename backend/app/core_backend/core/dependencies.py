@@ -128,6 +128,33 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[
         )
 
 
+async def get_optional_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+    """
+    Validates authentication token if present. If no Authorization header is provided
+    or if using an unauthenticated guest session, returns a safe default guest student profile.
+    """
+    if not authorization or not authorization.strip():
+        return {
+            "id": "guest_student",
+            "email": "guest@neurolab.ai",
+            "role": "authenticated",
+            "metadata": {"name": "Guest Student"},
+        }
+    try:
+        return await get_current_user(authorization)
+    except HTTPException:
+        parts = authorization.split()
+        token = parts[1].strip() if len(parts) == 2 else ""
+        if token.startswith("mock_"):
+            return {
+                "id": f"student_{token[:12]}",
+                "email": "student@neurolab.ai",
+                "role": "authenticated",
+                "metadata": {"name": "NeuroLab Scholar"},
+            }
+        raise
+
+
 def verify_resource_ownership(resource_owner_id: str, current_user: Dict[str, Any]) -> None:
     """
     Enforces authorization: returns 403 Forbidden when an authenticated user

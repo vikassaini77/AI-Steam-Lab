@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Trophy, Medal, Star, Target, Crown } from 'lucide-react';
 import { UserAvatar } from '../../components/dashboard/DashboardLayout';
+import { getApiBaseUrl } from '../../lib/api';
 
 interface LeaderboardEntry {
   id: string | number;
@@ -34,7 +35,7 @@ export default function LeaderboardPage() {
 
     const fetchLeaderboard = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const API_URL = getApiBaseUrl();
         const response = await fetch(`${API_URL}/api/gamification/leaderboard`);
         if (response.ok) {
           const data = await response.json();
