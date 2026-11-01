@@ -196,10 +196,13 @@ class ExperimentData(BaseModel):
 class GamificationXP(BaseModel):
     user_id: Optional[str] = None
     action: str = Field(default="general_award", max_length=100)
-    amount: int = Field(..., gt=0, le=500, description="XP award amount, strictly positive and capped at 500")
+    amount: Optional[int] = Field(None, gt=0, le=500, description="Optional client-requested amount; authoritative server rules calculate actual award")
     event_id: Optional[str] = Field(None, max_length=128, description="Unique client or event idempotency key")
     idempotency_key: Optional[str] = Field(None, max_length=128, description="Alias for event_id")
     concept: Optional[str] = Field(None, max_length=100)
+    experiment_id: Optional[str] = Field(None, max_length=128, description="Verified experiment reference ID")
+    evaluation_id: Optional[str] = Field(None, max_length=128, description="Verified evaluation reference ID")
+    activity_id: Optional[str] = Field(None, max_length=128, description="Generic activity identifier")
     metadata: Optional[Dict[str, Any]] = None
 
 

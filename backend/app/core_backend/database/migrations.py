@@ -188,6 +188,17 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
     (5, "005_user_achievements_and_badges", MIGRATION_V5_SQL),
 ]
 
+# Rollback SQL definitions for each migration version
+MIGRATION_ROLLBACK_SQL: Dict[int, str] = {
+    5: "DROP TABLE IF EXISTS user_achievements CASCADE;",
+    4: "DROP TABLE IF EXISTS xp_ledger CASCADE;",
+    3: "DROP INDEX IF EXISTS idx_memories_embedding_cosine; DROP INDEX IF EXISTS idx_memories_fts;",
+    2: "DROP INDEX IF EXISTS idx_memories_user_session; DROP INDEX IF EXISTS idx_memories_active_search;",
+    1: "DROP TABLE IF EXISTS daily_usage, mastery_records, experiments, user_xp, memories CASCADE;",
+}
+
+MIGRATION_ADVISORY_LOCK_ID = 88990011
+
 
 def check_pgvector_availability(conn) -> Dict[str, Any]:
     """
@@ -307,10 +318,18 @@ def verify_search_indexes(conn) -> Dict[str, Any]:
     return results
 
 
-def run_migrations(url: Optional[str] = None, target_version: Optional[int] = None) -> int:
+def run_migrations(
+    url: Optional[str] = None,
+    target_version: Optional[int] = None,
+    auto_backup: bool = True,
+) -> int:
     """
     Executes pending schema migrations using an isolated, dedicated administrative connection.
-    Does not use the application runtime connection pool.
+    Guarantees:
+    - Concurrency protection: PostgreSQL session-level advisory lock prevents race conditions
+      across multiple concurrent container or worker startups.
+    - Pre-migration backup: Automatically captures a transactional snapshot before applying changes.
+    - Atomicity & Rollback: Each migration commits individually; errors trigger rollback of the current step.
     Returns the final current schema version after migrations.
     """
     from app.core_backend.database.pgvector_db import get_database_url
@@ -320,7 +339,14 @@ def run_migrations(url: Optional[str] = None, target_version: Optional[int] = No
 
     logger.info("Executing database schema migrations...")
     conn = psycopg2.connect(target_url)
+    lock_acquired = False
     try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            # Concurrency protection: acquire PostgreSQL advisory lock
+            cur.execute("SELECT pg_advisory_lock(%s);", (MIGRATION_ADVISORY_LOCK_ID,))
+            lock_acquired = True
+
         conn.autocommit = False
         with conn.cursor() as cur:
             cur.execute("""
@@ -333,22 +359,32 @@ def run_migrations(url: Optional[str] = None, target_version: Optional[int] = No
         conn.commit()
 
         current_v = get_current_schema_version(conn)
-        applied_count = 0
+        pending_migrations = [
+            (v, n, sql) for v, n, sql in MIGRATIONS
+            if v > current_v and (target_version is None or v <= target_version)
+        ]
 
-        for version, name, sql in MIGRATIONS:
-            if target_version is not None and version > target_version:
-                break
-            if version > current_v:
-                logger.info(f"Applying migration v{version} ({name})...")
-                with conn.cursor() as cur:
-                    cur.execute(sql)
-                    cur.execute(
-                        "INSERT INTO schema_migrations (version, name) VALUES (%s, %s);",
-                        (version, name),
-                    )
-                conn.commit()
-                applied_count += 1
-                logger.info(f"Migration v{version} ({name}) successfully applied.")
+        # Automatic pre-migration backup before applying any new migrations
+        if pending_migrations and current_v > 0 and auto_backup and os.getenv("AUTO_BACKUP_ON_MIGRATION", "true").lower() in ("true", "1"):
+            try:
+                from app.core_backend.database.backup import create_database_backup
+                logger.info(f"Triggering pre-migration backup before applying {len(pending_migrations)} pending migration(s)...")
+                create_database_backup(url=target_url)
+            except Exception as backup_err:
+                logger.warning(f"Pre-migration backup skipped or failed ({backup_err}). Proceeding with migration.")
+
+        applied_count = 0
+        for version, name, sql in pending_migrations:
+            logger.info(f"Applying migration v{version} ({name})...")
+            with conn.cursor() as cur:
+                cur.execute(sql)
+                cur.execute(
+                    "INSERT INTO schema_migrations (version, name) VALUES (%s, %s);",
+                    (version, name),
+                )
+            conn.commit()
+            applied_count += 1
+            logger.info(f"Migration v{version} ({name}) successfully applied.")
 
         final_v = get_current_schema_version(conn)
         pgv_status = check_pgvector_availability(conn)
@@ -365,7 +401,80 @@ def run_migrations(url: Optional[str] = None, target_version: Optional[int] = No
         logger.critical(f"Database schema migration failed: {e}")
         raise
     finally:
+        if lock_acquired:
+            try:
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_unlock(%s);", (MIGRATION_ADVISORY_LOCK_ID,))
+            except Exception:
+                pass
         conn.close()
+
+
+def rollback_migration(version: int, url: Optional[str] = None) -> int:
+    """
+    Rolls back a specific migration version using its defined rollback SQL.
+    Deletes the record from schema_migrations table.
+    """
+    if version not in MIGRATION_ROLLBACK_SQL:
+        raise ValueError(f"No rollback definition available for migration version {version}.")
+
+    from app.core_backend.database.pgvector_db import get_database_url
+    target_url = url or get_database_url()
+    if not target_url:
+        raise RuntimeError("Cannot rollback migration: POSTGRES_URL is not configured.")
+
+    rollback_sql = MIGRATION_ROLLBACK_SQL[version]
+    logger.info(f"Rolling back migration v{version}...")
+
+    conn = psycopg2.connect(target_url)
+    lock_acquired = False
+    try:
+        conn.autocommit = True
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_lock(%s);", (MIGRATION_ADVISORY_LOCK_ID,))
+            lock_acquired = True
+
+        conn.autocommit = False
+        with conn.cursor() as cur:
+            cur.execute(rollback_sql)
+            cur.execute("DELETE FROM schema_migrations WHERE version = %s;", (version,))
+        conn.commit()
+
+        new_v = get_current_schema_version(conn)
+        logger.info(f"Migration v{version} successfully rolled back. Current schema version: {new_v}")
+        return new_v
+    except Exception as e:
+        conn.rollback()
+        logger.critical(f"Rollback of migration v{version} failed: {e}")
+        raise
+    finally:
+        if lock_acquired:
+            try:
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_unlock(%s);", (MIGRATION_ADVISORY_LOCK_ID,))
+            except Exception:
+                pass
+        conn.close()
+
+
+def rollback_to_version(target_version: int, url: Optional[str] = None) -> int:
+    """
+    Rolls back migrations sequentially in reverse order down to target_version.
+    """
+    from app.core_backend.database.pgvector_db import get_database_url
+    target_url = url or get_database_url()
+    conn = psycopg2.connect(target_url)
+    try:
+        curr_v = get_current_schema_version(conn)
+    finally:
+        conn.close()
+
+    while curr_v > target_version:
+        curr_v = rollback_migration(curr_v, url=target_url)
+
+    return curr_v
 
 
 if __name__ == "__main__":

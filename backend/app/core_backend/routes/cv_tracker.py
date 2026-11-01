@@ -3,12 +3,14 @@ import asyncio
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal, Optional, Dict, Any, List
-from fastapi import APIRouter, Request, Depends, HTTPException, status
+from fastapi import APIRouter, Request, Depends, HTTPException, status, Body, Query
 from pydantic import BaseModel, Field, model_validator
 from app.core_backend.core.dependencies import get_current_user
 from app.core_backend.core.limiter import limiter
 from app.machine_learning.cv_service import (
     CVTracker,
+    CVTrackerSessionManager,
+    cv_tracker_manager,
     Detection,
     FrameResult,
     InvalidImageError,
@@ -69,6 +71,16 @@ class FrameProcessRequest(BaseModel):
         None,
         max_length=7_000_000,
         description="Alternative key for base64 encoded frame",
+    )
+    session_id: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="Camera session identifier to isolate tracking state across multiple camera sessions",
+    )
+    camera_id: Optional[str] = Field(
+        default="cam0",
+        max_length=100,
+        description="Camera feed identifier (e.g. cam0, overhead, side_view) to isolate multi-camera tracking states",
     )
     tracking_method: Optional[TrackingMethod] = Field(
         default=TrackingMethod.COLOR,
@@ -146,13 +158,51 @@ class CVReadinessResponse(BaseModel):
     ready: bool = Field(..., description="Whether CV model inference is ready")
     active_model: str = Field(..., description="Name of the active detection model")
     yolo_loaded: bool = Field(..., description="Whether YOLOv8 weights are loaded")
+    yolo_status: Optional[str] = Field(default="loaded", description="YOLO weights loading status")
+    yolo_error: Optional[str] = Field(default=None, description="Diagnostic error if weights failed to load")
     classes_count: int = Field(..., ge=0, description="Detectable classes count")
     supported_methods: List[str] = Field(..., description="List of supported tracking methods")
+
+
+class ResetTrackerRequest(BaseModel):
+    session_id: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="Session ID to reset. If omitted, resets default session for authenticated user.",
+    )
+    camera_id: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="Camera ID to reset. If omitted with all_cameras=True, resets all cameras in the session.",
+    )
+    all_cameras: Optional[bool] = Field(
+        default=False,
+        description="Whether to reset all cameras in the session.",
+    )
+    all_sessions: Optional[bool] = Field(
+        default=False,
+        description="Whether to reset all camera sessions belonging to the authenticated user.",
+    )
+
+    model_config = {
+        "extra": "forbid",
+    }
 
 
 class ResetTrackerResponse(BaseModel):
     status: str = Field(..., description="Operation status (success)")
     message: str = Field(..., description="Status description")
+    user_id: Optional[str] = Field(None, description="Authenticated user ID")
+    session_id: Optional[str] = Field(None, description="Reset session identifier")
+    camera_id: Optional[str] = Field(None, description="Reset camera identifier")
+
+
+class CleanupSessionsResponse(BaseModel):
+    status: str = Field(..., description="Operation status (success)")
+    purged_count: int = Field(..., description="Number of expired sessions purged")
+    remaining_count: int = Field(..., description="Number of active sessions remaining")
+    cutoff_timestamp: float = Field(..., description="Cutoff epoch timestamp used for pruning")
+    ttl_seconds: int = Field(..., description="TTL configuration in seconds")
 
 
 class PhysicsTrackingMetrics(BaseModel):
@@ -174,6 +224,8 @@ class FrameProcessResponse(BaseModel):
     model_name: str = Field(..., description="Inference model or detector used")
     inference_latency_ms: float = Field(..., description="Inference execution duration in milliseconds")
     user_id: Optional[str] = Field(None, description="Authenticated user ID who submitted the frame")
+    session_id: Optional[str] = Field(None, description="Session ID for the isolated tracker instance")
+    camera_id: Optional[str] = Field(default="cam0", description="Camera ID for the isolated tracker instance")
     model_version: Optional[str] = Field(default="v1.0.0", description="Semantic model version")
     configuration_version: Optional[str] = Field(default="cv_config_v1.0", description="Configuration version")
     preprocessing_version: Optional[str] = Field(default="bgr_to_hsv_v1", description="Preprocessing version")
@@ -217,12 +269,81 @@ def check_cv_readiness():
 
 
 @router.post("/reset-tracker", response_model=ResetTrackerResponse)
-def reset_cv_tracker(current_user: dict = Depends(get_current_user)):
+async def reset_cv_tracker(
+    request: Request,
+    payload: Optional[ResetTrackerRequest] = Body(default=None),
+    session_id: Optional[str] = Query(default=None),
+    camera_id: Optional[str] = Query(default=None),
+    current_user: dict = Depends(get_current_user),
+):
     """
-    Resets object trajectory tracking history and clears persistent IDs.
+    Resets object trajectory tracking history and clears persistent IDs
+    isolated to the authenticated user and specified session/camera.
+    Guarantees other users' tracking states and sessions are not reset or impacted.
     """
-    cv_tracker.reset_tracker()
-    return {"status": "success", "message": "Object trajectory tracker reset."}
+    canonical_uid = str(current_user["id"])
+    resolved_session = None
+    resolved_camera = None
+    all_sessions = False
+    all_cameras = False
+
+    if payload is not None:
+        resolved_session = payload.session_id
+        resolved_camera = payload.camera_id
+        all_sessions = bool(payload.all_sessions)
+        all_cameras = bool(payload.all_cameras)
+
+    if not resolved_session and not all_sessions:
+        resolved_session = (
+            session_id
+            or request.headers.get("X-Session-ID")
+            or request.query_params.get("session_id")
+            or "default"
+        )
+    if not resolved_camera and not all_cameras:
+        resolved_camera = (
+            camera_id
+            or request.headers.get("X-Camera-ID")
+            or request.query_params.get("camera_id")
+        )
+
+    await cv_tracker_manager.reset_tracker(
+        user_id=canonical_uid,
+        session_id=resolved_session,
+        camera_id=resolved_camera,
+        all_sessions=all_sessions,
+        all_cameras=all_cameras,
+    )
+    if all_sessions:
+        target_desc = "all sessions"
+    elif all_cameras or not resolved_camera:
+        target_desc = f"session '{resolved_session}' (all cameras)"
+    else:
+        target_desc = f"session '{resolved_session}', camera '{resolved_camera}'"
+
+    return {
+        "status": "success",
+        "message": f"Object trajectory tracker reset for {target_desc}.",
+        "user_id": canonical_uid,
+        "session_id": "all" if all_sessions else resolved_session,
+        "camera_id": "all" if all_cameras else (resolved_camera or "all"),
+    }
+
+
+@router.post("/cleanup-sessions", response_model=CleanupSessionsResponse)
+async def cleanup_cv_sessions(
+    max_age_seconds: Optional[int] = Query(default=None, ge=1, le=86400),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Explicit expiration policy enforcement: purges inactive CV tracking sessions
+    and releases memory, async locks, and cached trajectory states.
+    """
+    stats = cv_tracker_manager.cleanup_expired_sessions(max_age_seconds=max_age_seconds)
+    return {
+        "status": "success",
+        **stats,
+    }
 
 
 @router.post(
@@ -243,8 +364,24 @@ async def process_frame(
     3. Defensively decodes base64 and verifies cv2.imdecode success.
     4. Enforces resolution limit (max 1920x1080).
     5. Rejects corrupt or invalid images with 422.
+    6. Isolates tracking state per authenticated user, session ID, and camera ID.
+    7. Synchronizes state across multi-backend instances using shared store.
     """
     encoded_img = payload.image or payload.frame
+    canonical_uid = str(current_user["id"])
+    resolved_session = (
+        payload.session_id
+        or request.headers.get("X-Session-ID")
+        or request.query_params.get("session_id")
+        or "default"
+    )
+    resolved_camera = (
+        payload.camera_id
+        or request.headers.get("X-Camera-ID")
+        or request.query_params.get("camera_id")
+        or "cam0"
+    )
+    tracker_key = cv_tracker_manager.make_tracker_key(canonical_uid, resolved_session, resolved_camera)
 
     # Concurrency control & execution timeout
     try:
@@ -262,21 +399,28 @@ async def process_frame(
     )
     start_time = time.perf_counter()
     try:
-        results = await asyncio.wait_for(
-            asyncio.to_thread(
-                cv_tracker.process_frame,
-                base64_img=encoded_img,
-                tracking_method=tracking_val,
-                color_target=payload.color_target,
-                px_to_meters=payload.px_to_meters,
-                confidence_threshold=payload.confidence_threshold,
-                nms_threshold=payload.nms_threshold,
-            ),
-            timeout=5.0,
-        )
+        session_lock = cv_tracker_manager.get_session_lock(tracker_key)
+        async with session_lock:
+            tracker = await cv_tracker_manager.get_tracker(canonical_uid, resolved_session, resolved_camera)
+            results = await asyncio.wait_for(
+                asyncio.to_thread(
+                    tracker.process_frame,
+                    base64_img=encoded_img,
+                    tracking_method=tracking_val,
+                    color_target=payload.color_target,
+                    px_to_meters=payload.px_to_meters,
+                    confidence_threshold=payload.confidence_threshold,
+                    nms_threshold=payload.nms_threshold,
+                ),
+                timeout=5.0,
+            )
+            await cv_tracker_manager.save_tracker_state(canonical_uid, resolved_session, tracker, resolved_camera)
+
         duration = time.perf_counter() - start_time
         _record_cv_telemetry(tracking_val, duration, status="success")
-        results["user_id"] = str(current_user["id"])
+        results["user_id"] = canonical_uid
+        results["session_id"] = resolved_session
+        results["camera_id"] = resolved_camera
         return results
     except PayloadTooLargeError as e:
         duration = time.perf_counter() - start_time
@@ -315,10 +459,12 @@ async def process_frame(
 @limiter.limit("120/minute")
 async def process_frame_binary(
     request: Request,
+    session_id: Optional[str] = Query(default=None),
+    camera_id: Optional[str] = Query(default=None),
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Direct binary image upload endpoint.
+    Direct binary image upload endpoint with user, session, and camera tracking isolation.
     Eliminates base64 memory and CPU decoding overhead for high-performance streaming.
     """
     content_length = request.headers.get("content-length")
@@ -328,13 +474,49 @@ async def process_frame_binary(
             detail="Payload too large: Binary video frame exceeds 5MB limit.",
         )
 
+    canonical_uid = str(current_user["id"])
+    resolved_session = (
+        session_id
+        or request.headers.get("X-Session-ID")
+        or request.query_params.get("session_id")
+        or "default"
+    )
+    resolved_camera = (
+        camera_id
+        or request.headers.get("X-Camera-ID")
+        or request.query_params.get("camera_id")
+        or "cam0"
+    )
+    tracker_key = cv_tracker_manager.make_tracker_key(canonical_uid, resolved_session, resolved_camera)
+
+    try:
+        await asyncio.wait_for(_cv_concurrency_semaphore.acquire(), timeout=1.0)
+    except (asyncio.TimeoutError, TimeoutError):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="CV processing server busy: Maximum simultaneous frame tasks reached.",
+        )
+
     raw_bytes = await request.body()
     start_time = time.perf_counter()
     try:
-        results = cv_tracker.process_binary_frame(raw_bytes)
+        session_lock = cv_tracker_manager.get_session_lock(tracker_key)
+        async with session_lock:
+            tracker = await cv_tracker_manager.get_tracker(canonical_uid, resolved_session, resolved_camera)
+            results = await asyncio.wait_for(
+                asyncio.to_thread(
+                    tracker.process_binary_frame,
+                    raw_bytes,
+                ),
+                timeout=5.0,
+            )
+            await cv_tracker_manager.save_tracker_state(canonical_uid, resolved_session, tracker, resolved_camera)
+
         duration = time.perf_counter() - start_time
         _record_cv_telemetry("binary_stream", duration, status="success")
-        results["user_id"] = str(current_user["id"])
+        results["user_id"] = canonical_uid
+        results["session_id"] = resolved_session
+        results["camera_id"] = resolved_camera
         return results
     except PayloadTooLargeError as e:
         duration = time.perf_counter() - start_time
@@ -350,6 +532,23 @@ async def process_frame_binary(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
+    except (asyncio.TimeoutError, TimeoutError):
+        duration = time.perf_counter() - start_time
+        _record_cv_telemetry("binary_stream", duration, status="timeout", error_type="timeout")
+        raise HTTPException(
+            status_code=status.HTTP_408_REQUEST_TIMEOUT,
+            detail="Binary frame processing timed out.",
+        )
+    except Exception as e:
+        duration = time.perf_counter() - start_time
+        _record_cv_telemetry("binary_stream", duration, status="error", error_type=type(e).__name__)
+        logger.exception(f"Unexpected error during binary frame processing: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal error while processing binary frame.",
+        )
+    finally:
+        _cv_concurrency_semaphore.release()
 
 
 @router.post("/engagement", response_model=EngagementResponse)

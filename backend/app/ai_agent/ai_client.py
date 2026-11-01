@@ -5,7 +5,9 @@ Encapsulates LLM provider calls, prompting configurations, token bounds,
 and non-blocking streaming chunk generation. Decoupled from database, HTTP, and SSE.
 """
 import asyncio
+import inspect
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, AsyncGenerator, Optional, Protocol, runtime_checkable
 
@@ -15,6 +17,30 @@ from app.logger import logger
 
 MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "1024"))
 MODEL_TIMEOUT_SECONDS = float(os.getenv("MODEL_TIMEOUT_SECONDS", "30.0"))
+
+
+async def check_cancellation(is_cancelled: Optional[Any]) -> bool:
+    """
+    Safely inspects cancellation indicator across:
+    - async callables (e.g. Starlette request.is_disconnected)
+    - sync callables (lambdas, functions)
+    - asyncio.Event or threading.Event
+    - boolean values
+    """
+    if is_cancelled is None:
+        return False
+    try:
+        if isinstance(is_cancelled, (asyncio.Event, threading.Event)):
+            return is_cancelled.is_set()
+        if callable(is_cancelled):
+            res = is_cancelled()
+            if inspect.isawaitable(res):
+                return await res
+            return bool(res)
+        return bool(is_cancelled)
+    except Exception as exc:
+        logger.debug(f"Error checking cancellation status: {exc}")
+        return False
 
 
 @runtime_checkable
@@ -129,13 +155,27 @@ class GeminiAIClient:
                     ),
                     timeout=timeout_seconds,
                 )
-                async for chunk in response:
-                    if is_cancelled and await is_cancelled():
-                        logger.info("Stream cancelled by client disconnection.")
-                        break
-                    text = getattr(chunk, "text", "")
-                    if text:
-                        yield text
+                if hasattr(response, "__aiter__"):
+                    resp_iter = aiter(response)
+                    while True:
+                        if await check_cancellation(is_cancelled):
+                            logger.info("Stream cancelled by client disconnection.")
+                            break
+                        try:
+                            chunk = await asyncio.wait_for(anext(resp_iter), timeout=timeout_seconds)
+                        except StopAsyncIteration:
+                            break
+                        text = getattr(chunk, "text", "")
+                        if text:
+                            yield text
+                else:
+                    for chunk in response:
+                        if await check_cancellation(is_cancelled):
+                            logger.info("Stream cancelled by client disconnection.")
+                            break
+                        text = getattr(chunk, "text", "")
+                        if text:
+                            yield text
             except (asyncio.TimeoutError, TimeoutError) as to_err:
                 raise TimeoutError(f"Model generation timed out after {timeout_seconds}s") from to_err
         else:
@@ -143,6 +183,7 @@ class GeminiAIClient:
             queue: asyncio.Queue = asyncio.Queue()
             loop = asyncio.get_running_loop()
             sentinel = object()
+            stop_event = threading.Event()
 
             def _sync_worker():
                 try:
@@ -151,7 +192,12 @@ class GeminiAIClient:
                         stream=True,
                         generation_config=generation_config,
                     )
+                    if stop_event.is_set():
+                        return
                     for chunk in res:
+                        if stop_event.is_set():
+                            logger.info("Sync stream worker aborted early due to cancellation.")
+                            return
                         text = getattr(chunk, "text", str(chunk))
                         loop.call_soon_threadsafe(queue.put_nowait, ("chunk", text))
                     loop.call_soon_threadsafe(queue.put_nowait, ("done", sentinel))
@@ -163,20 +209,24 @@ class GeminiAIClient:
             else:
                 loop.run_in_executor(None, _sync_worker)
 
-            while True:
-                if is_cancelled and await is_cancelled():
-                    logger.info("Sync stream worker cancelled by client disconnection.")
-                    break
-                try:
-                    msg_type, val = await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
-                except (asyncio.TimeoutError, TimeoutError) as to_err:
-                    raise TimeoutError(f"Model generation timed out after {timeout_seconds}s") from to_err
+            try:
+                while True:
+                    if await check_cancellation(is_cancelled):
+                        logger.info("Sync stream worker cancelled by client disconnection.")
+                        stop_event.set()
+                        break
+                    try:
+                        msg_type, val = await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
+                    except (asyncio.TimeoutError, TimeoutError) as to_err:
+                        stop_event.set()
+                        raise TimeoutError(f"Model generation timed out after {timeout_seconds}s") from to_err
 
-                if msg_type == "chunk":
-                    if val:
-                        yield val
-                elif msg_type == "done":
-                    break
-                elif msg_type == "error":
-                    raise val
-
+                    if msg_type == "chunk":
+                        if val:
+                            yield val
+                    elif msg_type == "done":
+                        break
+                    elif msg_type == "error":
+                        raise val
+            finally:
+                stop_event.set()

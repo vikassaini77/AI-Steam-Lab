@@ -6,6 +6,8 @@ from typing import Optional, Dict, Any
 from fastapi import Header, HTTPException, status, Request
 import jwt
 from app.core_backend.core.supabase_client import get_supabase_client
+from app.core_backend.core.jwt_verifier import SupabaseJWTVerifier
+from app.core_backend.core.token_revocation import is_token_revoked, clear_revoked_tokens
 
 
 def get_token_from_header(authorization: Optional[str] = Header(None)) -> str:
@@ -36,15 +38,36 @@ def get_token_from_header(authorization: Optional[str] = Header(None)) -> str:
     return token
 
 
+_shared_jwt_verifier: Optional[SupabaseJWTVerifier] = None
+
+
+def get_jwt_verifier() -> SupabaseJWTVerifier:
+    """Returns singleton instance of SupabaseJWTVerifier initialized from environment."""
+    global _shared_jwt_verifier
+    if _shared_jwt_verifier is None:
+        _shared_jwt_verifier = SupabaseJWTVerifier.from_env()
+    return _shared_jwt_verifier
+
+
 async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     Validates the Supabase access token on every protected backend request.
     1. Rejects missing, malformed, or empty tokens with 401 Unauthorized.
     2. Rejects expired tokens with 401 Unauthorized.
-    3. Rejects incorrectly signed or invalid tokens with 401 Unauthorized.
-    4. Authenticates against SUPABASE_JWT_SECRET (if configured) or the Supabase Auth API.
+    3. Rejects incorrectly signed, disallowed algorithm, or invalid tokens with 401 Unauthorized.
+    4. Explicitly validates iss, aud, sub, exp, and iat claims.
+    5. Authenticates locally via SupabaseJWTVerifier (supporting key rotation) if configured,
+       or falls back to the Supabase Auth API.
     """
     token = get_token_from_header(authorization)
+
+    # 1. Reject revoked/blacklisted sessions immediately
+    if is_token_revoked(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has been revoked: session has ended",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     # Fast-check expiration using standard JWT decoding without signature
     try:
@@ -63,38 +86,13 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> Dict[
             headers={"WWW-Authenticate": "Bearer"},
         )
     except Exception:
-        # Continue to signature verification
+        # Continue to verifier
         pass
 
-    # 1. If SUPABASE_JWT_SECRET is set, perform local cryptographic verification
-    jwt_secret = os.getenv("SUPABASE_JWT_SECRET")
-    if jwt_secret:
-        try:
-            payload = jwt.decode(
-                token,
-                jwt_secret,
-                algorithms=["HS256"],
-                audience="authenticated",
-                options={"verify_exp": True, "verify_signature": True},
-            )
-            return {
-                "id": payload.get("sub"),
-                "email": payload.get("email"),
-                "role": payload.get("role", "authenticated"),
-                "metadata": payload.get("user_metadata", {}),
-            }
-        except jwt.ExpiredSignatureError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        except jwt.InvalidTokenError as e:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid token signature: {str(e)}",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+    # 1. Local cryptographic verification with explicit claim validation and key rotation
+    verifier = get_jwt_verifier()
+    if verifier.is_configured:
+        return verifier.verify_token(token)
 
     # 2. Verify token validity directly against the Supabase Auth server
     try:
@@ -241,7 +239,14 @@ def get_tutor_service(request: Request = None):
 
 def reset_shared_dependencies():
     """Resets lazy singletons for clean test isolation."""
-    global _shared_db, _shared_tutor_service
+    global _shared_db, _shared_tutor_service, _shared_jwt_verifier
     _shared_db = None
     _shared_tutor_service = None
+    _shared_jwt_verifier = None
+    clear_revoked_tokens()
+    try:
+        from app.core_backend.database.pgvector_db import reset_pgvector_db
+        reset_pgvector_db()
+    except Exception:
+        pass
 

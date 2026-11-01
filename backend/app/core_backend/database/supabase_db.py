@@ -10,6 +10,10 @@ from app.core_backend.database.hybrid_retrieval import (
     execute_in_memory_hybrid_search,
     normalize_query_text,
 )
+from app.core_backend.database.pgvector_db import (
+    TenantIsolationError,
+    _require_valid_user_id,
+)
 
 db_lock = threading.Lock()
 
@@ -96,6 +100,22 @@ class DatabaseManager:
                 if str(exp.get("user_id")) == canonical_uid
             ]
 
+    def count_verified_experiments(self, user_id: str) -> int:
+        """
+        Authoritatively counts verified completed experiments belonging strictly to user_id.
+        Prevents trusting unverified client claims.
+        """
+        if not user_id:
+            return 0
+        canonical_uid = str(user_id)
+        with db_lock:
+            db = self._read_local()
+            return len([
+                exp for exp in db.get("experiments", [])
+                if str(exp.get("user_id")) == canonical_uid
+                and exp.get("inference_status", "completed") in ("completed", None)
+            ])
+
     def get_experiment_by_id(self, experiment_id: str) -> Optional[dict]:
         """
         Fetches an experiment record by ID without exposing it directly.
@@ -129,6 +149,26 @@ class DatabaseManager:
 
         clean_action = str(action or "general_award").strip().lower()
         evt_key = str(event_id) if event_id else f"evt_{canonical_uid}_{clean_action}_{uuid.uuid4().hex[:12]}"
+
+        # Problem 14: In production or when PostgreSQL is configured, delegate to ACID transaction
+        if os.getenv("ENVIRONMENT") == "production" or os.getenv("POSTGRES_URL") or os.getenv("USE_PGVECTOR", "false").lower() in ("true", "1"):
+            try:
+                from app.core_backend.database.pgvector_db import get_pgvector_db, DatabasePersistenceError
+                pg = get_pgvector_db()
+                if pg and not getattr(pg, "is_in_memory_fallback", False):
+                    return pg.record_xp_event(
+                        user_id=canonical_uid,
+                        action=clean_action,
+                        amount=amount,
+                        event_id=evt_key,
+                        concept=concept,
+                        metadata=metadata,
+                    )
+                elif os.getenv("ENVIRONMENT") == "production":
+                    raise DatabasePersistenceError("Production database unavailable for XP transaction.")
+            except Exception as e:
+                if os.getenv("ENVIRONMENT") == "production":
+                    raise
 
         with db_lock:
             db = self._read_local()
@@ -213,6 +253,18 @@ class DatabaseManager:
         Retrieves the immutable audit trail of XP awards for a specific user.
         """
         canonical_uid = str(user_id)
+        if os.getenv("ENVIRONMENT") == "production" or os.getenv("POSTGRES_URL") or os.getenv("USE_PGVECTOR", "false").lower() in ("true", "1"):
+            try:
+                from app.core_backend.database.pgvector_db import get_pgvector_db, DatabasePersistenceError
+                pg = get_pgvector_db()
+                if pg and not getattr(pg, "is_in_memory_fallback", False):
+                    return pg.get_xp_ledger(user_id=canonical_uid, limit=limit)
+                elif os.getenv("ENVIRONMENT") == "production":
+                    raise DatabasePersistenceError("Production database unavailable for XP ledger read.")
+            except Exception:
+                if os.getenv("ENVIRONMENT") == "production":
+                    raise
+
         with db_lock:
             db = self._read_local()
             ledger = db.get("xp_ledger", {})
@@ -229,6 +281,18 @@ class DatabaseManager:
         and reconciles user_xp aggregate.
         """
         canonical_uid = str(user_id)
+        if os.getenv("ENVIRONMENT") == "production" or os.getenv("POSTGRES_URL") or os.getenv("USE_PGVECTOR", "false").lower() in ("true", "1"):
+            try:
+                from app.core_backend.database.pgvector_db import get_pgvector_db, DatabasePersistenceError
+                pg = get_pgvector_db()
+                if pg and not getattr(pg, "is_in_memory_fallback", False):
+                    return pg.reconcile_xp_from_ledger(user_id=canonical_uid)
+                elif os.getenv("ENVIRONMENT") == "production":
+                    raise DatabasePersistenceError("Production database unavailable for XP reconciliation.")
+            except Exception:
+                if os.getenv("ENVIRONMENT") == "production":
+                    raise
+
         with db_lock:
             db = self._read_local()
             ledger = db.get("xp_ledger", {})
@@ -344,12 +408,50 @@ class DatabaseManager:
                 counts[uid] += 1
         return counts
 
-    def save_memory(self, session_id: str, text: str, embedding: list, user_id: Optional[str] = None) -> int:
+    def validate_session_ownership(self, session_id: str, user_id: str) -> bool:
+        """
+        Validates that session_id belongs strictly to user_id.
+        Returns False if the session has memories owned by a different user.
+        """
+        canonical_uid = _require_valid_user_id(user_id, "session ownership validation")
+        if not session_id or not str(session_id).strip():
+            raise TenantIsolationError("A valid session_id is required for session ownership validation.")
+        sess_str = str(session_id).strip()
+        with db_lock:
+            db = self._read_local()
+            for m in db.get("memories", []):
+                if str(m.get("session_id")) == sess_str:
+                    owner = m.get("user_id")
+                    if owner is not None and str(owner) != canonical_uid:
+                        return False
+            return True
+
+    def save_memory(
+        self,
+        session_id: str,
+        text: str,
+        embedding: list,
+        user_id: Optional[str] = None,
+        experiment_id: Optional[str] = None,
+        embedding_model_version: str = "text-embedding-004",
+        retention_days: Optional[int] = None,
+    ) -> int:
         """
         Saves a conversational vector memory tagged with user_id for strict tenant isolation.
-        Returns document ID.
+        Validates session ownership. Returns document ID.
         """
-        canonical_uid = str(user_id) if user_id else None
+        canonical_uid = _require_valid_user_id(user_id, "save_memory")
+        if not session_id or not str(session_id).strip():
+            raise TenantIsolationError("A valid session_id is required to save memory.")
+        sess_str = str(session_id).strip()
+
+        if not self.validate_session_ownership(sess_str, canonical_uid):
+            raise TenantIsolationError(f"Access denied: session '{sess_str}' belongs to another user.")
+
+        now = time.time()
+        days = retention_days if retention_days is not None else int(os.getenv("MEMORY_RETENTION_DAYS", "90"))
+        exp_time = (now + (days * 86400)) if (days is not None and days != 0) else None
+
         with db_lock:
             db = self._read_local()
             if "memories" not in db:
@@ -358,18 +460,34 @@ class DatabaseManager:
             db["memories"].append({
                 "id": doc_id,
                 "user_id": canonical_uid,
-                "session_id": session_id,
+                "session_id": sess_str,
+                "experiment_id": experiment_id,
                 "text": text,
                 "embedding": embedding,
+                "embedding_model_version": embedding_model_version or "text-embedding-004",
+                "created_at": now,
+                "expires_at": exp_time,
+                "is_deleted": False,
             })
             self._write_local(db)
             return doc_id
+
+    def has_user_memories(self, user_id: str) -> bool:
+        """Checks whether the user has any saved tutor memories / inquiry sessions."""
+        if not user_id:
+            return False
+        canonical_uid = str(user_id)
+        with db_lock:
+            db = self._read_local()
+            return any(str(m.get("user_id")) == canonical_uid for m in db.get("memories", []))
 
     def search_memories(
         self,
         query_embedding: Optional[list] = None,
         query_text: str = "",
         user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        experiment_id: Optional[str] = None,
         top_k: int = 3,
         return_metadata: bool = False,
         search_mode: str = "hybrid",
@@ -378,9 +496,15 @@ class DatabaseManager:
     ) -> Union[List[str], List[Dict[str, Any]]]:
         """
         Hybrid search using RRF (Reciprocal Rank Fusion) combining semantic vector
-        search with keyword/technical term matching and tenant ownership filtering.
+        search with keyword/technical term matching and strict tenant ownership filtering.
         Supports search_mode: 'hybrid' | 'semantic' | 'keyword'.
         """
+        canonical_uid = _require_valid_user_id(user_id, "search_memories")
+        sess_str = str(session_id).strip() if session_id and str(session_id).strip() else None
+        if sess_str:
+            if not self.validate_session_ownership(sess_str, canonical_uid):
+                raise TenantIsolationError(f"Access denied: session '{sess_str}' belongs to another user.")
+
         with db_lock:
             db = self._read_local()
             memories = list(db.get("memories", []))
@@ -389,7 +513,9 @@ class DatabaseManager:
             memories=memories,
             query_embedding=query_embedding,
             query_text=query_text,
-            user_id=user_id,
+            user_id=canonical_uid,
+            session_id=sess_str,
+            experiment_id=experiment_id,
             top_k=top_k,
             return_metadata=return_metadata,
             search_mode=search_mode,
@@ -398,6 +524,149 @@ class DatabaseManager:
         )
         self.last_retrieval_metadata = metadata
         return results
+
+    def list_memories(
+        self,
+        user_id: str,
+        session_id: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Lists memories for the authenticated user with strict tenant isolation,
+        optional session scoping, and pagination.
+        """
+        canonical_uid = _require_valid_user_id(user_id, "list_memories")
+        sess_str = str(session_id).strip() if session_id and str(session_id).strip() else None
+        if sess_str:
+            if not self.validate_session_ownership(sess_str, canonical_uid):
+                raise TenantIsolationError(f"Access denied: session '{sess_str}' belongs to another user.")
+
+        limit = max(1, min(limit, 200))
+        offset = max(0, offset)
+
+        with db_lock:
+            db = self._read_local()
+            matched = [
+                {
+                    "id": m.get("id"),
+                    "session_id": m.get("session_id"),
+                    "user_id": str(m.get("user_id")),
+                    "experiment_id": m.get("experiment_id"),
+                    "text": m.get("text"),
+                    "created_at": m.get("created_at"),
+                    "expires_at": m.get("expires_at"),
+                    "embedding_model_version": m.get("embedding_model_version"),
+                }
+                for m in db.get("memories", [])
+                if str(m.get("user_id")) == canonical_uid
+                and not m.get("is_deleted", False)
+                and (sess_str is None or str(m.get("session_id")) == sess_str)
+            ]
+            return matched[offset:offset + limit]
+
+    def get_session_history(
+        self,
+        session_id: str,
+        user_id: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieves chronological conversation history for a specific session.
+        Enforces strict session ownership.
+        """
+        canonical_uid = _require_valid_user_id(user_id, "get_session_history")
+        if not session_id or not str(session_id).strip():
+            raise TenantIsolationError("A valid session_id is required to retrieve session history.")
+        sess_str = str(session_id).strip()
+        if not self.validate_session_ownership(sess_str, canonical_uid):
+            raise TenantIsolationError(f"Access denied: session '{sess_str}' belongs to another user.")
+
+        with db_lock:
+            db = self._read_local()
+            turns = [
+                {
+                    "id": m.get("id"),
+                    "session_id": m.get("session_id"),
+                    "user_id": str(m.get("user_id")),
+                    "experiment_id": m.get("experiment_id"),
+                    "text": m.get("text"),
+                    "created_at": m.get("created_at"),
+                    "expires_at": m.get("expires_at"),
+                    "embedding_model_version": m.get("embedding_model_version"),
+                }
+                for m in db.get("memories", [])
+                if str(m.get("user_id")) == canonical_uid
+                and str(m.get("session_id")) == sess_str
+                and not m.get("is_deleted", False)
+            ]
+            turns.sort(key=lambda x: x.get("created_at") or 0)
+            return turns
+
+    def delete_memory_by_id(self, memory_id: int, user_id: str) -> bool:
+        """Deletes a specific memory with ownership enforcement."""
+        canonical_uid = _require_valid_user_id(user_id, "delete_memory_by_id")
+        if memory_id is None:
+            raise TenantIsolationError("A valid memory_id is required for deletion.")
+        with db_lock:
+            db = self._read_local()
+            memories = db.get("memories", [])
+            for idx, m in enumerate(memories):
+                if m.get("id") == memory_id and str(m.get("user_id")) == canonical_uid:
+                    memories.pop(idx)
+                    self._write_local(db)
+                    return True
+            return False
+
+    def delete_user_memories(
+        self,
+        user_id: str,
+        session_id: Optional[str] = None,
+        hard_delete: bool = True,
+    ) -> int:
+        """Deletes all memories for a user, optionally scoped to a session."""
+        canonical_uid = _require_valid_user_id(user_id, "delete_user_memories")
+        sess_str = str(session_id).strip() if session_id and str(session_id).strip() else None
+        if sess_str:
+            if not self.validate_session_ownership(sess_str, canonical_uid):
+                raise TenantIsolationError(f"Access denied: session '{sess_str}' belongs to another user.")
+
+        with db_lock:
+            db = self._read_local()
+            memories = db.get("memories", [])
+            before_len = len(memories)
+            if hard_delete:
+                db["memories"] = [
+                    m for m in memories
+                    if not (str(m.get("user_id")) == canonical_uid and (sess_str is None or str(m.get("session_id")) == sess_str))
+                ]
+            else:
+                for m in memories:
+                    if str(m.get("user_id")) == canonical_uid and (sess_str is None or str(m.get("session_id")) == sess_str):
+                        m["is_deleted"] = True
+            deleted_count = before_len - len(db["memories"]) if hard_delete else sum(
+                1 for m in memories if str(m.get("user_id")) == canonical_uid and (sess_str is None or str(m.get("session_id")) == sess_str)
+            )
+            self._write_local(db)
+            return deleted_count
+
+    def export_user_memories(self, user_id: str) -> List[Dict[str, Any]]:
+        """Exports all active conversational memories for an account without embedding vectors."""
+        canonical_uid = _require_valid_user_id(user_id, "export_user_memories")
+        with db_lock:
+            db = self._read_local()
+            return [
+                {
+                    "id": m.get("id"),
+                    "session_id": m.get("session_id"),
+                    "experiment_id": m.get("experiment_id"),
+                    "text": m.get("text"),
+                    "created_at": m.get("created_at"),
+                    "expires_at": m.get("expires_at"),
+                    "embedding_model_version": m.get("embedding_model_version"),
+                }
+                for m in db.get("memories", [])
+                if str(m.get("user_id")) == canonical_uid and not m.get("is_deleted", False)
+            ]
 
     def check_and_increment_daily_usage(self, user_id: str, limit: int = 100) -> tuple[bool, int]:
         """

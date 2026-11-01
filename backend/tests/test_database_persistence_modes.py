@@ -10,7 +10,7 @@ if not os.getenv("GEMINI_API_KEY"):
 
 from fastapi.testclient import TestClient
 from app.main import app
-from app.core_backend.core.dependencies import get_current_user
+from app.core_backend.core.dependencies import get_current_user, reset_shared_dependencies
 from app.core_backend.database.pgvector_db import (
     PGVectorManager,
     DatabaseMode,
@@ -33,6 +33,7 @@ def setup_auth_override():
     app.dependency_overrides[get_current_user] = override_user
     yield
     app.dependency_overrides.clear()
+    reset_shared_dependencies()
 
 
 # ==============================================================================

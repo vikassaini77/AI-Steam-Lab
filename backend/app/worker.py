@@ -61,7 +61,36 @@ celery_app.conf.update(
 # In-memory durable task store and idempotency cache fallback
 _task_results_lock = threading.Lock()
 _task_results_store: Dict[str, Dict[str, Any]] = {}
+_task_owners: Dict[str, str] = {}
 _idempotency_cache: Dict[str, Tuple[Dict[str, Any], float]] = {}
+
+_redis_sync_client = None
+_redis_sync_lock = threading.Lock()
+
+
+def get_redis_sync_client():
+    """Lazily initializes and caches synchronous Redis client for worker metadata and idempotency."""
+    global _redis_sync_client
+    with _redis_sync_lock:
+        if _redis_sync_client is None:
+            try:
+                import redis
+                broker_url = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL", "redis://localhost:6379/0")
+                _redis_sync_client = redis.from_url(
+                    broker_url,
+                    socket_connect_timeout=0.5,
+                    socket_timeout=0.5,
+                    decode_responses=True,
+                )
+            except Exception as e:
+                logger.debug(f"Redis synchronous client unavailable: {e}")
+                return None
+        return _redis_sync_client
+
+
+class TaskOwnershipError(PermissionError):
+    """Raised when a user attempts to access a task owned by another authenticated user."""
+    pass
 
 # Lazy singleton CVTracker
 _cv_tracker_instance = None
@@ -181,23 +210,130 @@ def dispatch_async_task(task, *args, **kwargs):
 
 
 # ==============================================================================
-# Durable Task Result Retrieval
+# Durable Task Result Retrieval & Ownership Tracking (Problems 17 & 18)
 # ==============================================================================
 
-def record_task_result(task_id: str, state: str, result: Optional[Dict[str, Any]] = None, error: Optional[str] = None):
-    """Stores task execution status and result in durable store."""
+def record_task_owner(task_id: str, user_id: str) -> None:
+    """Associates a task with its authenticated owner in local memory and Redis."""
+    uid = str(user_id).strip()
     with _task_results_lock:
-        _task_results_store[task_id] = {
-            "task_id": task_id,
-            "state": state,
-            "status": "completed" if state == "SUCCESS" else ("failed" if state == "FAILURE" else "processing"),
-            "result": result,
-            "error": error,
-            "updated_at": time.time(),
-        }
+        _task_owners[task_id] = uid
+
+    rc = get_redis_sync_client()
+    if rc:
+        try:
+            rc.set(f"task_owner:{task_id}", uid, ex=86400)
+        except Exception as e:
+            logger.debug(f"Redis record_task_owner failed: {e}")
 
 
-def update_task_state(task_self, state: str, meta: Dict[str, Any], task_id: str):
+def get_task_owner(task_id: str) -> Optional[str]:
+    """Retrieves the authenticated user ID that created the task."""
+    with _task_results_lock:
+        if task_id in _task_owners:
+            return _task_owners[task_id]
+
+    rc = get_redis_sync_client()
+    if rc:
+        try:
+            owner = rc.get(f"task_owner:{task_id}")
+            if owner:
+                return str(owner)
+            meta_json = rc.get(f"task_meta:{task_id}")
+            if meta_json:
+                import json
+                meta = json.loads(meta_json)
+                if meta.get("user_id"):
+                    return str(meta["user_id"])
+        except Exception:
+            pass
+
+    return None
+
+
+def get_task_idempotency(idempotency_key: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Checks Redis and local memory for cached idempotent task results."""
+    if not idempotency_key:
+        return None
+
+    # 1. Check Redis durable idempotency store
+    rc = get_redis_sync_client()
+    if rc:
+        try:
+            raw = rc.get(f"worker_idempotency:{idempotency_key}")
+            if raw:
+                import json
+                cached = json.loads(raw)
+                cached["cached"] = True
+                return cached
+        except Exception as e:
+            logger.debug(f"Redis get_task_idempotency check failed: {e}")
+
+    # 2. Check local in-memory fallback
+    with _task_results_lock:
+        if idempotency_key in _idempotency_cache:
+            cached_res, exp = _idempotency_cache[idempotency_key]
+            if exp > time.time():
+                cached_res["cached"] = True
+                return cached_res
+
+    return None
+
+
+def set_task_idempotency(idempotency_key: Optional[str], result: Dict[str, Any], ttl_seconds: int = 3600) -> None:
+    """Stores task result in durable Redis and local in-memory idempotency caches."""
+    if not idempotency_key:
+        return
+
+    with _task_results_lock:
+        _idempotency_cache[idempotency_key] = (result, time.time() + ttl_seconds)
+
+    rc = get_redis_sync_client()
+    if rc:
+        try:
+            import json
+            rc.set(f"worker_idempotency:{idempotency_key}", json.dumps(result), ex=ttl_seconds)
+        except Exception as e:
+            logger.debug(f"Redis set_task_idempotency failed: {e}")
+
+
+def record_task_result(
+    task_id: str,
+    state: str,
+    result: Optional[Dict[str, Any]] = None,
+    error: Optional[str] = None,
+    user_id: Optional[str] = None,
+):
+    """
+    Stores task execution status, results, and owner in local memory and durable Redis cache.
+    Survives worker crashes and restarts.
+    """
+    if user_id:
+        record_task_owner(task_id, user_id)
+
+    stored_entry = {
+        "task_id": task_id,
+        "state": state,
+        "status": "completed" if state == "SUCCESS" else ("failed" if state == "FAILURE" else "processing"),
+        "result": result,
+        "error": error,
+        "user_id": user_id or get_task_owner(task_id),
+        "updated_at": time.time(),
+    }
+
+    with _task_results_lock:
+        _task_results_store[task_id] = stored_entry
+
+    rc = get_redis_sync_client()
+    if rc:
+        try:
+            import json
+            rc.set(f"task_meta:{task_id}", json.dumps(stored_entry), ex=86400)
+        except Exception as e:
+            logger.debug(f"Redis record_task_result failed: {e}")
+
+
+def update_task_state(task_self, state: str, meta: Dict[str, Any], task_id: str, user_id: Optional[str] = None):
     """Safely updates Celery state if running in active Celery worker with valid request ID."""
     req_id = getattr(getattr(task_self, "request", None), "id", None)
     if req_id and hasattr(task_self, "update_state"):
@@ -205,14 +341,21 @@ def update_task_state(task_self, state: str, meta: Dict[str, Any], task_id: str)
             task_self.update_state(task_id=req_id, state=state, meta=meta)
         except Exception:
             pass
-    record_task_result(task_id, state=state, result=meta.get("result"), error=meta.get("error"))
+    record_task_result(task_id, state=state, result=meta.get("result"), error=meta.get("error"), user_id=user_id)
 
 
-def get_celery_task_status(task_id: str) -> Dict[str, Any]:
+def get_celery_task_status(task_id: str, requesting_user_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Retrieves the status, state, and result of a Celery task by ID.
-    Queries Celery AsyncResult (Redis backend) with fallback to internal store.
+    Enforces task ownership authorization (Problem 17):
+    If the task has a recorded owner and requesting_user_id does not match, raises TaskOwnershipError.
+    Queries Celery AsyncResult (Redis backend) with fallback to durable Redis task_meta and internal store.
     """
+    # 0. Enforce Task Ownership Authorization
+    task_owner = get_task_owner(task_id)
+    if task_owner and task_owner not in ("default_user", "anonymous") and requesting_user_id and task_owner != requesting_user_id:
+        raise TaskOwnershipError(f"Forbidden: Authenticated user '{requesting_user_id}' does not own task '{task_id}'.")
+
     # 1. Check Celery AsyncResult
     try:
         async_res = celery_app.AsyncResult(task_id)
@@ -250,7 +393,26 @@ def get_celery_task_status(task_id: str) -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Error checking Celery AsyncResult for task {task_id}: {e}")
 
-    # 2. Check internal task store fallback
+    # 2. Check durable Redis task store (Problem 18)
+    rc = get_redis_sync_client()
+    if rc:
+        try:
+            raw_meta = rc.get(f"task_meta:{task_id}")
+            if raw_meta:
+                import json
+                stored = json.loads(raw_meta)
+                return {
+                    "task_id": task_id,
+                    "state": stored["state"],
+                    "status": stored["status"],
+                    "result": stored.get("result"),
+                    "error": stored.get("error"),
+                    "ready": stored["state"] in ("SUCCESS", "FAILURE"),
+                }
+        except Exception as e:
+            logger.debug(f"Redis task_meta retrieval error for {task_id}: {e}")
+
+    # 3. Check internal in-memory task store fallback
     with _task_results_lock:
         if task_id in _task_results_store:
             stored = _task_results_store[task_id]
@@ -263,7 +425,7 @@ def get_celery_task_status(task_id: str) -> Dict[str, Any]:
                 "ready": stored["state"] in ("SUCCESS", "FAILURE"),
             }
 
-    # 3. Default PENDING state
+    # 4. Default PENDING state
     return {
         "task_id": task_id,
         "state": "PENDING",
@@ -307,17 +469,14 @@ def process_heavy_cv_frame(self, frame_data: dict) -> Dict[str, Any]:
         record_task_result(task_id, state="FAILURE", error=err_msg)
         raise ValueError(err_msg)
 
-    # 2. Idempotency Check
+    # 2. Idempotency Check (Durable Redis + In-memory fallback)
     if payload.idempotency_key:
-        with _task_results_lock:
-            if payload.idempotency_key in _idempotency_cache:
-                cached_res, exp = _idempotency_cache[payload.idempotency_key]
-                if exp > time.time():
-                    cached_res["cached"] = True
-                    return cached_res
+        cached_res = get_task_idempotency(payload.idempotency_key)
+        if cached_res:
+            return cached_res
 
     # 3. Explicit State: STARTED
-    update_task_state(self, state="STARTED", meta={"step": "decoding_image", "task_id": task_id, "progress": 15}, task_id=task_id)
+    update_task_state(self, state="STARTED", meta={"step": "decoding_image", "task_id": task_id, "progress": 15}, task_id=task_id, user_id=payload.user_id)
 
     # 4. Execute Real Computer Vision Tracking Pipeline
     raw_b64 = payload.image or payload.frame
@@ -356,12 +515,11 @@ def process_heavy_cv_frame(self, frame_data: dict) -> Dict[str, Any]:
             "timestamp_ms": cv_result.get("timestamp_ms", int(time.time() * 1000)),
         }
 
-        # Store in idempotency cache
+        # Store in durable idempotency cache
         if payload.idempotency_key:
-            with _task_results_lock:
-                _idempotency_cache[payload.idempotency_key] = (result_payload, time.time() + 3600)
+            set_task_idempotency(payload.idempotency_key, result_payload, ttl_seconds=3600)
 
-        record_task_result(task_id, state="SUCCESS", result=result_payload)
+        record_task_result(task_id, state="SUCCESS", result=result_payload, user_id=payload.user_id)
         logger.info(f"[{task_id}] CV frame task processed successfully: {len(detections)} detection(s) found.")
         return result_payload
 
@@ -420,17 +578,14 @@ def generate_ai_tutor_response(self, prompt: Union[str, dict], **kwargs) -> Dict
         record_task_result(task_id, state="FAILURE", error=err_msg)
         raise ValueError(err_msg)
 
-    # 2. Idempotency Check
+    # 2. Idempotency Check (Durable Redis + In-memory fallback)
     if payload.idempotency_key:
-        with _task_results_lock:
-            if payload.idempotency_key in _idempotency_cache:
-                cached_res, exp = _idempotency_cache[payload.idempotency_key]
-                if exp > time.time():
-                    cached_res["cached"] = True
-                    return cached_res
+        cached_res = get_task_idempotency(payload.idempotency_key)
+        if cached_res:
+            return cached_res
 
     # 3. Explicit States: STARTED and PROCESSING
-    update_task_state(self, state="STARTED", meta={"step": "retrieving_context", "task_id": task_id, "progress": 20}, task_id=task_id)
+    update_task_state(self, state="STARTED", meta={"step": "retrieving_context", "task_id": task_id, "progress": 20}, task_id=task_id, user_id=payload.user_id)
 
     prompt_text = payload.prompt.strip()
     prompt_lower = prompt_text.lower()
@@ -505,12 +660,11 @@ def generate_ai_tutor_response(self, prompt: Union[str, dict], **kwargs) -> Dict
             },
         }
 
-        # Store in idempotency cache
+        # Store in durable idempotency cache
         if payload.idempotency_key:
-            with _task_results_lock:
-                _idempotency_cache[payload.idempotency_key] = (result_payload, time.time() + 3600)
+            set_task_idempotency(payload.idempotency_key, result_payload, ttl_seconds=3600)
 
-        record_task_result(task_id, state="SUCCESS", result=result_payload)
+        record_task_result(task_id, state="SUCCESS", result=result_payload, user_id=payload.user_id)
         logger.info(f"[{task_id}] AI tutor task generated response in {duration}s for prompt '{prompt_text[:30]}...'")
         return result_payload
 

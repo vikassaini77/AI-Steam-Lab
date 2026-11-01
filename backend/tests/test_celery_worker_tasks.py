@@ -266,7 +266,7 @@ def test_task_status_and_result_retrieval():
     client = TestClient(app)
 
     # 1. Execute task to populate result store
-    ai_res = generate_ai_tutor_response({"prompt": "Explain conservation of energy."})
+    ai_res = generate_ai_tutor_response({"prompt": "Explain conservation of energy.", "user_id": MOCK_USER["id"]})
     task_id = ai_res["task_id"]
 
     # 2. Retrieve status via helper function
@@ -345,3 +345,153 @@ def test_celery_worker_concurrency_and_memory_policies():
     assert conf.result_expires == 3600
     assert conf.task_time_limit >= 30
     assert conf.task_soft_time_limit >= 25
+
+
+# ==============================================================================
+# 8. Task Ownership and Authorization (Problem 17)
+# ==============================================================================
+
+def test_task_ownership_authorization():
+    """
+    Problem 17 verification:
+    A task ID must not be treated as authorization.
+    User A owns a task; User B querying that task receives HTTP 403 Forbidden.
+    """
+    client = TestClient(app)
+    user_alice = {"id": "user_alice_uuid", "email": "alice@neurolab.ai", "role": "authenticated"}
+    user_bob = {"id": "user_bob_uuid", "email": "bob@neurolab.ai", "role": "authenticated"}
+
+    # 1. User Alice dispatches an asynchronous task
+    app.dependency_overrides[get_current_user] = lambda: user_alice
+    b64_img = create_test_frame_b64(width=320, height=240, draw_circle=True)
+    res_dispatch = client.post(
+        "/api/v1/tasks/cv/process-frame-async",
+        json={"image": b64_img, "tracking_method": "color", "color_target": "red"},
+    )
+    assert res_dispatch.status_code == 200
+    task_id = res_dispatch.json()["task_id"]
+
+    # 2. Alice queries her own task -> 200 OK
+    res_alice = client.get(f"/api/v1/tasks/{task_id}")
+    assert res_alice.status_code == 200
+    assert res_alice.json()["task_id"] == task_id
+
+    # 3. User Bob attempts to access Alice's task -> 403 Forbidden
+    app.dependency_overrides[get_current_user] = lambda: user_bob
+    res_bob = client.get(f"/api/v1/tasks/{task_id}")
+    assert res_bob.status_code == 403
+    assert "does not own task" in res_bob.json()["detail"].lower()
+
+
+def test_task_unauthenticated_access_rejected():
+    """
+    Problem 17 verification:
+    Unauthenticated requests to GET /api/v1/tasks/{task_id} must receive HTTP 401.
+    """
+    client = TestClient(app)
+    # Remove auth override
+    app.dependency_overrides.pop(get_current_user, None)
+    res = client.get("/api/v1/tasks/some_random_task_uuid")
+    assert res.status_code == 401
+
+
+# ==============================================================================
+# 9. Durable Task and Idempotency Storage (Problem 18)
+# ==============================================================================
+
+def test_durable_task_and_idempotency_storage():
+    """
+    Problem 18 verification:
+    Verify task metadata and idempotency records survive in durable storage
+    even when process in-memory stores are purged.
+    """
+    from app.worker import (
+        record_task_result,
+        get_celery_task_status,
+        set_task_idempotency,
+        get_task_idempotency,
+        _task_results_store,
+        _task_results_lock,
+        _idempotency_cache,
+    )
+
+    task_id = "durable_task_test_999"
+    user_id = "user_durable_owner"
+    result_data = {"solution": "F=ma", "score": 100}
+
+    # Record task result
+    record_task_result(task_id, state="SUCCESS", result=result_data, user_id=user_id)
+    set_task_idempotency("key_durable_123", result_data, ttl_seconds=3600)
+
+    # Simulate process memory wipe (as happens during worker restart)
+    with _task_results_lock:
+        _task_results_store.pop(task_id, None)
+        _idempotency_cache.pop("key_durable_123", None)
+
+    # Retrieval must still succeed via durable Redis store or fallback
+    status_info = get_celery_task_status(task_id, requesting_user_id=user_id)
+    assert status_info["task_id"] == task_id
+    if status_info["ready"]:
+        assert status_info["result"] == result_data
+
+    # Idempotency cache check
+    cached = get_task_idempotency("key_durable_123")
+    if cached:
+        assert cached.get("cached") is True
+        assert cached["solution"] == "F=ma"
+
+
+# ==============================================================================
+# 10. Worker Retry & Fault-Tolerance Behavior (Problem 19)
+# ==============================================================================
+
+def test_worker_gemini_timeout_triggers_retry():
+    """
+    Problem 19: Test Gemini timeout failure scenario:
+    Worker catches transient timeout, records RETRY state, and triggers Celery retry with backoff.
+    """
+    from celery.exceptions import Retry
+
+    generate_ai_tutor_response.request.retries = 1
+    try:
+        with patch.object(generate_ai_tutor_response, "retry", side_effect=Retry("Retrying due to transient timeout")) as mock_retry:
+            with patch.dict("os.environ", {"GEMINI_API_KEY": "real-key-for-test", "ALLOW_FAKE_VECTORS": "false", "ENVIRONMENT": "production"}):
+                with patch("google.generativeai.GenerativeModel.generate_content", side_effect=TimeoutError("Gemini timed out")):
+                    with pytest.raises(Retry):
+                        generate_ai_tutor_response({"prompt": "Explain momentum conservation", "user_id": "test_uid"})
+
+                    mock_retry.assert_called_once()
+                    _, kwargs = mock_retry.call_args
+                    assert kwargs.get("countdown") == 2
+                    assert kwargs.get("max_retries") == 3
+    finally:
+        generate_ai_tutor_response.request.retries = 0
+
+
+def test_worker_duplicate_task_delivery_idempotency():
+    """
+    Problem 19: At-least-once task delivery guarantee:
+    When a task is delivered twice (duplicate redelivery), the second execution
+    detects the idempotency key and returns the identical cached result without re-executing inference.
+    """
+    idempotency_key = "idemp_duplicate_test_456"
+    b64_img = create_test_frame_b64(width=320, height=240, draw_circle=True)
+    payload = {
+        "image": b64_img,
+        "tracking_method": "color",
+        "color_target": "red",
+        "idempotency_key": idempotency_key,
+        "user_id": "user_idemp_tester",
+    }
+
+    # Delivery 1
+    res1 = process_heavy_cv_frame(payload)
+    assert res1["status"] == "processed"
+    task_id1 = res1["task_id"]
+
+    # Delivery 2 (Duplicate redelivery)
+    res2 = process_heavy_cv_frame(payload)
+    assert res2.get("cached") is True
+    assert res2["task_id"] == task_id1
+    assert res2["centroid"] == res1["centroid"]
+

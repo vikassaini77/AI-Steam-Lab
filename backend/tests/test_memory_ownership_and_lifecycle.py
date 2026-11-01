@@ -147,7 +147,7 @@ def test_single_memory_deletion_with_ownership_protection():
     emb = [0.4] * 768
 
     id_alice = db.save_memory(session_id="s1", text="Alice private note", embedding=emb, user_id="alice")
-    id_bob = db.save_memory(session_id="s1", text="Bob private note", embedding=emb, user_id="bob")
+    id_bob = db.save_memory(session_id="s2", text="Bob private note", embedding=emb, user_id="bob")
 
     # Bob attempts to delete Alice's memory: must fail
     bob_attempt = db.delete_memory_by_id(memory_id=id_alice, user_id="bob")

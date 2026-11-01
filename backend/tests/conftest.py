@@ -30,7 +30,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def reset_global_observability_alerts():
-    """Resets alert manager and contextvars between tests to prevent test cross-contamination."""
+    """Resets alert manager, circuit breaker, and contextvars between tests to prevent test cross-contamination."""
     try:
         from app.core_backend.core.observability import alert_manager
         alert_manager.clear()
@@ -39,6 +39,11 @@ def reset_global_observability_alerts():
     try:
         from app.cache import clear_local_cache
         clear_local_cache()
+    except Exception:
+        pass
+    try:
+        from app.ai_agent.embedding_service import reset_embedding_circuit_breaker
+        reset_embedding_circuit_breaker()
     except Exception:
         pass
     yield
@@ -50,5 +55,10 @@ def reset_global_observability_alerts():
     try:
         from app.cache import clear_local_cache
         clear_local_cache()
+    except Exception:
+        pass
+    try:
+        from app.ai_agent.embedding_service import reset_embedding_circuit_breaker
+        reset_embedding_circuit_breaker()
     except Exception:
         pass

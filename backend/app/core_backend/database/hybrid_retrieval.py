@@ -146,7 +146,10 @@ def execute_in_memory_hybrid_search(
     Returns (results, detailed_metadata).
     """
     import time
-    canonical_uid = str(user_id) if user_id else None
+    if not user_id or not str(user_id).strip():
+        # Strict tenant isolation: unauthenticated search queries return no candidates
+        return ([], [])
+    canonical_uid = str(user_id).strip()
     now = time.time()
 
     # Step 0: Apply strict tenant ownership, scope, and lifecycle filters
@@ -154,7 +157,7 @@ def execute_in_memory_hybrid_search(
     for m in memories:
         if m.get("is_deleted", False):
             continue
-        if canonical_uid and str(m.get("user_id")) != canonical_uid:
+        if str(m.get("user_id")) != canonical_uid:
             continue
         if session_id and str(m.get("session_id")) != str(session_id):
             continue

@@ -17,6 +17,8 @@ from app.worker import (
     get_celery_task_status,
     process_heavy_cv_frame,
     generate_ai_tutor_response,
+    record_task_owner,
+    TaskOwnershipError,
     CVTaskPayload,
     AITaskPayload,
     TaskBrokerUnavailableError,
@@ -46,16 +48,28 @@ class TaskDispatchResponse(BaseModel):
 
 @router.get("/{task_id}", response_model=TaskStatusResponse)
 @limiter.limit("120/minute")
-def get_task_result(request: Request, task_id: str):
+def get_task_result(
+    request: Request,
+    task_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """
     Retrieves the execution status, explicit state, and durable output of an asynchronous task.
+    Enforces task ownership authorization (Problem 17): authenticated user must own the task.
     """
     if not task_id or not task_id.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="task_id parameter is required.",
         )
-    task_info = get_celery_task_status(task_id.strip())
+    canonical_uid = str(current_user["id"])
+    try:
+        task_info = get_celery_task_status(task_id.strip(), requesting_user_id=canonical_uid)
+    except TaskOwnershipError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        )
     return task_info
 
 
@@ -68,9 +82,11 @@ def dispatch_cv_frame_task(
 ):
     """
     Dispatches a heavy YOLOv8 / kinematics frame processing task to Celery worker queue.
+    Server-derives authenticated user_id from token, rejecting forged client identities.
     """
+    canonical_uid = str(current_user["id"])
     payload_dict = payload.model_dump()
-    payload_dict["user_id"] = str(current_user.get("id", "anonymous"))
+    payload_dict["user_id"] = canonical_uid
 
     try:
         task_res = dispatch_async_task(process_heavy_cv_frame, payload_dict)
@@ -82,6 +98,7 @@ def dispatch_cv_frame_task(
 
     # If dispatched via Celery AsyncResult (has .id)
     if hasattr(task_res, "id"):
+        record_task_owner(task_res.id, canonical_uid)
         return {
             "task_id": task_res.id,
             "status": "queued",
@@ -91,6 +108,7 @@ def dispatch_cv_frame_task(
 
     # If executed synchronously inline
     task_id = task_res.get("task_id", "sync_cv")
+    record_task_owner(task_id, canonical_uid)
     return {
         "task_id": task_id,
         "status": "completed",
@@ -108,9 +126,11 @@ def dispatch_tutor_generate_task(
 ):
     """
     Dispatches a background AI Tutor generation task to Celery worker queue.
+    Server-derives authenticated user_id from token, rejecting forged client identities.
     """
+    canonical_uid = str(current_user["id"])
     payload_dict = payload.model_dump()
-    payload_dict["user_id"] = str(current_user.get("id", "anonymous"))
+    payload_dict["user_id"] = canonical_uid
 
     try:
         task_res = dispatch_async_task(generate_ai_tutor_response, payload_dict)
@@ -122,6 +142,7 @@ def dispatch_tutor_generate_task(
 
     # If dispatched via Celery AsyncResult
     if hasattr(task_res, "id"):
+        record_task_owner(task_res.id, canonical_uid)
         return {
             "task_id": task_res.id,
             "status": "queued",
@@ -131,6 +152,7 @@ def dispatch_tutor_generate_task(
 
     # If executed synchronously inline
     task_id = task_res.get("task_id", "sync_ai")
+    record_task_owner(task_id, canonical_uid)
     return {
         "task_id": task_id,
         "status": "completed",

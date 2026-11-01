@@ -13,7 +13,7 @@ from typing import Any, AsyncGenerator, List, Optional
 import google.generativeai as genai
 from fastapi import Request
 
-from app.ai_agent.ai_client import _DEFAULT_MODEL, GeminiAIClient
+from app.ai_agent.ai_client import _DEFAULT_MODEL, GeminiAIClient, check_cancellation
 from app.ai_agent.learning_evaluation import (
     EvaluationResult,
     LearningState,
@@ -23,6 +23,8 @@ from app.ai_agent.retrieval_service import TutorRetrievalService
 from app.application.tutor_orchestrator import (
     MAX_CONCURRENT_GENERATIONS,
     TutorOrchestrator,
+    SSEEventName,
+    make_sse_event,
 )
 from app.core_backend.database.supabase_db import DatabaseManager
 from app.core_backend.repositories.memory_repository import MemoryRepository
@@ -30,6 +32,7 @@ from app.logger import logger
 
 MAX_WORKER_THREADS = int(os.getenv("TUTOR_MAX_THREADS", "8"))
 MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "1024"))
+MODEL_TIMEOUT_SECONDS = float(os.getenv("MODEL_TIMEOUT_SECONDS", "30.0"))
 
 # Shared ThreadPoolExecutor for isolating synchronous background tasks
 _tutor_executor: Optional[ThreadPoolExecutor] = None
@@ -67,70 +70,14 @@ async def _stream_model_chunks(
     request: Optional[Request] = None,
 ) -> AsyncGenerator[str, None]:
     """Streams model response chunks without blocking the event loop."""
-    use_async = (
-        isinstance(model, genai.GenerativeModel)
-        or (
-            hasattr(model, "generate_content_async")
-            and not hasattr(model, "_mock_return_value")
-        )
-    )
-
-    if use_async:
-        try:
-            response = await asyncio.wait_for(
-                model.generate_content_async(
-                    prompt,
-                    stream=True,
-                    generation_config=generation_config,
-                ),
-                timeout=timeout_seconds,
-            )
-            async for chunk in response:
-                if request and await request.is_disconnected():
-                    logger.info("Client disconnected during async stream generation.")
-                    break
-                text = getattr(chunk, "text", "")
-                if text:
-                    yield text
-        except (asyncio.TimeoutError, TimeoutError) as to_err:
-            raise TimeoutError(f"Model generation timed out after {timeout_seconds}s") from to_err
-    else:
-        queue: asyncio.Queue = asyncio.Queue()
-        loop = asyncio.get_running_loop()
-        sentinel = object()
-
-        def _sync_worker():
-            try:
-                res = model.generate_content(
-                    prompt,
-                    stream=True,
-                    generation_config=generation_config,
-                )
-                for chunk in res:
-                    text = getattr(chunk, "text", str(chunk))
-                    loop.call_soon_threadsafe(queue.put_nowait, ("chunk", text))
-                loop.call_soon_threadsafe(queue.put_nowait, ("done", sentinel))
-            except Exception as exc:
-                loop.call_soon_threadsafe(queue.put_nowait, ("error", exc))
-
-        loop.run_in_executor(executor, _sync_worker)
-
-        while True:
-            if request and await request.is_disconnected():
-                logger.info("Client disconnected during sync-queue stream consumption.")
-                break
-            try:
-                msg_type, val = await asyncio.wait_for(queue.get(), timeout=timeout_seconds)
-            except (asyncio.TimeoutError, TimeoutError) as to_err:
-                raise TimeoutError(f"Model generation timed out after {timeout_seconds}s") from to_err
-
-            if msg_type == "chunk":
-                if val:
-                    yield val
-            elif msg_type == "done":
-                break
-            elif msg_type == "error":
-                raise val
+    is_cancelled = request.is_disconnected if request else None
+    client = GeminiAIClient(model=model, executor=executor)
+    async for chunk in client.stream_completion(
+        prompt=prompt,
+        timeout_seconds=timeout_seconds,
+        is_cancelled=is_cancelled,
+    ):
+        yield chunk
 
 
 class AITutorService:
@@ -253,13 +200,17 @@ class AITutorService:
         )
 
         if eval_result.is_correct and eval_result.confidence >= 0.80:
-            newly_awarded, _ = self.memory_repository.award_mastery_xp(
-                user_id=user_id,
-                concept=concept,
-                amount=100,
+            loop = asyncio.get_running_loop()
+            newly_awarded, xp = await loop.run_in_executor(
+                self._executor,
+                lambda: self.memory_repository.award_mastery_xp(
+                    user_id=user_id,
+                    concept=concept,
+                    amount=100,
+                ),
             )
             eval_result.mastery_awarded = newly_awarded
-            eval_result.xp_awarded = 100 if newly_awarded else 0
+            eval_result.xp_awarded = xp if newly_awarded else 0
             eval_result.state = LearningState.MASTERY_CONFIRMED
         else:
             eval_result.mastery_awarded = False

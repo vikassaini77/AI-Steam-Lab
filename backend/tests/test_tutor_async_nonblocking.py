@@ -30,7 +30,7 @@ class MockChatRequest:
 
 
 @pytest.mark.asyncio
-async def test_database_calls_execute_off_main_thread():
+async def test_database_calls_execute_off_main_thread(monkeypatch):
     """
     Verification: Confirms that search_memories and save_memory run inside the bounded
     executor on a worker thread, never blocking the main asyncio event loop thread.
@@ -48,6 +48,12 @@ async def test_database_calls_execute_off_main_thread():
 
     tracking_db = ThreadTrackingDB()
     tutor = AITutorService(db=tracking_db)
+
+    # Isolate from external network embedding generation
+    dummy_vec = [0.05] * 768
+    async def fast_emb(*args, **kwargs):
+        return dummy_vec
+    monkeypatch.setattr(tutor, "generate_embedding", fast_emb)
 
     # Mock chunk generator
     mock_model = MagicMock()

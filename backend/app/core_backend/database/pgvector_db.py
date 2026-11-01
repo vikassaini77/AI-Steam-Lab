@@ -65,6 +65,18 @@ class DatabasePoolTimeoutError(DatabaseConnectionError):
     pass
 
 
+class TenantIsolationError(DatabasePersistenceError, ValueError):
+    """Raised when an operation violates strict tenant isolation or attempts unauthorized session access."""
+    pass
+
+
+def _require_valid_user_id(user_id: Optional[str], operation: str = "memory operation") -> str:
+    """Validates that user_id is a non-empty, non-whitespace string for strict tenant isolation."""
+    if user_id is None or not str(user_id).strip():
+        raise TenantIsolationError(f"A valid, authenticated user_id is required for {operation}.")
+    return str(user_id).strip()
+
+
 class DatabaseMetrics:
     """
     Thread-safe telemetry metrics recorder for database operations.
@@ -433,6 +445,22 @@ def close_database_pool():
             _GLOBAL_DATABASE_POOL = None
 
 
+_shared_pgvector_db: Optional["PGVectorManager"] = None
+
+
+def get_pgvector_db(url: Optional[str] = None) -> "PGVectorManager":
+    global _shared_pgvector_db
+    if _shared_pgvector_db is None:
+        _shared_pgvector_db = PGVectorManager(url=url)
+    return _shared_pgvector_db
+
+
+def reset_pgvector_db():
+    global _shared_pgvector_db
+    _shared_pgvector_db = None
+    close_database_pool()
+
+
 def is_container_environment() -> bool:
     """
     Detects whether the application is running inside a Docker container.
@@ -774,6 +802,58 @@ class PGVectorManager:
                 "metrics": self.get_metrics(),
             }
 
+    def validate_session_ownership(self, session_id: str, user_id: str) -> bool:
+        """
+        Validates that the supplied session_id belongs strictly to the authenticated user.
+        If the session has existing records belonging to another user, returns False.
+        If the session has no records, or all records belong to user_id, returns True.
+        """
+        canonical_uid = _require_valid_user_id(user_id, "session ownership validation")
+        if not session_id or not str(session_id).strip():
+            raise TenantIsolationError("A valid session_id is required for session ownership validation.")
+        sess_str = str(session_id).strip()
+
+        # In-memory fallback check
+        if getattr(self, "is_in_memory_fallback", False) or not getattr(self, "url", None) or hasattr(self, "fallback_memories"):
+            if hasattr(self, "fallback_memories"):
+                for m in self.fallback_memories:
+                    if str(m.get("session_id")) == sess_str:
+                        owner = m.get("user_id")
+                        if owner is not None and str(owner) != canonical_uid:
+                            return False
+            if getattr(self, "is_in_memory_fallback", False) or not getattr(self, "url", None):
+                return True
+
+        def _db_validate_session():
+            with self._get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT DISTINCT user_id
+                        FROM memories
+                        WHERE session_id = %s AND user_id IS NOT NULL;
+                        """,
+                        (sess_str,),
+                    )
+                    rows = cur.fetchall()
+                    for r in rows:
+                        if r[0] is not None and str(r[0]) != canonical_uid:
+                            return False
+                    return True
+
+        try:
+            return self._execute(
+                operation_name="validate_session_ownership",
+                operation_fn=_db_validate_session,
+                is_idempotent=True,
+                is_write=False,
+                user_id=canonical_uid,
+            )
+        except Exception as e:
+            if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
+                raise
+            return True
+
     def save_memory(
         self,
         session_id: str,
@@ -787,10 +867,18 @@ class PGVectorManager:
         """
         Saves a conversational vector memory with tenant ownership tag,
         lifecycle metadata (created_at, expires_at), model version, and scope.
+        Strictly enforces authenticated user_id filtering and session ownership.
         In production: raises DatabasePersistenceError if write fails.
         In development: optionally falls back to in-memory store.
         """
-        canonical_uid = str(user_id) if user_id else None
+        canonical_uid = _require_valid_user_id(user_id, "save_memory")
+        if not session_id or not str(session_id).strip():
+            raise TenantIsolationError("A valid session_id is required to save memory.")
+        sess_str = str(session_id).strip()
+
+        if not self.validate_session_ownership(sess_str, canonical_uid):
+            raise TenantIsolationError(f"Access denied: session '{sess_str}' belongs to another user.")
+
         model_version = embedding_model_version or "text-embedding-004"
         days = retention_days if retention_days is not None else int(os.getenv("MEMORY_RETENTION_DAYS", "90"))
         now = time.time()
@@ -802,7 +890,7 @@ class PGVectorManager:
             doc_id = len(self.fallback_memories) + 1
             self.fallback_memories.append({
                 "id": doc_id,
-                "session_id": session_id,
+                "session_id": sess_str,
                 "user_id": canonical_uid,
                 "experiment_id": experiment_id,
                 "text": text,
@@ -835,7 +923,7 @@ class PGVectorManager:
                             VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP + (%s || ' days')::interval)
                             RETURNING id;
                             """,
-                            (session_id, canonical_uid, experiment_id, text, embedding, model_version, str(days)),
+                            (sess_str, canonical_uid, experiment_id, text, embedding, model_version, str(days)),
                         )
                     else:
                         cur.execute(
@@ -847,7 +935,7 @@ class PGVectorManager:
                             VALUES (%s, %s, %s, %s, %s, %s, NULL)
                             RETURNING id;
                             """,
-                            (session_id, canonical_uid, experiment_id, text, embedding, model_version),
+                            (sess_str, canonical_uid, experiment_id, text, embedding, model_version),
                         )
                     row = cur.fetchone()
                     doc_id = row[0] if row else 1
@@ -985,6 +1073,52 @@ class PGVectorManager:
                 ]
             return []
 
+    def count_verified_experiments(self, user_id: str) -> int:
+        """
+        Authoritatively counts verified completed experiments belonging strictly to user_id.
+        Prevents trusting unverified client claims.
+        """
+        if not user_id:
+            return 0
+        canonical_uid = str(user_id)
+        if getattr(self, "is_in_memory_fallback", False) or not getattr(self, "url", None):
+            if hasattr(self, "fallback_experiments"):
+                return len([
+                    exp for exp in self.fallback_experiments
+                    if str(exp.get("user_id")) == canonical_uid
+                    and exp.get("inference_status", "completed") in ("completed", None)
+                ])
+            return 0
+
+        def _db_count_experiments():
+            with self._get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT COUNT(*) FROM experiments
+                        WHERE user_id = %s;
+                        """,
+                        (canonical_uid,),
+                    )
+                    row = cur.fetchone()
+                    return int(row[0]) if row else 0
+
+        try:
+            return self._execute(
+                operation_name="count_verified_experiments",
+                operation_fn=_db_count_experiments,
+                is_idempotent=True,
+                is_write=False,
+                user_id=canonical_uid,
+            )
+        except Exception:
+            if hasattr(self, "fallback_experiments"):
+                return len([
+                    exp for exp in self.fallback_experiments
+                    if str(exp.get("user_id")) == canonical_uid
+                ])
+            return 0
+
     def get_experiment_by_id(self, experiment_id: str) -> Optional[dict]:
         """
         Fetches an experiment record by ID without exposing it directly.
@@ -1032,6 +1166,36 @@ class PGVectorManager:
                 )
             return None
 
+    def has_user_memories(self, user_id: str) -> bool:
+        """Checks whether the user has any saved tutor memories / inquiry sessions."""
+        if not user_id:
+            return False
+        canonical_uid = str(user_id)
+        if getattr(self, "is_in_memory_fallback", False) or not getattr(self, "url", None):
+            if hasattr(self, "fallback_memories"):
+                return any(str(m.get("user_id")) == canonical_uid for m in self.fallback_memories)
+            return False
+
+        def _db_has_memories():
+            with self._get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT 1 FROM memories WHERE user_id = %s LIMIT 1;",
+                        (canonical_uid,),
+                    )
+                    return cur.fetchone() is not None
+
+        try:
+            return self._execute(
+                operation_name="has_user_memories",
+                operation_fn=_db_has_memories,
+                is_idempotent=True,
+                is_write=False,
+                user_id=canonical_uid,
+            )
+        except Exception:
+            return False
+
     def search_memories(
         self,
         query_embedding: Optional[list] = None,
@@ -1060,8 +1224,11 @@ class PGVectorManager:
         embedding_model_version, and retention TTL (expires_at).
         """
         norm_query = normalize_query_text(query_text)
-        canonical_uid = str(user_id) if user_id else None
-        session_str = str(session_id) if session_id else None
+        canonical_uid = _require_valid_user_id(user_id, "search_memories")
+        session_str = str(session_id).strip() if session_id and str(session_id).strip() else None
+        if session_str:
+            if not self.validate_session_ownership(session_str, canonical_uid):
+                raise TenantIsolationError(f"Access denied: session '{session_str}' belongs to another user.")
         exp_str = str(experiment_id) if experiment_id else None
         model_v_str = str(embedding_model_version) if embedding_model_version else None
         mode = search_mode.lower().strip() if search_mode else "hybrid"
@@ -1110,7 +1277,7 @@ class PGVectorManager:
                                    1 - (embedding <=> %s::vector) AS semantic_sim,
                                    row_number() OVER (ORDER BY embedding <=> %s::vector) AS rank
                             FROM memories
-                            WHERE (%s::text IS NULL OR user_id = %s::text)
+                            WHERE user_id = %s::text
                               AND (%s::text IS NULL OR session_id = %s::text)
                               AND (%s::text IS NULL OR experiment_id = %s::text)
                               AND (%s::text IS NULL OR embedding_model_version = %s::text)
@@ -1123,7 +1290,7 @@ class PGVectorManager:
                                    ts_rank_cd(to_tsvector('english', text), plainto_tsquery('english', %s)) AS keyword_score,
                                    row_number() OVER (ORDER BY ts_rank_cd(to_tsvector('english', text), plainto_tsquery('english', %s)) DESC) AS rank
                             FROM memories
-                            WHERE (%s::text IS NULL OR user_id = %s::text)
+                            WHERE user_id = %s::text
                               AND (%s::text IS NULL OR session_id = %s::text)
                               AND (%s::text IS NULL OR experiment_id = %s::text)
                               AND (%s::text IS NULL OR embedding_model_version = %s::text)
@@ -1155,7 +1322,7 @@ class PGVectorManager:
                             (
                                 # semantic_search params
                                 emb_str, emb_str,
-                                canonical_uid, canonical_uid,
+                                canonical_uid,
                                 session_str, session_str,
                                 exp_str, exp_str,
                                 model_v_str, model_v_str,
@@ -1163,7 +1330,7 @@ class PGVectorManager:
                                 emb_str,
                                 # keyword_search params
                                 norm_query, norm_query,
-                                canonical_uid, canonical_uid,
+                                canonical_uid,
                                 session_str, session_str,
                                 exp_str, exp_str,
                                 model_v_str, model_v_str,
@@ -1189,7 +1356,7 @@ class PGVectorManager:
                                expires_at,
                                embedding_model_version
                         FROM memories
-                        WHERE (%s::text IS NULL OR user_id = %s::text)
+                        WHERE user_id = %s::text
                           AND (%s::text IS NULL OR session_id = %s::text)
                           AND (%s::text IS NULL OR experiment_id = %s::text)
                           AND (%s::text IS NULL OR embedding_model_version = %s::text)
@@ -1203,7 +1370,7 @@ class PGVectorManager:
                             query,
                             (
                                 rrf_k, norm_query, norm_query, norm_query,
-                                canonical_uid, canonical_uid,
+                                canonical_uid,
                                 session_str, session_str,
                                 exp_str, exp_str,
                                 model_v_str, model_v_str,
@@ -1228,7 +1395,7 @@ class PGVectorManager:
                                expires_at,
                                embedding_model_version
                         FROM memories
-                        WHERE (%s::text IS NULL OR user_id = %s::text)
+                        WHERE user_id = %s::text
                           AND (%s::text IS NULL OR session_id = %s::text)
                           AND (%s::text IS NULL OR experiment_id = %s::text)
                           AND (%s::text IS NULL OR embedding_model_version = %s::text)
@@ -1241,7 +1408,7 @@ class PGVectorManager:
                             query,
                             (
                                 rrf_k, emb_str, emb_str, emb_str,
-                                canonical_uid, canonical_uid,
+                                canonical_uid,
                                 session_str, session_str,
                                 exp_str, exp_str,
                                 model_v_str, model_v_str,
@@ -1508,7 +1675,11 @@ class PGVectorManager:
         Supports both hard deletion (GDPR Right to Erasure) and soft deletion.
         Immediately purges from fallback in-memory store if active.
         """
-        canonical_uid = str(user_id)
+        canonical_uid = _require_valid_user_id(user_id, "delete_user_memories")
+        sess_str = str(session_id).strip() if session_id and str(session_id).strip() else None
+        if sess_str:
+            if not self.validate_session_ownership(sess_str, canonical_uid):
+                raise TenantIsolationError(f"Access denied: session '{sess_str}' belongs to another user.")
 
         def _fallback_delete_memories():
             if not hasattr(self, "fallback_memories"):
@@ -1516,7 +1687,7 @@ class PGVectorManager:
             before_len = len(self.fallback_memories)
             self.fallback_memories = [
                 m for m in self.fallback_memories
-                if not (str(m.get("user_id")) == canonical_uid and (session_id is None or str(m.get("session_id")) == str(session_id)))
+                if not (str(m.get("user_id")) == canonical_uid and (sess_str is None or str(m.get("session_id")) == sess_str))
             ]
             cnt = before_len - len(self.fallback_memories)
             logger.info(f"Deleted {cnt} memories for user {user_id} in fallback mode")
@@ -1532,10 +1703,10 @@ class PGVectorManager:
             with self._get_conn() as conn:
                 with conn.cursor() as cur:
                     if hard_delete:
-                        if session_id:
+                        if sess_str:
                             cur.execute(
                                 "DELETE FROM memories WHERE user_id = %s AND session_id = %s;",
-                                (canonical_uid, str(session_id)),
+                                (canonical_uid, sess_str),
                             )
                         else:
                             cur.execute(
@@ -1543,10 +1714,10 @@ class PGVectorManager:
                                 (canonical_uid,),
                             )
                     else:
-                        if session_id:
+                        if sess_str:
                             cur.execute(
                                 "UPDATE memories SET is_deleted = TRUE WHERE user_id = %s AND session_id = %s;",
-                                (canonical_uid, str(session_id)),
+                                (canonical_uid, sess_str),
                             )
                         else:
                             cur.execute(
@@ -1574,7 +1745,9 @@ class PGVectorManager:
         """
         Deletes a specific memory with ownership enforcement (user_id must match).
         """
-        canonical_uid = str(user_id)
+        canonical_uid = _require_valid_user_id(user_id, "delete_memory_by_id")
+        if memory_id is None:
+            raise TenantIsolationError("A valid memory_id is required for deletion.")
 
         def _fallback_delete_id():
             if hasattr(self, "fallback_memories"):
@@ -1614,12 +1787,196 @@ class PGVectorManager:
                 raise
             return _fallback_delete_id()
 
+    def list_memories(
+        self,
+        user_id: str,
+        session_id: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Lists conversational memories for the authenticated user with strict tenant isolation,
+        optional session scoping (with ownership validation), and pagination.
+        """
+        canonical_uid = _require_valid_user_id(user_id, "list_memories")
+        sess_str = str(session_id).strip() if session_id and str(session_id).strip() else None
+        if sess_str:
+            if not self.validate_session_ownership(sess_str, canonical_uid):
+                raise TenantIsolationError(f"Access denied: session '{sess_str}' belongs to another user.")
+
+        limit = max(1, min(limit, 200))
+        offset = max(0, offset)
+
+        def _fallback_list():
+            if not hasattr(self, "fallback_memories"):
+                self.fallback_memories = []
+            matched = [
+                {
+                    "id": m.get("id"),
+                    "session_id": m.get("session_id"),
+                    "user_id": str(m.get("user_id")),
+                    "experiment_id": m.get("experiment_id"),
+                    "text": m.get("text"),
+                    "created_at": m.get("created_at"),
+                    "expires_at": m.get("expires_at"),
+                    "embedding_model_version": m.get("embedding_model_version"),
+                }
+                for m in self.fallback_memories
+                if str(m.get("user_id")) == canonical_uid
+                and not m.get("is_deleted", False)
+                and (sess_str is None or str(m.get("session_id")) == sess_str)
+            ]
+            return matched[offset:offset + limit]
+
+        if getattr(self, "is_in_memory_fallback", False) or not getattr(self, "url", None):
+            if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
+                raise DatabasePersistenceError(f"Failed to list memories: Database unavailable in {self.mode} mode.")
+            return _fallback_list()
+
+        def _db_list():
+            with self._get_conn() as conn:
+                with conn.cursor() as cur:
+                    if sess_str:
+                        cur.execute(
+                            """
+                            SELECT id, session_id, user_id, experiment_id, text, created_at, expires_at, embedding_model_version
+                            FROM memories
+                            WHERE user_id = %s AND session_id = %s AND (is_deleted IS FALSE OR is_deleted IS NULL)
+                            ORDER BY created_at DESC
+                            LIMIT %s OFFSET %s;
+                            """,
+                            (canonical_uid, sess_str, limit, offset),
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            SELECT id, session_id, user_id, experiment_id, text, created_at, expires_at, embedding_model_version
+                            FROM memories
+                            WHERE user_id = %s AND (is_deleted IS FALSE OR is_deleted IS NULL)
+                            ORDER BY created_at DESC
+                            LIMIT %s OFFSET %s;
+                            """,
+                            (canonical_uid, limit, offset),
+                        )
+                    rows = cur.fetchall()
+                    return [
+                        {
+                            "id": r[0],
+                            "session_id": r[1],
+                            "user_id": r[2],
+                            "experiment_id": r[3],
+                            "text": r[4],
+                            "created_at": r[5].isoformat() if hasattr(r[5], "isoformat") else str(r[5]),
+                            "expires_at": r[6].isoformat() if hasattr(r[6], "isoformat") else (str(r[6]) if r[6] else None),
+                            "embedding_model_version": r[7],
+                        }
+                        for r in rows
+                    ]
+
+        try:
+            return self._execute(
+                operation_name="list_memories",
+                operation_fn=_db_list,
+                is_idempotent=True,
+                is_write=False,
+                user_id=canonical_uid,
+            )
+        except DatabasePersistenceError:
+            if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
+                raise
+            return _fallback_list()
+
+    def get_session_history(
+        self,
+        session_id: str,
+        user_id: str,
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieves the chronological conversational history for a specific session.
+        Strictly enforces that the session belongs to the authenticated user.
+        Raises TenantIsolationError if session_id belongs to another user.
+        """
+        canonical_uid = _require_valid_user_id(user_id, "get_session_history")
+        if not session_id or not str(session_id).strip():
+            raise TenantIsolationError("A valid session_id is required to retrieve session history.")
+        sess_str = str(session_id).strip()
+
+        if not self.validate_session_ownership(sess_str, canonical_uid):
+            raise TenantIsolationError(f"Access denied: session '{sess_str}' belongs to another user.")
+
+        def _fallback_history():
+            if not hasattr(self, "fallback_memories"):
+                self.fallback_memories = []
+            turns = [
+                {
+                    "id": m.get("id"),
+                    "session_id": m.get("session_id"),
+                    "user_id": str(m.get("user_id")),
+                    "experiment_id": m.get("experiment_id"),
+                    "text": m.get("text"),
+                    "created_at": m.get("created_at"),
+                    "expires_at": m.get("expires_at"),
+                    "embedding_model_version": m.get("embedding_model_version"),
+                }
+                for m in self.fallback_memories
+                if str(m.get("user_id")) == canonical_uid
+                and str(m.get("session_id")) == sess_str
+                and not m.get("is_deleted", False)
+            ]
+            turns.sort(key=lambda x: x.get("created_at") or 0)
+            return turns
+
+        if getattr(self, "is_in_memory_fallback", False) or not getattr(self, "url", None):
+            if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
+                raise DatabasePersistenceError(f"Failed to get session history: Database unavailable in {self.mode} mode.")
+            return _fallback_history()
+
+        def _db_history():
+            with self._get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT id, session_id, user_id, experiment_id, text, created_at, expires_at, embedding_model_version
+                        FROM memories
+                        WHERE user_id = %s AND session_id = %s AND (is_deleted IS FALSE OR is_deleted IS NULL)
+                        ORDER BY created_at ASC;
+                        """,
+                        (canonical_uid, sess_str),
+                    )
+                    rows = cur.fetchall()
+                    return [
+                        {
+                            "id": r[0],
+                            "session_id": r[1],
+                            "user_id": r[2],
+                            "experiment_id": r[3],
+                            "text": r[4],
+                            "created_at": r[5].isoformat() if hasattr(r[5], "isoformat") else str(r[5]),
+                            "expires_at": r[6].isoformat() if hasattr(r[6], "isoformat") else (str(r[6]) if r[6] else None),
+                            "embedding_model_version": r[7],
+                        }
+                        for r in rows
+                    ]
+
+        try:
+            return self._execute(
+                operation_name="get_session_history",
+                operation_fn=_db_history,
+                is_idempotent=True,
+                is_write=False,
+                user_id=canonical_uid,
+            )
+        except DatabasePersistenceError:
+            if self.mode == DatabaseMode.PRODUCTION or not self.allow_in_memory_fallback:
+                raise
+            return _fallback_history()
+
     def export_user_memories(self, user_id: str) -> List[Dict[str, Any]]:
         """
         Exports all active conversational memories for an account (data portability).
         Omits internal high-dimensional vector embeddings for bandwidth and privacy.
         """
-        canonical_uid = str(user_id)
+        canonical_uid = _require_valid_user_id(user_id, "export_user_memories")
 
         def _fallback_export():
             if hasattr(self, "fallback_memories"):

@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 from datetime import datetime
@@ -16,7 +17,7 @@ from app.core_backend.core.dependencies import (
 )
 from app.core_backend.core.limiter import limiter
 from app.core_backend.database.supabase_db import DatabaseManager
-from app.core_backend.database.pgvector_db import DatabasePersistenceError
+from app.core_backend.database.pgvector_db import DatabasePersistenceError, TenantIsolationError
 from app.logger import logger
 
 router = APIRouter()
@@ -166,6 +167,22 @@ class ExportMemoriesResponse(BaseModel):
     memories: List[ExportedMemoryItem] = Field(default_factory=list, description="List of user memory records")
 
 
+class ListMemoriesResponse(BaseModel):
+    status: str = Field(..., description="Operation status (success)")
+    user_id: str = Field(..., description="Canonical user ID")
+    session_id: Optional[str] = Field(None, description="Session ID if filtered")
+    count: int = Field(..., ge=0, description="Total count of returned memory records")
+    memories: List[Dict[str, Any]] = Field(default_factory=list, description="List of user memory records")
+
+
+class SessionHistoryResponse(BaseModel):
+    status: str = Field(..., description="Operation status (success)")
+    user_id: str = Field(..., description="Canonical user ID")
+    session_id: str = Field(..., description="Session ID")
+    count: int = Field(..., ge=0, description="Total count of returned turns")
+    history: List[Dict[str, Any]] = Field(default_factory=list, description="Chronological conversation turns")
+
+
 @router.get("/", response_model=TutorStatusResponse)
 def get_tutor_status():
     return {"status": "Tutor endpoint is active."}
@@ -214,7 +231,7 @@ async def chat_with_tutor(
     canonical_uid = str(current_user["id"])
 
     # Enforce daily request budget
-    daily_allowed, current_count = db_manager.check_and_increment_daily_usage(canonical_uid, limit=100)
+    daily_allowed, current_count = await asyncio.to_thread(db_manager.check_and_increment_daily_usage, canonical_uid, 100)
     if not daily_allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -260,6 +277,11 @@ async def delete_user_memories(
             "message": f"Successfully deleted {deleted} memory records.",
             "deleted_count": deleted,
         }
+    except TenantIsolationError as tie:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(tie),
+        )
     except DatabasePersistenceError as pe:
         logger.error(f"Failed to delete memories for user {canonical_uid}: {pe}")
         raise HTTPException(
@@ -290,6 +312,11 @@ async def delete_single_memory(
         return {"status": "success", "message": f"Memory {memory_id} deleted."}
     except HTTPException:
         raise
+    except TenantIsolationError as tie:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(tie),
+        )
     except DatabasePersistenceError as pe:
         logger.error(f"Failed to delete memory {memory_id} for user {canonical_uid}: {pe}")
         raise HTTPException(
@@ -322,4 +349,84 @@ async def export_user_memories(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database persistence unavailable: Memory records could not be exported.",
+        )
+
+
+
+@router.get("/memories", response_model=ListMemoriesResponse)
+@limiter.limit("30/minute")
+async def list_user_memories(
+    request: Request,
+    session_id: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
+):
+    """
+    List conversational memories for the authenticated user with optional session scoping and pagination.
+    """
+    canonical_uid = str(current_user["id"])
+    try:
+        memories = active_db.list_memories(
+            user_id=canonical_uid,
+            session_id=session_id,
+            limit=limit,
+            offset=offset,
+        )
+        return {
+            "status": "success",
+            "user_id": canonical_uid,
+            "session_id": session_id,
+            "count": len(memories),
+            "memories": memories,
+        }
+    except TenantIsolationError as tie:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(tie),
+        )
+    except DatabasePersistenceError as pe:
+        logger.error(f"Failed to list memories for user {canonical_uid}: {pe}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database persistence unavailable: Memory records could not be listed.",
+        )
+
+
+@router.get("/memories/session/{session_id}", response_model=SessionHistoryResponse)
+@limiter.limit("30/minute")
+async def get_session_history_endpoint(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
+):
+    """
+    Retrieves chronological conversation history for a specific session.
+    Strictly enforces that the session belongs to the authenticated user.
+    """
+    canonical_uid = str(current_user["id"])
+    try:
+        history = active_db.get_session_history(
+            session_id=session_id,
+            user_id=canonical_uid,
+        )
+        return {
+            "status": "success",
+            "user_id": canonical_uid,
+            "session_id": session_id,
+            "count": len(history),
+            "history": history,
+        }
+    except TenantIsolationError as tie:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(tie),
+        )
+    except DatabasePersistenceError as pe:
+        logger.error(f"Failed to retrieve session history for user {canonical_uid}: {pe}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database persistence unavailable: Session history could not be retrieved.",
         )

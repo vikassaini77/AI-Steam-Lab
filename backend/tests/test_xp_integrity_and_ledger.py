@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.core_backend.database.pgvector_db import PGVectorManager, DatabasePersistenceError
 from app.core_backend.database.supabase_db import DatabaseManager
-from app.core_backend.core.dependencies import get_current_user
+from app.core_backend.core.dependencies import get_current_user, get_db, reset_shared_dependencies
 from app.core_backend.routes.gamification import MAX_XP_PER_EVENT
 
 client = TestClient(app)
@@ -33,8 +33,10 @@ TEST_USER_B = {"id": "user_xp_bob", "sub": "user_xp_bob", "role": "student"}
 
 @pytest.fixture(autouse=True)
 def override_auth_and_cleanup():
-    app.dependency_overrides[get_current_user] = lambda: TEST_USER_A
+    reset_shared_dependencies()
     db = DatabaseManager()
+    app.dependency_overrides[get_current_user] = lambda: TEST_USER_A
+    app.dependency_overrides[get_db] = lambda: db
     data = db._read_local()
     if "xp" in data:
         data["xp"][TEST_USER_A["id"]] = 0
@@ -50,6 +52,7 @@ def override_auth_and_cleanup():
         yield
 
     app.dependency_overrides.clear()
+    reset_shared_dependencies()
 
 
 def test_server_enforces_positive_award_amounts():

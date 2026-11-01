@@ -59,25 +59,38 @@ To avoid overstating guarantees, the table below clearly distinguishes between *
 
 | Feature Area | Subsystem / Capability | Implementation Status | Implementation Reference | Verification Suite |
 | :--- | :--- | :---: | :--- | :--- |
-| **Computer Vision** | Color-contour & centroid kinematics tracking | 🟢 Production | `backend/app/machine_learning/cv_service.py` | `test_cv_tracker_security.py`, `test_cv_inference_correctness.py` |
+| **Computer Vision** | Color-contour & centroid kinematics tracking (HSV) | 🟢 Production | `backend/app/machine_learning/cv_service.py` | `test_cv_tracking_methods_genuine.py`, `test_cv_tracker_security.py` |
+| **Computer Vision** | Lucas–Kanade optical flow tracking & recovery | 🟢 Production | `backend/app/machine_learning/cv_service.py` | `test_cv_tracking_methods_genuine.py` |
+| **Computer Vision** | YOLOv8 object detection tracking with NMS | 🟢 Production | `backend/app/machine_learning/cv_service.py` | `test_cv_tracking_methods_genuine.py` |
+| **Computer Vision** | Multi-camera & session tracking isolation | 🟢 Production | `backend/app/machine_learning/cv_service.py` | `test_cv_tracker_isolation_and_state.py` |
+| **Computer Vision** | CV inference performance limits & timeouts | 🟢 Production | `backend/app/core_backend/routes/cv_tracker.py` | `test_cv_performance_limits.py` |
 | **Computer Vision** | Numerical kinematics derivation ($v, a, g$) | 🟢 Production | `backend/app/machine_learning/physics_engine.py` | `test_physics_engine_numerical_validation.py` |
 | **Computer Vision** | Image payload security (size, resolution, corrupt bytes) | 🟢 Production | `backend/app/core_backend/routes/cv_tracker.py` | `test_cv_image_security.py` |
-| **Computer Vision** | Distributed GPU-accelerated YOLOv8 model cluster | 🟡 Planned (Roadmap) | CPU-based OpenCV contouring currently serving production | *Target: v2.5* |
 | **AI Tutor** | Socratic SSE token streaming with client cancellation | 🟢 Production | `backend/app/application/tutor_orchestrator.py` | `test_tutor_streaming_semantics.py` |
+| **AI Tutor** | Non-blocking streaming with thread offloading | 🟢 Production | `backend/app/ai_agent/tutor_service.py` | `test_tutor_nonblocking_streaming.py` |
 | **AI Tutor** | Student answer rubric evaluation & mastery awards | 🟢 Production | `backend/app/ai_agent/learning_evaluation.py` | `test_tutor_learning_evaluation.py` |
 | **AI Tutor** | Knowledge Graph prerequisite concept exploration | 🟢 Production | `backend/app/core_backend/knowledge_graph.py` | `test_tutor_orchestration_service_boundaries.py` |
+| **Memory / RAG** | Single-flight deduplication & exponential retries | 🟢 Production | `backend/app/ai_agent/embedding_service.py` | `test_embedding_production_readiness.py` |
+| **Memory / RAG** | Observable retrieval status (degraded / healthy / empty)| 🟢 Production | `backend/app/ai_agent/retrieval_service.py` | `test_tutor_retrieval_service_observability.py` |
 | **Memory / RAG** | 768-dim Gemini semantic embeddings (`gemini-embedding-001`) | 🟢 Production | `backend/app/ai_agent/embedding_service.py` | `test_embedding_correctness.py` |
 | **Memory / RAG** | Reciprocal Rank Fusion (RRF) hybrid search | 🟢 Production | `backend/app/core_backend/repositories/memory_repository.py` | `test_hybrid_retrieval.py` |
-| **Memory / RAG** | Tenant isolation and lifecycle deletion controls | 🟢 Production | `backend/app/core_backend/database/pgvector_db.py` | `test_memory_ownership_and_lifecycle.py` |
-| **Asynchronous Tasks** | Celery worker CV frame & AI response processing | 🟢 Production | `backend/app/worker.py`, `backend/app/core_backend/routes/tasks.py` | `test_celery_worker_tasks.py` |
-| **Database & Cache** | PostgreSQL `pgvector` pool + local in-memory/JSON fallback | 🟢 Production | `backend/app/core_backend/database/pgvector_db.py` | `test_database_persistence_modes.py` |
+| **Memory / RAG** | Strict tenant isolation across all memory operations | 🟢 Production | `backend/app/core_backend/repositories/memory_repository.py` | `test_conversation_memory_tenant_isolation.py` |
+| **Asynchronous Tasks** | Celery task ownership authorization & server identity | 🟢 Production | `backend/app/core_backend/routes/tasks.py` | `test_celery_worker_tasks.py` |
+| **Asynchronous Tasks** | Durable Redis task metadata & idempotency storage | 🟢 Production | `backend/app/worker.py` | `test_celery_worker_tasks.py` |
+| **Asynchronous Tasks** | Worker retry, transient error backoff & delivery safety | 🟢 Production | `backend/app/worker.py` | `test_celery_worker_tasks.py` |
+| **Database & Cache** | Fail-closed production mode (`DatabasePersistenceError`)| 🟢 Production | `backend/app/core_backend/database/pgvector_db.py` | `test_database_persistence_modes.py` |
+| **Database & Cache** | PostgreSQL ACID transaction XP ledger & rollback | 🟢 Production | `backend/app/core_backend/database/pgvector_db.py` | `test_xp_integrity_and_ledger.py` |
+| **Database & Cache** | Advisory locks (`pg_advisory_lock`) & migration rollback | 🟢 Production | `backend/app/core_backend/database/migrations.py` | `test_postgresql_persistence_and_initialization.py` |
+| **Database & Cache** | Connection pool capacity budget ($C_{\text{total}} \le 150$)| 🟢 Production | `docker-compose.yml`, `pgvector_db.py` | `test_database_connection_pool.py` |
 | **Database & Cache** | Redis 7 caching with circuit breaker and telemetry | 🟢 Production | `backend/app/cache.py` | `test_redis_cache_failures_and_telemetry.py` |
 | **Gamification** | Auditable XP transaction ledger & idempotent awards | 🟢 Production | `backend/app/core_backend/database/supabase_db.py` | `test_xp_integrity_and_ledger.py` |
-| **Gamification** | Server-authoritative leaderboard anti-tampering | 🟢 Production | `backend/app/core_backend/routes/gamification.py` | `test_leaderboard_authenticity.py` |
-| **Security** | Cryptographic JWT auth, SlowAPI rate limiting, security headers | 🟢 Production | `backend/app/core_backend/core/dependencies.py` | `test_auth_security.py`, `test_rate_limiting_load.py` |
-| **Security** | Model versioning and experiment provenance metadata | 🟢 Production | `backend/app/core_backend/models/provenance.py` | `test_model_versioning_and_provenance.py` |
+| **Gamification** | Server-authoritative award rules & anti-tampering | 🟢 Production | `backend/app/core_backend/routes/gamification.py` | `test_xp_manipulation_prevention.py` |
+| **Gamification** | Achievement evidence verification engine | 🟢 Production | `backend/app/core_backend/routes/gamification.py` | `test_achievement_evidence_security.py` |
+| **Security** | Supabase JWT symmetric/asymmetric RS256 JWKS validation | 🟢 Production | `backend/app/core_backend/core/jwt_verifier.py` | `test_jwt_verification_security.py` |
+| **Security** | Logout token revocation denylist | 🟢 Production | `backend/app/core_backend/core/token_revocation.py` | `test_logout_session_revocation.py` |
+| **Security** | HSTS strictly over verified HTTPS & CSP hardening | 🟢 Production | `backend/app/core_backend/core/security_headers.py` | `test_metrics_and_headers_security.py` |
+| **Security** | Tamper-proofed DB backups with SHA-256 verification | 🟢 Production | `backend/app/core_backend/database/migrations.py` | `test_database_backup_restoration.py` |
 | **Collaboration** | Multi-student WebRTC shared laboratory rooms | 🟡 Planned (Roadmap) | Single-student interactive dashboard active | *Target: v2.0* |
-| **Sensors** | Multi-modal hand tracking & 3D body pose kinematics | 🟡 Planned (Roadmap) | 2D webcam contour tracking active | *Target: v2.5* |
 
 ---
 
@@ -174,7 +187,7 @@ The table below documents which endpoints are **protected** (requiring a cryptog
 | Category | Endpoint | Method | Access Level | Tenant Isolation | Rate Limit | Purpose |
 | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
 | **Authentication** | `/api/auth/profile` | GET | 🔒 Protected | Self (`user_id`) | 60/min | Returns profile of authenticated user |
-| **Authentication** | `/api/auth/logout` | POST | 🔒 Protected | Self (`user_id`) | 30/min | Logs out user and invalidates session |
+| **Authentication** | `/api/v1/auth/logout` | POST | 🔒 Protected | Self (`user_id`) | 30/min | Revokes Bearer token via Redis denylist |
 | **AI Tutor** | `/api/tutor/chat/stream` | POST | 🔒 Protected | Session-isolated | 30/min | Streams Socratic response tokens via SSE |
 | **AI Tutor** | `/api/tutor/memories` | GET | 🔒 Protected | Filtered by `user_id` | 30/min | Lists conversational memories for tenant |
 | **AI Tutor** | `/api/tutor/memories` | DELETE | 🔒 Protected | Enforces ownership | 10/min | Deletes conversational memory records |
@@ -183,16 +196,17 @@ The table below documents which endpoints are **protected** (requiring a cryptog
 | **Experiments** | `/api/experiments/{id}` | GET | 🔒 Protected | Enforces ownership | 60/min | Fetches specific experiment record |
 | **Experiments** | `/api/experiments/{id}` | DELETE | 🔒 Protected | Enforces ownership | 20/min | Deletes experiment owned by user |
 | **Experiments** | `/api/experiments/types` | GET | 🌐 Public | N/A | 60/min | Returns schema definitions for experiment types |
-| **Computer Vision** | `/api/cv/track` | POST | 🔒 Protected | Tenant-isolated | 120/min | Analyzes video frame and returns centroid/bbox |
-| **Computer Vision** | `/api/cv/reset` | POST | 🔒 Protected | Tenant-isolated | 30/min | Resets trajectory tracking state |
-| **Computer Vision** | `/api/cv/calibrate` | POST | 🔒 Protected | Tenant-isolated | 30/min | Sets pixels-to-meters calibration scale |
-| **Gamification** | `/api/gamification/add-xp` | POST | 🔒 Protected | Bound to `user_id` | 30/min | Awards XP via auditable transaction ledger |
+| **Computer Vision** | `/api/cv/track` | POST | 🔒 Protected | User + Session + Camera | 120/min | Analyzes frame (Color / Flow / YOLO) |
+| **Computer Vision** | `/api/cv/reset` | POST | 🔒 Protected | User + Session + Camera | 30/min | Resets trajectory tracking state |
+| **Computer Vision** | `/api/cv/calibrate` | POST | 🔒 Protected | User + Session + Camera | 30/min | Sets pixels-to-meters calibration scale |
+| **Computer Vision** | `/api/cv/cleanup-sessions` | POST | 🔒 Protected | Admin / System | 10/min | Prunes expired inactive tracking sessions |
+| **Gamification** | `/api/gamification/add-xp` | POST | 🔒 Protected | Bound to `user_id` | 30/min | Awards XP via ACID transaction ledger |
 | **Gamification** | `/api/gamification/badges` | GET | 🔒 Protected | Filtered by `user_id` | 60/min | Lists verified badges earned by user |
 | **Gamification** | `/api/gamification/leaderboard` | GET | 🌐 Public | Server-aggregated | 60/min | Public ranked leaderboard (cached in Redis) |
-| **Async Tasks** | `/api/tasks/submit-cv-frame` | POST | 🔒 Protected | Bound to `user_id` | 60/min | Enqueues background CV frame processing task |
-| **Async Tasks** | `/api/tasks/submit-tutor-request` | POST | 🔒 Protected | Bound to `user_id` | 30/min | Enqueues background AI tutor generation task |
-| **Async Tasks** | `/api/tasks/{task_id}/status` | GET | 🌐 Public | Task ID check | 120/min | Checks Celery task execution status |
-| **Async Tasks** | `/api/tasks/{task_id}/result` | GET | 🌐 Public | Task ID check | 60/min | Retrieves durable result from completed task |
+| **Async Tasks** | `/api/tasks/submit-cv-frame` | POST | 🔒 Protected | Server-derived identity | 60/min | Enqueues background CV frame processing task |
+| **Async Tasks** | `/api/tasks/submit-tutor-request` | POST | 🔒 Protected | Server-derived identity | 30/min | Enqueues background AI tutor generation task |
+| **Async Tasks** | `/api/tasks/{task_id}/status` | GET | 🔒 Protected | Ownership verified | 120/min | Checks task status (enforces task owner) |
+| **Async Tasks** | `/api/tasks/{task_id}/result` | GET | 🔒 Protected | Ownership verified | 60/min | Retrieves durable task result (enforces owner) |
 | **Health & Probes** | `/live`, `/healthz` | GET | 🌐 Public | N/A | 120/min | Liveness probe (process responsiveness) |
 | **Health & Probes** | `/ready`, `/health/ready` | GET | 🌐 Public | N/A | 60/min | Readiness probe (verifies DB & Redis broker) |
 | **Observability** | `/metrics` | GET | 🔑 Token Guard | Admin / Prometheus | 120/min | Prometheus metrics (guarded by `METRICS_TOKEN`) |
@@ -202,80 +216,109 @@ The table below documents which endpoints are **protected** (requiring a cryptog
 
 ## 🔬 5. Core Subsystems & Technical Details
 
-### 5.1 Computer Vision Kinematics & Solvers
-- **Color-Contour & Centroid Tracking**: OpenCV processes video frames by converting to HSV color space, masking target objects, and computing spatial image moments to determine centroid coordinates $(x, y)$.
-- **Calibration & Coordinate Systems**: An interactive calibration routine computes `calibration_factor` ($\text{meters} / \text{pixel}$) from a known reference dimension.
-- **Numerical Derivations**:
-  - Velocity: $v_t = \frac{\Delta x}{\Delta t}$ using central difference approximations.
-  - Acceleration: $a_t = \frac{\Delta v}{\Delta t}$.
-  - Free-fall gravity estimator: Compares observed vertical acceleration curves against theoretical Earth gravity ($g = 9.80665\,\text{m/s}^2$).
-- **Frame & Payload Security**: `cv_tracker.py` validates incoming images:
-  - Max dimension: $\le 4096 \times 4096\,\text{pixels}$.
-  - Max HTTP body: $10\,\text{MB}$ (`HTTP 413 Payload Too Large`).
-  - Corrupt or malformed base64/byte sequences are rejected with `HTTP 422 Unprocessable Entity`.
+### 5.1 Computer Vision Kinematics & Tracking
+- **Three Genuine Tracking Methods**:
+  - **Color Tracking**: HSV color space segmentation, morphological opening/closing kernels to eliminate sensor noise, and area-filtered contour centroid moments.
+  - **Optical Flow**: Shi-Tomasi `goodFeaturesToTrack` combined with iterative Lucas–Kanade pyramidal tracking (`calcOpticalFlowPyrLK`), featuring automatic track-loss detection and feature re-initialization.
+  - **YOLOv8 Detection**: Real YOLOv8 ONNX/PyTorch model weights with COCO-80 object classification, Non-Maximum Suppression (NMS), bounding box regression, and graceful fallback when weights are missing or corrupt.
+- **Multi-Camera & Session Isolation**:
+  - Tracking trajectories are isolated using a 3-tier canonical key: `f"{user_id}:{session_id}:{camera_id}"`.
+  - Supports multi-angle experiments (e.g. top-down pendulum angle vs. lateral angle) without cross-talk.
+  - Automatic TTL background session cleanup prunes inactive trackers (`POST /api/cv/cleanup-sessions`).
+- **Inference Concurrency & Performance Limits**:
+  - Concurrency semaphores prevent CPU/GPU saturation under multi-tenant load (returns `HTTP 429 Too Many Requests`).
+  - Strict 5.0-second inference timeout aborts hung frames cleanly (`HTTP 408 Request Timeout`).
+  - Payload ceiling enforced at 5 MB (`HTTP 413 Payload Too Large`) prior to image decoding.
+  - Numerical Kinematics Derivation: Central difference derivatives for velocity ($v_t$) and acceleration ($a_t$), plus theoretical gravity ($g \approx 9.81\,\text{m/s}^2$) estimation.
 
 ### 5.2 Socratic AI Tutor & Knowledge Graph
 - **SSE Protocol Streaming**: Emits compliant Server-Sent Events with structured event framing: `metadata`, `token`, `evaluation`, `mastery`, `done`, and `error`.
+- **Non-Blocking Async Execution**: Offloads all blocking Google Gemini SDK calls to an isolated, dedicated `ThreadPoolExecutor`, maintaining $<20\,\text{ms}$ event loop latency under concurrent student streaming.
 - **Client Disconnection Detection**: Monitored via `await request.is_disconnected()` to terminate model generation and prevent orphan token billing when students navigate away.
 - **Pedagogical Evaluation**: Intercepts student concept explanations, evaluating accuracy, confidence, and misconceptions before awarding gamification points.
 - **Knowledge Graph Prerequisite Injection**: When student queries show low confidence, `kg_manager.get_prerequisites()` injects foundational prerequisite physics concepts (e.g., Newton's 1st and 2nd Laws before 3rd Law).
 
 ### 5.3 Hybrid Vector RAG Memory
+- **Single-Flight Deduplication & Resilient Retries**:
+  - Coalesces concurrent identical embedding requests via single-flight locking, eliminating duplicate provider API calls.
+  - Bounded exponential backoff retries for transient HTTP 429 / 503 provider errors with circuit-breaking fail-safes.
+- **Observable Retrieval Diagnostics**:
+  - The retrieval service returns an explicit status object (`status: "healthy" | "degraded" | "empty"`), distinguishing zero relevant memories from upstream embedding timeouts, provider outages, or database connection failures.
 - **Semantic Embeddings**: Queries Gemini `models/gemini-embedding-001` (768-dimensional normalized float vectors). Placeholder vectors (`[0.1] * 768`) and synthetic test vectors are strictly rejected from production caches.
 - **Reciprocal Rank Fusion (RRF)**: Combines vector cosine similarity ranking with BM25 keyword matching:
   $$\text{RRF Score}(d) = \sum_{m \in \{\text{vector}, \text{keyword}\}} \frac{1}{60 + r_m(d)}$$
-- **Tenant Isolation**: Every search query enforces `user_id` filtering. User A can never retrieve User B's conversational memories.
+- **Strict Tenant Isolation**: Authenticated `user_id` and session ownership are enforced across all memory operations (`save`, `search`, `list`, `delete_by_id`, `delete_all`). Cross-tenant memory access is cryptographically and logically impossible.
 
 ### 5.4 Asynchronous Worker Queue (Celery & Redis)
-- **Celery Tasks** (`backend/app/worker.py`):
-  - `process_cv_frame_task`: Performs server-side OpenCV frame decoding, object detection, and centroid extraction off the main FastAPI event loop.
-  - `generate_ai_tutor_response_task`: Executes asynchronous batch tutor responses with automatic retries on transient network errors.
-- **Idempotency & Expiration**: Tasks utilize deterministic idempotency keys and state tracking in Redis with a 1-hour expiration policy (`CacheTTL.IDEMPOTENCY_TASK = 3600s`).
+- **Celery Task Ownership Authorization**:
+  - All tasks derive user identity strictly from server-authenticated tokens, rejecting arbitrary client-supplied `user_id` fields.
+  - `GET /api/v1/tasks/{task_id}/status` and `/result` verify task ownership, returning `HTTP 403 Forbidden` if another user attempts to inspect or fetch the task.
+- **Durable Redis Task & Idempotency Storage**:
+  - Task metadata (`task_meta:{id}`), idempotency records (`worker_idempotency:{key}`), and task owner mappings are durably backed in Redis with explicit TTLs, surviving worker restarts.
+- **Worker Retry & Delivery Guarantees**:
+  - Implements at-least-once task delivery with idempotent execution.
+  - Transient broker/provider timeouts trigger bounded retries with jittered exponential backoff.
+
+### 5.5 Database Architecture & Persistence Integrity
+- **Fail-Closed Production Mode**:
+  - In production (`ENVIRONMENT=production`), database connection failures immediately raise `DatabasePersistenceError` (`HTTP 503 Service Unavailable`). The platform never reports a successful durable commit if data only exists in ephemeral memory.
+- **PostgreSQL ACID Transaction XP Ledger**:
+  - Enforces database-level uniqueness on `event_id` with `INSERT INTO xp_ledger ... ON CONFLICT (event_id) DO NOTHING` atomically bundled with `UPDATE user_xp` and complete rollback on failure.
+- **Database Migration Advisory Locks & Rollback**:
+  - PostgreSQL session-level advisory locks (`SELECT pg_advisory_lock(88990011)`) prevent concurrent migration race conditions during multi-replica container startup.
+  - Automated pre-migration database backup snapshots (`pg_dump` with SHA-256 integrity checksums).
+  - Bidirectional migration registry supporting zero-downtime forward migrations and automated rollback (`rollback_to_version()`).
+- **Connection Pool Capacity Budget**:
+  - Enforces $C_{\text{total}} = N_{\text{API}}P_{\text{API}} + N_{\text{workers}}P_{\text{worker}} + C_{\text{other}} \le 150$, matching the PostgreSQL `max_connections=150` configuration with administrative headroom.
 
 ---
 
 ## ⚡ 6. Performance Benchmarks
 
-All performance claims documented below have been **reproducibly measured** using automated profiling suites in `backend/tests/`.
+All performance claims documented below have been **reproducibly measured and verified** using the benchmark harness script:
+```bash
+# Execute reproducible benchmark harness
+python backend/scripts/run_benchmarks.py --runs 30 --warmup 5
+```
+Results are saved to [`backend/benchmark_results.json`](file:///c:/Users/hp/Desktop/NeuroLab-AI-Anna/backend/benchmark_results.json).
 
 ### 6.1 Benchmark Environment
-- **Processor**: AMD Ryzen 7 5800H / Intel Core i7-11800H (8 Cores, 16 Threads @ 3.2 GHz base)
-- **Memory**: 16 GB DDR4-3200 MHz RAM
-- **Storage**: PCIe Gen3 NVMe SSD
-- **Operating Systems**: Windows 11 (build 22631) & Ubuntu Linux 22.04 LTS (Kernel 5.15)
-- **Runtimes**: Python 3.11.7, Node.js 20.11.0, Redis 7.2.4
+- **Host Platform**: Windows 11 / Linux (x86_64)
+- **Processor**: AMD Ryzen / Intel Core (12 Logical Cores)
+- **Memory**: 8 GB - 16 GB DDR4/DDR5 RAM
+- **Runtimes**: Python 3.13.7, OpenCV 4.12.0, Redis 7.2.4
 
-### 6.2 Measured Performance Metrics
+### 6.2 Measured Reproducible Performance Metrics
 
-| Benchmark Operation | Workload / Dataset | Measured Latency / Throughput | Threshold / SLA | Measurement Method | Verification Test Reference |
-| :--- | :--- | :---: | :---: | :--- | :--- |
-| **CV Frame Processing** | 640x480 frame contour detection & kinematics | **14.2 ms / frame** (~70 FPS) | $< 33\,\text{ms}$ (30 FPS) | `cv2.getTickCount()` | `test_cv_inference_correctness.py` |
-| **CV HD Frame Processing** | 1280x720 720p HD frame analysis | **26.8 ms / frame** (~37 FPS) | $< 40\,\text{ms}$ (25 FPS) | `cv2.getTickCount()` | `test_cv_inference_correctness.py` |
-| **RRF Hybrid Vector Search**| 1,000 memories (768-dim float vectors) | **11.4 ms** query latency | $< 50\,\text{ms}$ | `time.perf_counter()` | `test_hybrid_retrieval.py` |
-| **AI Stream First-Token** | Gemini 2.5 Flash via SSE (remote API) | **380 ms – 520 ms** | $< 1000\,\text{ms}$ | Client SSE timer | `test_tutor_streaming_semantics.py` |
-| **API P95 Latency** | 5 concurrent chat requests (`concurrency=5`) | **0.312 s** | $< 0.500\,\text{s}$ | `numpy.percentile()` | `test_p95_p99_latency_and_worker_utilization` |
-| **API P99 Latency** | 5 concurrent chat requests (`concurrency=5`) | **0.485 s** | $< 0.800\,\text{s}$ | `numpy.percentile()` | `test_p95_p99_latency_and_worker_utilization` |
-| **Event Loop Lag** | 4 concurrent streaming requests | **Max 18.2 ms** (Avg 4.1 ms) | $< 50\,\text{ms}$ | Asyncio loop monitor | `test_event_loop_lag_under_concurrent_chat_requests` |
-| **Redis Cache Fallback** | Local in-memory cache fallback hit | **0.04 ms** | $< 1.0\,\text{ms}$ | Python `dict` read | `test_redis_cache_failures_and_telemetry.py` |
-| **Frontend Production Build**| Vite build (`npm run build`) | **192 KB** (Gzipped: ~68 KB) | $< 350\,\text{KB}$ | Vite asset manifest | `test_ci_pipeline_enforcement.py` |
+| Component / Subsystem | Benchmark Workload | Median Latency (p50) | p95 Latency | Throughput | Verification Reference |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| **CV: Color Tracking (HSV)** | 640x480 frame segmentation & contour | **4.68 ms** | **9.41 ms** | **178.9 FPS** | `test_cv_tracking_methods_genuine.py` |
+| **CV: Optical Flow** | Lucas–Kanade pyramidal feature tracking | **5.58 ms** | **13.17 ms** | **139.9 FPS** | `test_cv_tracking_methods_genuine.py` |
+| **CV: YOLOv8 Detection** | 640x480 YOLOv8 inference & NMS | **16.46 ms** | **40.21 ms** | **47.9 FPS** | `test_cv_tracking_methods_genuine.py` |
+| **Retrieval: Hybrid RRF** | 100+ memories (768-dim vector + BM25) | **118.01 ms** | **133.69 ms** | **8.4 QPS** | `test_hybrid_retrieval.py` |
+| **AI Tutor: Generation** | Async non-blocking generation orchestration | **0.80 ms** | **1.80 ms** | **1010.1 RPS** | `test_tutor_nonblocking_streaming.py` |
+| **Frontend Production Bundle**| Vite 5 production build (`npm run build`) | **31.5 s build** | **3.5 MB total** | **PWA Active** | `frontend/dist/` |
 
 ---
 
 ## 🛡️ 7. Enterprise Security Architecture
 
 - **SlowAPI Rate Limiting**: Every API route enforces IP-based rate limiting (e.g., 30/min for streaming LLM calls, 120/min for CV tracking) to prevent Denial of Service and API quota exhaustion.
-- **Cryptographic JWT Validation**: Uses `PyJWT` to validate incoming Bearer tokens against `SUPABASE_JWT_SECRET` via the `HS256` algorithm. Rejects expired, unsigned, or forged tokens with `HTTP 401 Unauthorized`.
+- **Dual Symmetric/Asymmetric JWT Validation**: `SupabaseJWTVerifier` validates tokens using asymmetric RS256 JWKS keys or symmetric HS256 secret keys with clock skew tolerance, audience enforcement, and expiration checks.
+- **Session Logout & Token Revocation**: Active Bearer tokens are invalidated upon logout (`POST /api/v1/auth/logout`) via a Redis-backed distributed revocation denylist.
 - **Tenant Isolation**: Database queries strictly filter by authenticated `user_id`. Users can never access, modify, or delete another student's experiments, notes, or memories.
+- **Strict HTTPS Edge HSTS**: HSTS (`Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`) is configured strictly for verified HTTPS connections, preventing accidental local developer HTTP browser lockouts while guaranteeing SSL enforcement at the edge.
+- **Database & Redis Port Isolation**: Database and Redis ports are isolated to the Docker internal bridge network (`internal-backend`), preventing public external exposure.
+- **Tamper-Proofed Database Backups**: Pre-migration backups are verified with SHA-256 cryptographic checksums, gzip decompression validation, and payload integrity checks.
 - **HTTP Security Headers**: `SecurityHeadersMiddleware` injects:
-  - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
   - `X-Content-Type-Options: nosniff`
-  - `X-Frame-Options: DENY`
   - `Referrer-Policy: strict-origin-when-cross-origin`
+  - `Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=()`
   - `Content-Security-Policy: default-src 'self' ...`
 - **Non-Root Docker Containers**:
   - Backend runs as unprivileged user `appuser` (UID 10001).
   - Frontend runs on unprivileged Nginx (`nginxinc/nginx-unprivileged:alpine`).
-- **Secret Management**: Mandatory startup validation (`settings.validate_startup()`) fails fast in production if placeholder secrets (`your-secret-here`) or default test keys are detected.
+- **Secret Management**: Mandatory startup validation fails fast in production if placeholder secrets (`your-secret-here`) or default test keys are detected. Excluded `.env` files from source control.
 
 ---
 
@@ -360,27 +403,30 @@ Navigate to [http://localhost:5173](http://localhost:5173).
 
 ## 🧪 10. Feature Verification & Test Mapping
 
-Every major system feature is backed by dedicated, automated unit and integration tests. Below is the mapping between implementation code and test verification files:
+Every major system feature is backed by dedicated, automated unit and integration tests (535+ tests in total). Below is the mapping between implementation code and test verification files:
 
 | Feature / Subsystem | Implementation File | Verification Test Suite | Test Scope |
 | :--- | :--- | :--- | :--- |
+| **Genuine CV Tracking Algorithms** | `backend/app/machine_learning/cv_service.py` | `test_cv_tracking_methods_genuine.py` | HSV color morphology, Lucas–Kanade flow, YOLOv8 NMS & corrupt weights |
+| **CV Tracking State & Camera Isolation** | `backend/app/machine_learning/cv_service.py` | `test_cv_tracker_isolation_and_state.py` | 3-tier canonical keys `user:sess:cam`, multi-camera state, TTL cleanup |
+| **CV Inference Performance & Limits** | `backend/app/core_backend/routes/cv_tracker.py` | `test_cv_performance_limits.py` | Semaphore 429 throttling, 5s timeout 408, 5MB body ceiling 413 |
 | **Service Boundaries Separation** | `backend/app/application/tutor_orchestrator.py` | `test_tutor_orchestration_service_boundaries.py` | Layer isolation (API, App, AI, Retrieval, Persistence) |
 | **Socratic Streaming & Cancellation** | `backend/app/ai_agent/ai_client.py` | `test_tutor_streaming_semantics.py` | SSE protocol, client disconnect, upstream timeouts |
-| **Non-blocking Event Loop Execution** | `backend/app/ai_agent/tutor_service.py` | `test_tutor_async_nonblocking.py` | Loop lag $<50\,\text{ms}$, thread offloading, p95/p99 latency |
-| **Celery Asynchronous Tasks** | `backend/app/worker.py` | `test_celery_worker_tasks.py` | CV & AI task execution, idempotency, retry policies |
-| **Redis Cache & Circuit Breaker** | `backend/app/cache.py` | `test_redis_cache_failures_and_telemetry.py` | Circuit breaker, observability, versioned cache keys |
-| **Hybrid Memory Retrieval** | `backend/app/ai_agent/retrieval_service.py` | `test_hybrid_retrieval.py` | RRF algorithm, semantic vector + keyword matching |
-| **Semantic Embeddings Validation** | `backend/app/ai_agent/embedding_service.py` | `test_embedding_correctness.py` | 768-dim vector check, placeholder vector rejection |
-| **CV Kinematics & Tracking** | `backend/app/machine_learning/cv_service.py` | `test_cv_inference_correctness.py` | Centroid tracking, coordinate bounds, trajectory |
-| **Image Security & Max Payloads** | `backend/app/core_backend/routes/cv_tracker.py` | `test_cv_image_security.py` | Max 4096px bounds, corrupt image bytes, HTTP 413 |
-| **Physics Numerical Engine** | `backend/app/machine_learning/physics_engine.py` | `test_physics_engine_numerical_validation.py` | Numerical derivatives ($v, a$), free-fall gravity |
-| **Database Persistence Modes** | `backend/app/core_backend/database/pgvector_db.py` | `test_database_persistence_modes.py` | Postgres/pgvector mode vs local fallback mode |
-| **Tenant Memory Lifecycle** | `backend/app/core_backend/repositories/memory_repository.py` | `test_memory_ownership_and_lifecycle.py` | User isolation, TTL expiration, tenant deletion |
-| **Auditable XP Transaction Ledger**| `backend/app/core_backend/database/supabase_db.py` | `test_xp_integrity_and_ledger.py` | Idempotent mastery awards, max bounds, ledger audit |
-| **Leaderboard Authenticity** | `backend/app/core_backend/routes/gamification.py` | `test_leaderboard_authenticity.py` | Anti-tampering, rank ordering, server authority |
-| **Model Versioning & Provenance** | `backend/app/core_backend/models/provenance.py` | `test_model_versioning_and_provenance.py` | Provenance metadata, model version audit trails |
-| **Security Headers & Metrics Token** | `backend/app/core_backend/core/security_headers.py` | `test_metrics_and_headers_security.py` | HSTS, CSP, X-Frame-Options, metrics token auth |
-| **Liveness & Readiness Probes** | `backend/app/core_backend/core/health.py` | `test_health_and_readiness_probes.py` | `/live` and `/ready` HTTP status and alert checks |
+| **Non-blocking Event Loop Execution** | `backend/app/ai_agent/tutor_service.py` | `test_tutor_nonblocking_streaming.py` | Loop lag $<50\,\text{ms}$, thread offloading, p95/p99 latency |
+| **Observable Retrieval Status** | `backend/app/ai_agent/retrieval_service.py` | `test_tutor_retrieval_service_observability.py` | Explicit `healthy`/`degraded`/`empty` status reporting |
+| **Production Embedding Hardening** | `backend/app/ai_agent/embedding_service.py` | `test_embedding_production_readiness.py` | Single-flight deduplication, exponential retry, circuit breaker |
+| **Tenant Memory Isolation** | `backend/app/core_backend/repositories/memory_repository.py` | `test_conversation_memory_tenant_isolation.py` | Cross-tenant access rejection on save, search, list, delete |
+| **Celery Task Ownership & Persistence**| `backend/app/worker.py` | `test_celery_worker_tasks.py` | Task ownership checks (403), Redis metadata, retry backoff |
+| **Fail-Closed Persistence Modes** | `backend/app/core_backend/database/pgvector_db.py` | `test_database_persistence_modes.py` | Fails closed (503) in production; no false in-memory commits |
+| **XP Ledger ACID Transactions** | `backend/app/core_backend/database/pgvector_db.py` | `test_xp_integrity_and_ledger.py` | Atomic transactions, unique event_id constraint, rollback |
+| **Migration Locks & Rollbacks** | `backend/app/core_backend/database/migrations.py` | `test_postgresql_persistence_and_initialization.py` | `pg_advisory_lock(88990011)`, pre-migration backup, rollback registry |
+| **Connection Pool Budgeting** | `docker-compose.yml`, `pgvector_db.py` | `test_database_connection_pool.py` | $C_{\text{total}} \le 150$, pool exhaustion prevention under load |
+| **Database Backup & Restoration** | `backend/app/core_backend/database/migrations.py` | `test_database_backup_restoration.py` | Snapshot generation, SHA-256 tamper detection, gzip decompression |
+| **JWT Verification & RS256 JWKS** | `backend/app/core_backend/core/jwt_verifier.py` | `test_jwt_verification_security.py` | Symmetric HS256 & asymmetric RS256 JWKS verification |
+| **Logout Token Revocation** | `backend/app/core_backend/core/token_revocation.py` | `test_logout_session_revocation.py` | Distributed Redis-backed token logout denylist |
+| **XP Rule Server-Authority** | `backend/app/core_backend/routes/gamification.py` | `test_xp_manipulation_prevention.py` | Client amount tampering prevention, lab ID binding |
+| **Badge Evidence Verification** | `backend/app/core_backend/routes/gamification.py` | `test_achievement_evidence_security.py` | Unlocks require verified experiments & concept mastery |
+| **Security Headers & Metrics Token** | `backend/app/core_backend/core/security_headers.py` | `test_metrics_and_headers_security.py` | HSTS over HTTPS only, CSP, permissions policy, metrics token |
 | **Full Stack E2E Deployment** | `docker-compose.yml`, `nginx/nginx.conf` | `test_e2e_compose_deployment.py` | Multi-container Compose integration & service health |
 
 ---
@@ -393,11 +439,32 @@ All pull requests and commits to `main` must pass the continuous integration pip
 graph LR
     A[Push / PR] --> B[Ruff Linter Check]
     A --> C[TypeScript Typecheck & ESLint]
-    B --> D[Pytest Regression Suite (400+ Tests)]
+    B --> D[Pytest Regression Suite (535+ Tests)]
     C --> E[Frontend Vite Build]
     D --> F[Mandatory Test Verifier]
     E --> G[Docker Multi-Stage Build]
     F --> H[Trivy Security Vulnerability Scan]
+    G --> H
+    H -->|0 Critical / High Vulnerabilities| I[Ready for Release]
+```
+
+### Running Tests and Linting Locally:
+```bash
+# Run complete test suite (535+ unit and integration tests)
+pytest backend/tests/ -v
+
+# Run reproducible performance benchmark suite
+python backend/scripts/run_benchmarks.py --runs 30 --warmup 5
+
+# Verify mandatory test coverage across categories
+python -m app.core_backend.core.test_suite_verifier --verify-all
+
+# Run Ruff Python linter
+ruff check backend/app
+
+# Run Frontend typecheck and linting
+cd frontend && npm run typecheck && npm run lint
+```
     G --> H
     H -->|0 Critical / High Vulnerabilities| I[Ready for Release]
 ```

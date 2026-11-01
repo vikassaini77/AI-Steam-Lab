@@ -487,6 +487,27 @@ def save_experiment(
     active_db = active_db or get_db()
     try:
         saved_record = active_db.save_experiment(record_payload, user_id=canonical_uid)
+
+        # Generate XP awards on the backend after verifying a completed activity (Problem 1 / P0)
+        try:
+            from app.core_backend.routes.gamification import SERVER_ACTIVITY_RULES, LEADERBOARD_CACHE
+            award_amount = SERVER_ACTIVITY_RULES.get("experiment_completed", 100)
+            active_db.record_xp_event(
+                user_id=canonical_uid,
+                action="experiment_completed",
+                amount=award_amount,
+                event_id=f"evt_exp_{record_id}",
+                concept=exp_type_enum.value,
+                metadata={
+                    "experiment_id": record_id,
+                    "experiment_type": exp_type_enum.value,
+                    "automated_award": True,
+                },
+            )
+            LEADERBOARD_CACHE.clear()
+        except Exception as e:
+            logger.warning(f"Automatic backend XP award for experiment {record_id} warning: {e}")
+
         return {
             "status": "saved",
             "experiment": saved_record,

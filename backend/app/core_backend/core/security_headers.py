@@ -47,13 +47,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
         response.headers["Content-Security-Policy"] = os.getenv("CONTENT_SECURITY_POLICY", default_csp)
 
-        # 5. HSTS: Configure only over HTTPS or in production environments
-        # Avoids local developer browser lockouts on localhost
+        # 5. HSTS: Configure strictly over HTTPS (directly or via TLS-terminating reverse proxy)
+        # Avoids local developer browser lockouts on localhost while protecting HTTPS traffic
         is_https = (
             request.url.scheme == "https"
-            or request.headers.get("x-forwarded-proto") == "https"
-            or os.getenv("ENVIRONMENT") == "production"
-            or os.getenv("ENABLE_HSTS", "false").lower() == "true"
+            or request.headers.get("x-forwarded-proto", "").lower() == "https"
         )
         if is_https:
             response.headers["Strict-Transport-Security"] = (

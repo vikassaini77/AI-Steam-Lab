@@ -173,10 +173,14 @@ class TutorOrchestrator:
                 })
 
                 if eval_res.is_correct and eval_res.confidence >= 0.80:
-                    awarded, xp = self.memory_repository.award_mastery_xp(
-                        user_id=user_id,
-                        concept=concept,
-                        amount=100,
+                    loop = asyncio.get_running_loop()
+                    awarded, xp = await loop.run_in_executor(
+                        self.executor,
+                        lambda: self.memory_repository.award_mastery_xp(
+                            user_id=user_id,
+                            concept=concept,
+                            amount=100,
+                        ),
                     )
                     eval_res.mastery_awarded = awarded
                     eval_res.xp_awarded = xp if awarded else 0
@@ -198,11 +202,12 @@ class TutorOrchestrator:
                     f"Use this evaluation to guide your Socratic response."
                 )
 
-            # Step 2: Context Retrieval use case (graceful degradation)
+            # Step 2: Context Retrieval use case (graceful degradation with explicit status observability)
+            retrieval_result = None
             try:
                 if generate_embedding_fn is not None:
                     try:
-                        past_context = await self.retrieval_service.retrieve_context(
+                        retrieval_result = await self.retrieval_service.retrieve_context(
                             query=prompt,
                             user_id=user_id,
                             session_id=sess_id,
@@ -210,14 +215,14 @@ class TutorOrchestrator:
                             embedding_fn=generate_embedding_fn,
                         )
                     except TypeError:
-                        past_context = await self.retrieval_service.retrieve_context(
+                        retrieval_result = await self.retrieval_service.retrieve_context(
                             query=prompt,
                             user_id=user_id,
                             session_id=sess_id,
                             top_k=3,
                         )
                 else:
-                    past_context = await self.retrieval_service.retrieve_context(
+                    retrieval_result = await self.retrieval_service.retrieve_context(
                         query=prompt,
                         user_id=user_id,
                         session_id=sess_id,
@@ -225,6 +230,19 @@ class TutorOrchestrator:
                     )
             except Exception as retrieval_err:
                 logger.warning(f"[{request_id}] Retrieval service failure ({type(retrieval_err).__name__}): {retrieval_err}. Degraded fallback active.")
+                retrieval_result = {"status": "degraded", "context": [], "reason": str(retrieval_err)}
+
+            if isinstance(retrieval_result, dict):
+                past_context = retrieval_result.get("context", [])
+                retrieval_status = retrieval_result.get("status", "healthy")
+                retrieval_reason = retrieval_result.get("reason")
+                if retrieval_status == "degraded":
+                    logger.warning(
+                        f"[{request_id}] Tutor memory retrieval degraded (reason: {retrieval_reason}). Proceeding without context."
+                    )
+            elif isinstance(retrieval_result, list):
+                past_context = retrieval_result
+            else:
                 past_context = []
 
             # Step 3: Prompt assembly
@@ -253,11 +271,18 @@ class TutorOrchestrator:
             chunk_count = 0
             is_cancelled = request.is_disconnected if request else None
 
+            resolved_timeout = MODEL_TIMEOUT_SECONDS
+            try:
+                import app.ai_agent.tutor_service as _ts
+                resolved_timeout = getattr(_ts, "MODEL_TIMEOUT_SECONDS", resolved_timeout)
+            except Exception:
+                pass
+
             try:
                 async for chunk_text in self.ai_client.stream_completion(
                     prompt=prompt,
                     system_instruction=sys_prompt,
-                    timeout_seconds=MODEL_TIMEOUT_SECONDS,
+                    timeout_seconds=resolved_timeout,
                     is_cancelled=is_cancelled,
                 ):
                     chunk_count += 1
@@ -269,6 +294,11 @@ class TutorOrchestrator:
                         "index": chunk_count,
                         "request_id": request_id,
                     })
+
+                # Check if client disconnected before terminal event emission
+                if request and await request.is_disconnected():
+                    logger.info(f"[{request_id}] Client disconnected during stream; skipping terminal events.")
+                    return
 
                 # Step 5: Terminal Done Event & Observability
                 duration = round(time.perf_counter() - start_time, 3)
@@ -340,6 +370,7 @@ class TutorOrchestrator:
                     "error": "The tutor took too long to respond.",
                     "error_code": "MODEL_TIMEOUT",
                     "text": "The tutor took too long to respond. Please try again.",
+                    "partial_text": full_text if chunk_count > 0 else "",
                     "request_id": request_id,
                     "status": "error",
                 })
@@ -358,6 +389,7 @@ class TutorOrchestrator:
 
                 err_str = str(stream_err).lower()
                 err_cls = type(stream_err).__name__.lower()
+                err_code = getattr(stream_err, "code", None) or getattr(stream_err, "status_code", None)
 
                 if "timeout" in err_cls or "timed out" in err_str:
                     logger.warning(f"[{request_id}] Model generation timed out: {stream_err}")
@@ -365,24 +397,37 @@ class TutorOrchestrator:
                         "error": "The tutor took too long to respond.",
                         "error_code": "MODEL_TIMEOUT",
                         "text": "The tutor took too long to respond. Please try again.",
+                        "partial_text": full_text if chunk_count > 0 else "",
                         "request_id": request_id,
                         "status": "error",
                     })
-                elif "quota" in err_str or "resource_exhausted" in err_str or "429" in err_str:
+                elif (
+                    "resourceexhausted" in err_cls
+                    or "resource_exhausted" in err_str
+                    or "quota" in err_str
+                    or "429" in err_str
+                    or "rate limit" in err_str
+                    or "ratelimit" in err_str
+                    or "too many requests" in err_str
+                    or err_code == 429
+                ):
                     logger.warning(f"[{request_id}] AI model quota exhausted: {stream_err}")
                     yield emit(SSEEventName.ERROR, {
                         "error": "The tutor is currently experiencing high demand. Please try again shortly.",
                         "error_code": "QUOTA_EXHAUSTED",
                         "text": "The tutor is currently experiencing high demand. Please try again shortly.",
+                        "partial_text": full_text if chunk_count > 0 else "",
                         "request_id": request_id,
                         "status": "error",
+                        "retry_after_seconds": 5,
                     })
                 else:
                     logger.exception(f"[{request_id}] Model streaming error: {stream_err}")
                     yield emit(SSEEventName.ERROR, {
-                        "error": "The tutor is temporarily unavailable.",
-                        "error_code": "MODEL_STREAM_ERROR",
-                        "text": "The tutor is temporarily unavailable. Please try again later.",
+                        "error": "The tutor stream was interrupted." if chunk_count > 0 else "The tutor is temporarily unavailable.",
+                        "error_code": "PARTIAL_STREAM_FAILURE" if chunk_count > 0 else "MODEL_STREAM_ERROR",
+                        "text": "The tutor encountered an error while generating a response. Please try again.",
+                        "partial_text": full_text if chunk_count > 0 else "",
                         "request_id": request_id,
                         "status": "error",
                     })
