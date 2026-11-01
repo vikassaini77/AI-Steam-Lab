@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "prepare": "husky"
+    "prepare": "node -e \"if (!process.env.CI && !process.env.VERCEL) try { require('child_process').execSync('npx husky') } catch (e) {}\""
   },
   "dependencies": {
     "@react-three/drei": "9.92.7",
