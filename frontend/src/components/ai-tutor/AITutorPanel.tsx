@@ -313,7 +313,7 @@ export default function AITutorPanel() {
         console.error('Tutor chat API connection failed:', error);
         addMessage(activeChatId, {
           id: Date.now() + 2,
-          text: "I'm running in offline mode because I couldn't reach the backend server. Make sure FastAPI is running on port 8000!",
+          text: "I'm temporarily unable to reach the AI backend (the server may be spinning up from standby). Please retry your question in a moment!",
           sender: 'ai',
           timestamp: new Date().toISOString(),
         });

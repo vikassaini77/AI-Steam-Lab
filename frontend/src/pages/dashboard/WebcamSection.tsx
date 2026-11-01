@@ -34,7 +34,7 @@ import {
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 import { pushNotification } from '../../lib/notificationStore';
 import { useChatStore } from '../../lib/chatStore';
-import { getApiBaseUrl, getAuthHeaders } from '../../lib/api';
+import { getApiBaseUrl, getAuthHeaders, getWebSocketUrl } from '../../lib/api';
 
 // Comprehensive multi-language resource pack
 const translations = {
@@ -827,9 +827,7 @@ export default function WebcamSection() {
         }
 
         // ── Tier 1: Try WebSocket to backend ──
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsHost = `${window.location.hostname}:8000`;
-        const wsUrl = `${wsProtocol}//${wsHost}/api/cv/ws/stream`;
+        const wsUrl = getWebSocketUrl('/api/cv/ws/stream');
 
         let wsConnected = false;
         const ws = new WebSocket(wsUrl);

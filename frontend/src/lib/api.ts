@@ -28,6 +28,16 @@ export function getApiBaseUrl(): string {
 }
 
 /**
+ * Returns a valid WebSocket URL for backend streaming connections (ws:// or wss://).
+ */
+export function getWebSocketUrl(path: string = ''): string {
+  const base = getApiBaseUrl();
+  const wsBase = base.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
+  const cleanPath = path ? (path.startsWith('/') ? path : `/${path}`) : '';
+  return `${wsBase}${cleanPath}`;
+}
+
+/**
  * Helper to build standard API headers with Supabase Bearer token if session exists.
  */
 export async function getAuthHeaders(customHeaders: Record<string, string> = {}): Promise<Record<string, string>> {
