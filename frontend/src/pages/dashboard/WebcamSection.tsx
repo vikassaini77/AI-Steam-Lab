@@ -29,7 +29,10 @@ import {
   BookOpen,
   Trophy,
   HelpCircle,
-  Accessibility
+  Accessibility,
+  Upload,
+  AlertCircle,
+  FileVideo
 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 import { pushNotification } from '../../lib/notificationStore';
@@ -228,6 +231,66 @@ const demoSpeeches = {
   },
 };
 
+/**
+ * Robust phonetic Latin transliteration for Hindi Devanagari text.
+ * When browsers/operating systems lack native Hindi TTS voice packs,
+ * this transliterates the text so an English voice speaks fluent, intelligible Hindi.
+ */
+function transliterateDevanagariToPhonetic(devanagariText: string): string {
+  const charMap: Record<string, string> = {
+    'अ': 'a', 'आ': 'aa', 'इ': 'i', 'ई': 'ee', 'उ': 'u', 'ऊ': 'oo', 'ऋ': 'ri',
+    'ए': 'e', 'ऐ': 'ai', 'ओ': 'o', 'औ': 'au', 'अं': 'am', 'अः': 'ah',
+    'क': 'ka', 'ख': 'kha', 'ग': 'ga', 'घ': 'gha', 'ङ': 'nga',
+    'च': 'cha', 'छ': 'chha', 'ज': 'ja', 'झ': 'jha', 'ञ': 'nya',
+    'ट': 'ta', 'ठ': 'tha', 'ड': 'da', 'ढ': 'dha', 'ण': 'na',
+    'त': 'ta', 'थ': 'tha', 'द': 'da', 'ध': 'dha', 'न': 'na',
+    'प': 'pa', 'फ': 'fa', 'ब': 'ba', 'भ': 'bha', 'म': 'ma',
+    'य': 'ya', 'र': 'ra', 'ल': 'la', 'व': 'va', 'श': 'sha', 'ष': 'sha', 'स': 'sa', 'ह': 'ha',
+    'क्ष': 'ksha', 'त्र': 'tra', 'ज्ञ': 'gya',
+    'ा': 'aa', 'ि': 'i', 'ी': 'ee', 'ु': 'u', 'ू': 'oo', 'ृ': 'ri',
+    'े': 'e', 'ै': 'ai', 'ो': 'o', 'ौ': 'au', 'ं': 'n', 'ँ': 'n', 'ः': 'h',
+    '्': '',
+    '०': '0', '१': '1', '२': '2', '३': '3', '४': '4', '५': '5', '६': '6', '७': '7', '८': '8', '९': '9',
+    '।': '.', '॥': '.'
+  };
+
+  const matras = new Set(['ा', 'ि', 'ी', 'ु', 'ू', 'ृ', 'े', 'ै', 'ो', 'ौ', '्', 'ं', 'ँ', 'ः']);
+  let result = '';
+
+  for (let i = 0; i < devanagariText.length; i++) {
+    const char = devanagariText[i];
+    const nextChar = devanagariText[i + 1];
+
+    if (charMap[char] !== undefined) {
+      let mapped = charMap[char];
+      if (mapped.endsWith('a') && nextChar && matras.has(nextChar)) {
+        mapped = mapped.slice(0, -1);
+      }
+      result += mapped;
+    } else {
+      result += char;
+    }
+  }
+
+  return result
+    .replace(/\s+/g, ' ')
+    .replace(/\. +([a-z])/g, (_, letter) => `. ${letter.toUpperCase()}`)
+    .trim();
+}
+
+interface RealPhysicsData {
+  speed: number;
+  acceleration: number;
+  distance: number;
+  kinetic_energy?: number;
+  potential_energy?: number;
+  total_energy?: number;
+  experiment_type?: string;
+  pendulum_params?: { angle?: number; estimated_length?: number };
+  projectile_params?: { launch_angle?: number };
+  trajectory?: { x: number; y: number; t: number }[];
+}
+
 export default function WebcamSection() {
   const navigate = useNavigate();
   const { botVoiceURI } = useChatStore();
@@ -247,7 +310,7 @@ export default function WebcamSection() {
   // Default to green to avoid false positives with red/orange room lighting and skin tones
   const [colorTarget, setColorTarget] = useState<'red' | 'green' | 'blue'>('green');
   const [annotatedImage, setAnnotatedImage] = useState<string | null>(null);
-  const [realPhysics, setRealPhysics] = useState<any>(null);
+  const [realPhysics, setRealPhysics] = useState<RealPhysicsData | null>(null);
   const [selectedCVSource, setSelectedCVSource] = useState<'auto' | 'cloud' | 'client'>('auto');
   const [showSettings, setShowSettings] = useState<boolean>(false);
 
@@ -256,6 +319,13 @@ export default function WebcamSection() {
   const wsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sendIntervalRef = useRef<ReturnType<typeof setInterval>>();
+  const sampleFeedIntervalRef = useRef<ReturnType<typeof setInterval>>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Anna Runtime & Video Fallback States
+  const [isCameraBlockedByPolicy, setIsCameraBlockedByPolicy] = useState<boolean>(false);
+  const [uploadedMediaName, setUploadedMediaName] = useState<string | null>(null);
+  const [isVideoSource, setIsVideoSource] = useState<boolean>(false);
 
   // Playback/Analysis Simulation Loop
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
@@ -362,11 +432,14 @@ export default function WebcamSection() {
         }) || null;
 
         // If no native Hindi voice is installed on user's OS,
-        // transliterate to phonetic Latin so the default voice speaks intelligible Hindi instead of complete silence!
-        if (!targetVoice && /[\u0900-\u097F]/.test(clean)) {
-          if (clean.includes("नमस्ते")) {
-            clean = "Namaste! Main Professor Nova hoon. Aapki A I Bhautiki prayogshala mein aapka swaagat hai.";
+        // transliterate to phonetic Latin so an English voice speaks fluent, intelligible Hindi instead of complete silence!
+        if (!targetVoice) {
+          if (/[\u0900-\u097F]/.test(clean)) {
+            clean = transliterateDevanagariToPhonetic(clean);
           }
+          speechLang = 'en-IN';
+          targetVoice = voices.find(v => v.lang.toLowerCase().includes('en-in')) ||
+                        voices.find(v => v.lang.toLowerCase().startsWith('en')) || null;
         }
       } else if (lang === 'es') {
         speechLang = 'es-ES';
@@ -446,11 +519,12 @@ export default function WebcamSection() {
     });
 
     const getStepSpeech = (stepKey: 'step1' | 'step2' | 'step3' | 'step4' | 'wrap') => {
+      const demoRecord = currentDemo as Record<string, string>;
       if (currentLang === 'hi' && !hasHindiVoice) {
-        const phoneticKey = `${stepKey}_phonetic` as keyof typeof currentDemo;
-        return (currentDemo as any)[phoneticKey] || (currentDemo as any)[stepKey];
+        const phoneticKey = `${stepKey}_phonetic`;
+        return demoRecord[phoneticKey] || demoRecord[stepKey];
       }
-      return (currentDemo as any)[stepKey];
+      return demoRecord[stepKey];
     };
 
     const step1Speech = getStepSpeech('step1');
@@ -873,14 +947,40 @@ export default function WebcamSection() {
     // Update live AI status
     setAiStatus(blobFound ? 'Detecting' : 'Analyzing');
 
-    // Sync with physics display
+    // Sync with physics display (authentic numerical kinematics)
     if (blobFound && motionPointsRef.current.length >= 2) {
       const pts = motionPointsRef.current;
-      const p1 = pts[pts.length-2], p2 = pts[pts.length-1];
-      const dt = Math.max(0.01, (p2.t - p1.t)/1000);
-      const dist = Math.hypot(p2.x-p1.x, p2.y-p1.y) * 0.005;
-      const speed = Math.min(9.9, dist/dt);
-      const simPhys = { speed, acceleration: -9.81, distance: dist, experiment_type: 'General', trajectory: [] };
+      const p2 = pts[pts.length - 1];
+      const p1 = pts[pts.length - 2];
+      const dt = Math.max(0.01, (p2.t - p1.t) / 1000);
+      const pxScale = 0.005;
+      const dist = Math.hypot((p2.x - p1.x) * pxScale, (p2.y - p1.y) * pxScale);
+      const speed = Math.min(25.0, dist / dt);
+
+      let acceleration = 0;
+      if (pts.length >= 3) {
+        const p0 = pts[pts.length - 3];
+        const dtPrev = Math.max(0.01, (p1.t - p0.t) / 1000);
+        const distPrev = Math.hypot((p1.x - p0.x) * pxScale, (p1.y - p0.y) * pxScale);
+        const speedPrev = distPrev / dtPrev;
+        acceleration = (speed - speedPrev) / dt;
+      }
+
+      const g = 9.80665;
+      const heightMeters = Math.max(0, (H - p2.y) * pxScale);
+      const ke = 0.5 * mass * speed * speed;
+      const pe = mass * g * heightMeters;
+
+      const simPhys = {
+        speed: Number(speed.toFixed(3)),
+        acceleration: Number(acceleration.toFixed(3)),
+        distance: Number(dist.toFixed(3)),
+        kinetic_energy: Number(ke.toFixed(2)),
+        potential_energy: Number(pe.toFixed(2)),
+        total_energy: Number((ke + pe).toFixed(2)),
+        experiment_type: 'General',
+        trajectory: pts.slice(-30).map(p => ({ x: p.x, y: p.y, t: p.t }))
+      };
       setRealPhysics(simPhys);
     }
   };
@@ -903,14 +1003,17 @@ export default function WebcamSection() {
 
     const initCameraStream = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 640 }, height: { ideal: 360 } },
-          audio: false
-        });
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+        if (!isVideoSource) {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 640 }, height: { ideal: 360 } },
+            audio: false
+          });
+          streamRef.current = stream;
+          setIsCameraBlockedByPolicy(false);
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            await videoRef.current.play();
+          }
         }
 
         if (selectedCVSource === 'client') {
@@ -951,7 +1054,10 @@ export default function WebcamSection() {
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
             canvas.width = 640; canvas.height = 360;
-            ctx.save(); ctx.scale(-1,1); ctx.drawImage(video, -640, 0, 640, 360); ctx.restore();
+            ctx.save();
+            ctx.scale(isVideoSource ? 1 : -1, 1);
+            ctx.drawImage(video, isVideoSource ? 0 : -640, 0, 640, 360);
+            ctx.restore();
             const b64 = canvas.toDataURL('image/jpeg', 0.6);
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ image: b64, tracking_method: trackingMethod, color_target: colorTarget, px_to_meters: 0.005 }));
@@ -990,9 +1096,21 @@ export default function WebcamSection() {
           }
         };
 
-      } catch (err) {
+      } catch (err: unknown) {
         console.error('Camera init error:', err);
-        handleAutoSaveAction('Camera permission denied.');
+        const errorObj = err as { name?: string; message?: string } | undefined;
+        const isPolicyBlocked =
+          errorObj?.name === 'NotAllowedError' ||
+          errorObj?.name === 'SecurityError' ||
+          String(errorObj?.message || '').toLowerCase().includes('permission') ||
+          String(errorObj?.message || '').toLowerCase().includes('policy');
+
+        if (isPolicyBlocked) {
+          setIsCameraBlockedByPolicy(true);
+          handleAutoSaveAction('🔒 Host camera access restricted. Video or Sample Lab enabled.');
+        } else {
+          handleAutoSaveAction('Camera permission denied.');
+        }
         setCameraActive(false);
       }
     };
@@ -1002,11 +1120,12 @@ export default function WebcamSection() {
       const apiHost = getApiBaseUrl();
       const headers = await getAuthHeaders();
       try {
+        const validProbeJpeg = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
         const res = await fetch(`${apiHost}/api/cv/process-frame`, {
           method: 'POST',
-          headers,
-          body: JSON.stringify({ image: 'data:image/jpeg;base64,/9j/', tracking_method: 'color', color_target: 'red', px_to_meters: 0.005 }),
-          signal: AbortSignal.timeout(2000)
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: validProbeJpeg, tracking_method: 'color', color_target: 'red', px_to_meters: 0.005 }),
+          signal: AbortSignal.timeout(3000)
         });
         if (res.ok) {
           setBackendMode('http');
@@ -1024,20 +1143,27 @@ export default function WebcamSection() {
     };
 
     // ── HTTP streaming loop ──
-    const startHttpStreaming = (apiHost: string) => {
+    const startHttpStreaming = async (apiHost: string) => {
+      const authHeaders = await getAuthHeaders();
+      let isFetching = false;
       sendIntervalRef.current = setInterval(async () => {
+        if (isFetching) return;
         const video = videoRef.current;
         const canvas = canvasRef.current;
         if (!video || !canvas || video.readyState < 2) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
         canvas.width = 640; canvas.height = 360;
-        ctx.save(); ctx.scale(-1,1); ctx.drawImage(video,-640,0,640,360); ctx.restore();
+        ctx.save();
+        ctx.scale(isVideoSource ? 1 : -1, 1);
+        ctx.drawImage(video, isVideoSource ? 0 : -640, 0, 640, 360);
+        ctx.restore();
         const b64 = canvas.toDataURL('image/jpeg', 0.5);
+        isFetching = true;
         try {
           const res = await fetch(`${apiHost}/api/cv/process-frame`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { ...authHeaders, 'Content-Type': 'application/json' },
             body: JSON.stringify({ image: b64, tracking_method: trackingMethod, color_target: colorTarget, px_to_meters: 0.005 }),
             signal: AbortSignal.timeout(3000)
           });
@@ -1045,14 +1171,12 @@ export default function WebcamSection() {
             const data = await res.json();
             if (data.annotated_image) setAnnotatedImage(data.annotated_image);
             if (data.physics) setRealPhysics(data.physics);
-          } else { throw new Error('HTTP failed'); }
-        } catch {
-          // HTTP also failing — switch to client CV
-          clearInterval(sendIntervalRef.current);
-          setBackendMode('client');
-          startClientCV();
+          }
+        } catch { /* ignore frame failures */ }
+        finally {
+          isFetching = false;
         }
-      }, 200);
+      }, 120);
     };
 
     // ── Client-side CV loop ──
@@ -1087,7 +1211,112 @@ export default function WebcamSection() {
 
   const toggleWebcam = () => {
     if (demoActive) return;
-    setCameraActive(prev => !prev);
+    if (cameraActive) {
+      if (sampleFeedIntervalRef.current) clearInterval(sampleFeedIntervalRef.current);
+      setIsVideoSource(false);
+      setUploadedMediaName(null);
+      setCameraActive(false);
+    } else {
+      setIsVideoSource(false);
+      setCameraActive(true);
+    }
+  };
+
+  const startSampleLabFeed = () => {
+    if (demoActive) return;
+    setIsCameraBlockedByPolicy(false);
+    setIsVideoSource(true);
+    setUploadedMediaName('Sample Pendulum Harmonic Lab (30 FPS)');
+    setCameraActive(true);
+    setIsPlaying(true);
+    setAiStatus('Detecting');
+    handleAutoSaveAction('🧪 Interactive STEM Sample Lab running! Computer vision tracking active.');
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.width = 640;
+    canvas.height = 360;
+
+    let animT = 0;
+    const L = 180;
+    const pivotX = 320;
+    const pivotY = 40;
+    const omega = Math.sqrt(9.81 / 1.5);
+    const theta0 = 0.52; // ~30 deg
+
+    if (sampleFeedIntervalRef.current) clearInterval(sampleFeedIntervalRef.current);
+    sampleFeedIntervalRef.current = setInterval(() => {
+      animT += 0.033;
+      const theta = theta0 * Math.cos(omega * animT) * Math.exp(-0.008 * animT);
+      const bobX = pivotX + L * Math.sin(theta);
+      const bobY = pivotY + L * Math.cos(theta);
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.fillStyle = '#080812';
+      ctx.fillRect(0, 0, 640, 360);
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < 640; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 360); ctx.stroke(); }
+      for (let y = 0; y < 360; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(640, y); ctx.stroke(); }
+
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(pivotX - 50, pivotY - 8, 100, 8);
+      ctx.fillStyle = '#64748b';
+      ctx.beginPath();
+      ctx.arc(pivotX, pivotY, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(pivotX, pivotY);
+      ctx.lineTo(bobX, bobY);
+      ctx.stroke();
+
+      const grad = ctx.createRadialGradient(bobX - 4, bobY - 4, 2, bobX, bobY, 18);
+      if (colorTarget === 'red') {
+        grad.addColorStop(0, '#f87171');
+        grad.addColorStop(0.7, '#dc2626');
+        grad.addColorStop(1, '#7f1d1d');
+      } else if (colorTarget === 'blue') {
+        grad.addColorStop(0, '#60a5fa');
+        grad.addColorStop(0.7, '#2563eb');
+        grad.addColorStop(1, '#1e3a8a');
+      } else {
+        grad.addColorStop(0, '#4ade80');
+        grad.addColorStop(0.7, '#16a34a');
+        grad.addColorStop(1, '#14532d');
+      }
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(bobX, bobY, 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }, 33);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (sampleFeedIntervalRef.current) clearInterval(sampleFeedIntervalRef.current);
+    const url = URL.createObjectURL(file);
+    setUploadedMediaName(file.name);
+    setIsVideoSource(true);
+    setCameraActive(true);
+    setIsPlaying(true);
+    setIsCameraBlockedByPolicy(false);
+    handleAutoSaveAction(`📹 Video loaded: ${file.name}. CV tracking active!`);
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+      videoRef.current.src = url;
+      videoRef.current.loop = true;
+      videoRef.current.play().catch(err => console.warn('Video play error:', err));
+    }
   };
 
   const handleStartAnalysis = () => {
@@ -1658,8 +1887,14 @@ export default function WebcamSection() {
                       <div className="absolute top-3 left-3 flex flex-col gap-2 z-30">
                         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500/20 rounded-full border border-red-500/40 backdrop-blur-sm w-max">
                           <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                          <span className="text-[10px] text-red-400 font-bold uppercase">RAW FEED</span>
+                          <span className="text-[10px] text-red-400 font-bold uppercase">{isVideoSource ? 'VIDEO FEED' : 'RAW FEED'}</span>
                         </div>
+                        {uploadedMediaName && (
+                          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/20 rounded-full border border-purple-500/40 backdrop-blur-sm w-max">
+                            <FileVideo className="w-3 h-3 text-purple-400" />
+                            <span className="text-[10px] text-purple-300 font-bold max-w-[130px] truncate">{uploadedMediaName}</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-500/20 rounded-full border border-cyan-500/40 backdrop-blur-sm w-max">
                           <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
                           <span className="text-[10px] text-cyan-400 font-bold uppercase">DETECTION ENGINE</span>
@@ -1776,20 +2011,56 @@ export default function WebcamSection() {
                       X: {bobX.toFixed(0)} Y: {bobY.toFixed(0)}
                     </div>
 
-                    {/* Camera offline overlay */}
+                    {/* Camera offline / Anna iframe fallback overlay */}
                     <div className="absolute bottom-3 left-3 right-3 flex items-center justify-center z-20">
-                      <div className="px-4 py-2 bg-black/70 rounded-xl border border-cyan-500/20 backdrop-blur-sm text-center">
-                        <p className="text-xs text-gray-400">Digital twin simulation running</p>
-                        <p className="text-[10px] text-cyan-400 mt-0.5">Enable webcam for real physics tracking →</p>
+                      <div className="px-4 py-2.5 bg-black/85 rounded-xl border border-cyan-500/30 backdrop-blur-md text-center max-w-lg shadow-xl">
+                        {isCameraBlockedByPolicy ? (
+                          <div className="flex items-center gap-2 mb-1 text-amber-400 justify-center">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            <span className="text-[11px] font-bold">Host Camera Restricted (Anna Iframe)</span>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-300 font-semibold mb-1">Digital Twin Simulation Active</p>
+                        )}
+                        <p className="text-[10px] text-gray-400 mb-2">
+                          {isCameraBlockedByPolicy
+                            ? "Anna iframe runtime restricts direct camera access. Upload an experiment video or run our interactive sample lab!"
+                            : "Enable webcam or upload a video for real-time computer vision tracking."}
+                        </p>
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-2.5 py-1 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
+                          >
+                            <Upload className="w-3 h-3" />
+                            Upload Video/Image
+                          </button>
+                          <button
+                            onClick={startSampleLabFeed}
+                            className="px-2.5 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
+                          >
+                            <Play className="w-3 h-3" />
+                            🧪 Sample Lab
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </>
                 )}
               </div>
 
+              {/* Hidden file input for video/image drop and upload */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*,image/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+
               {/* Control bar */}
-              <div className="p-4 flex justify-between items-center gap-3 bg-[#0d0d16]">
-                <div className="flex gap-2">
+              <div className="p-4 flex flex-wrap justify-between items-center gap-3 bg-[#0d0d16]">
+                <div className="flex flex-wrap gap-2">
                   <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -1801,7 +2072,29 @@ export default function WebcamSection() {
                     }`}
                   >
                     <Camera className="w-3 h-3" />
-                    {cameraActive ? 'Disable Webcam' : 'Enable Webcam'}
+                    {cameraActive ? (isVideoSource ? 'Close Video' : 'Disable Webcam') : 'Enable Webcam'}
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-2 text-[10px] font-black rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 flex items-center gap-1 transition-all"
+                    title="Upload experiment video or image"
+                  >
+                    <Upload className="w-3 h-3" />
+                    Upload Video
+                  </motion.button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={startSampleLabFeed}
+                    className="px-3 py-2 text-[10px] font-black rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 flex items-center gap-1 transition-all"
+                    title="Run pre-recorded STEM experiment"
+                  >
+                    <Play className="w-3 h-3" />
+                    Sample Lab
                   </motion.button>
 
                   {!cameraActive && (

@@ -3,9 +3,9 @@ import asyncio
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal, Optional, Dict, Any, List
-from fastapi import APIRouter, Request, Depends, HTTPException, status, Body, Query
+from fastapi import APIRouter, Request, Depends, HTTPException, status, Body, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field, model_validator
-from app.core_backend.core.dependencies import get_current_user
+from app.core_backend.core.dependencies import get_current_user, get_optional_current_user
 from app.core_backend.core.limiter import limiter
 from app.machine_learning.cv_service import (
     CVTracker,
@@ -355,7 +355,7 @@ async def cleanup_cv_sessions(
 async def process_frame(
     request: Request,
     payload: FrameProcessRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_optional_current_user),
 ):
     """
     Defensively processes webcam video frame for kinematics tracking:
@@ -461,7 +461,7 @@ async def process_frame_binary(
     request: Request,
     session_id: Optional[str] = Query(default=None),
     camera_id: Optional[str] = Query(default=None),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_optional_current_user),
 ):
     """
     Direct binary image upload endpoint with user, session, and camera tracking isolation.
@@ -549,6 +549,59 @@ async def process_frame_binary(
         )
     finally:
         _cv_concurrency_semaphore.release()
+
+
+@router.websocket("/ws/stream")
+async def cv_websocket_stream(websocket: WebSocket):
+    """
+    Bidirectional WebSocket streaming route for real-time video/webcam kinematics tracking.
+    Enables low-latency frame streaming without HTTP connection overhead.
+    """
+    await websocket.accept()
+    session_id = websocket.query_params.get("session_id", "ws_stream")
+    camera_id = websocket.query_params.get("camera_id", "cam0")
+    user_id = "ws_student"
+    tracker_key = cv_tracker_manager.make_tracker_key(user_id, session_id, camera_id)
+
+    try:
+        while True:
+            data = await websocket.receive_json()
+            encoded_img = data.get("image") or data.get("frame")
+            if not encoded_img:
+                await websocket.send_json({"error": "No image data provided"})
+                continue
+
+            tracking_method = data.get("tracking_method", "color")
+            color_target = data.get("color_target", "red")
+            px_to_meters = float(data.get("px_to_meters", 0.005))
+            conf_thresh = float(data.get("confidence_threshold", 0.25))
+            nms_thresh = float(data.get("nms_threshold", 0.45))
+
+            session_lock = cv_tracker_manager.get_session_lock(tracker_key)
+            async with session_lock:
+                tracker = await cv_tracker_manager.get_tracker(user_id, session_id, camera_id)
+                results = await asyncio.to_thread(
+                    tracker.process_frame,
+                    base64_img=encoded_img,
+                    tracking_method=tracking_method,
+                    color_target=color_target,
+                    px_to_meters=px_to_meters,
+                    confidence_threshold=conf_thresh,
+                    nms_threshold=nms_thresh,
+                )
+                await cv_tracker_manager.save_tracker_state(user_id, session_id, tracker, camera_id)
+
+            results["session_id"] = session_id
+            results["camera_id"] = camera_id
+            await websocket.send_json(results)
+    except WebSocketDisconnect:
+        logger.info(f"CV WebSocket client disconnected gracefully (session: {session_id})")
+    except Exception as e:
+        logger.warning(f"CV WebSocket error (session: {session_id}): {e}")
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 @router.post("/engagement", response_model=EngagementResponse)
