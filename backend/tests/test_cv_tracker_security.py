@@ -94,8 +94,7 @@ def test_oversized_payload_rejected():
     """
     Verification: Oversized requests exceeding the size limit should be rejected with 413.
     """
-    headers = {**AUTH_HEADERS, "Content-Length": "20000"}
     payload = {"state": "focused", "confidence": 0.85, "metadata": {"blob": "x" * 15000}}
-    response = client.post("/api/cv/engagement", json=payload, headers=headers)
+    response = client.post("/api/cv/engagement", json=payload, headers=AUTH_HEADERS)
     assert response.status_code == 413
 
