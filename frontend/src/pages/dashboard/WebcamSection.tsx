@@ -282,6 +282,8 @@ interface RealPhysicsData {
   speed: number;
   acceleration: number;
   distance: number;
+  velocity_x?: number;
+  velocity_y?: number;
   kinetic_energy?: number;
   potential_energy?: number;
   total_energy?: number;
@@ -379,6 +381,36 @@ export default function WebcamSection() {
   const [demoStep, setDemoStep] = useState<number>(0);
   const demoIntervalRef = useRef<ReturnType<typeof setInterval>>();
   const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  // Synchronize live experiment telemetry to local storage for AI Tutor context
+  useEffect(() => {
+    if (realPhysics) {
+      try {
+        const statePayload = {
+          experiment_type: 'pendulum',
+          status: isPlaying ? 'running' : 'paused',
+          current_metrics: {
+            speed: realPhysics.speed,
+            acceleration: realPhysics.acceleration,
+            distance: realPhysics.distance,
+            kinetic_energy: realPhysics.kinetic_energy ?? 0,
+            potential_energy: realPhysics.potential_energy ?? 0,
+            total_energy: realPhysics.total_energy ?? 0,
+          },
+          parameters: {
+            mass,
+            length,
+            gravity: 9.81,
+            target_color: colorTarget,
+          },
+          time_elapsed: Number(time.toFixed(1)),
+        };
+        localStorage.setItem('neurolab_experiment_state', JSON.stringify(statePayload));
+      } catch {
+        /* ignore storage quota exceptions */
+      }
+    }
+  }, [realPhysics, isPlaying, mass, length, colorTarget, time]);
 
   // Pre-load and cache browser voices when SpeechSynthesis becomes ready
   useEffect(() => {

@@ -24,6 +24,24 @@ export default function AITutorPanel() {
   const [engagementState, setEngagementState] = useState<'FOCUSED' | 'CONFUSED' | 'DISENGAGED' | null>(null);
   const [showNudge, setShowNudge] = useState(false);
   const disengagedTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [liveLabContext, setLiveLabContext] = useState<{ type: string; speed?: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('neurolab_experiment_state');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.current_metrics) {
+          setLiveLabContext({
+            type: parsed.experiment_type || 'Pendulum',
+            speed: parsed.current_metrics.speed,
+          });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -382,6 +400,12 @@ export default function AITutorPanel() {
               'bg-red-500/20 text-red-400 border-red-500/30'
             }`}>
               {engagementState}
+            </span>
+          )}
+          {liveLabContext && (
+            <span className="hidden sm:inline-flex items-center gap-1.5 ml-2 text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              Live Lab Synced ({liveLabContext.type})
             </span>
           )}
         </div>
