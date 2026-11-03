@@ -231,6 +231,7 @@ class AITutorService:
         session_id = getattr(req, "session_id", None)
         concept = getattr(req, "concept", None)
         question = getattr(req, "question", None)
+        experiment_state = getattr(req, "experiment_state", None)
 
         async for event_chunk in self.orchestrator.execute_tutor_stream(
             prompt=prompt,
@@ -241,6 +242,7 @@ class AITutorService:
             request=request,
             last_event_id=last_event_id,
             generate_embedding_fn=self.generate_embedding,
+            experiment_state=experiment_state,
         ):
             yield event_chunk
 

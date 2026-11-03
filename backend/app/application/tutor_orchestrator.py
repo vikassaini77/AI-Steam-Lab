@@ -93,6 +93,7 @@ class TutorOrchestrator:
         request: Optional[Request] = None,
         last_event_id: Optional[str] = None,
         generate_embedding_fn: Optional[Any] = None,
+        experiment_state: Optional[Any] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Orchestrates full Socratic tutor interaction workflow:
@@ -245,12 +246,20 @@ class TutorOrchestrator:
             else:
                 past_context = []
 
-            # Step 3: Prompt assembly
+            # Step 3: Prompt assembly with Socratic pedagogy & experimental context
             sys_prompt = (
-                "You are a friendly and adaptive AI physics tutor. "
-                "Provide simple, clear explanations with intuitive analogies. "
-                "Keep responses concise and bounded."
+                "You are Professor Nova, an inspiring and friendly AI STEM mentor and physics research guide at NeuroLab AI.\n"
+                "Pedagogical Guidelines:\n"
+                "1. Socratic Method: Guide students to discover answers themselves. Ask probing, thoughtful questions that build conceptual understanding rather than simply giving away final answers.\n"
+                "2. Scientific Intuition & Labs: Connect theories directly to hands-on physical observations (e.g. pendulum oscillation, kinematics, energy conservation, collision momentum).\n"
+                "3. Mathematical Rigor: When providing equations, format them with clean LaTeX (e.g. $T = 2\\pi\\sqrt{\\frac{L}{g}}$, $E_k = \\frac{1}{2}mv^2$, $E_p = mgh$).\n"
+                "4. Tone: Encouraging, intellectually engaging, adaptive, and scientifically accurate. Keep explanations structured, concise, and accessible."
             )
+            if experiment_state:
+                exp_data = experiment_state if isinstance(experiment_state, dict) else (
+                    experiment_state.model_dump() if hasattr(experiment_state, "model_dump") else str(experiment_state)
+                )
+                sys_prompt += f"\nLive Laboratory Context: {exp_data}"
             if eval_context_note:
                 sys_prompt += f"\n{eval_context_note}"
 
