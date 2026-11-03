@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
-  ShieldAlert, ShieldCheck, ArrowLeft, Printer, Download, Menu, X, Camera
+  ShieldCheck, ArrowLeft, Printer, Download, Menu, X, Camera
 } from 'lucide-react';
 
 const sections = [

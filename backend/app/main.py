@@ -137,27 +137,40 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Apply comprehensive browser and network security headers
 app.add_middleware(SecurityHeadersMiddleware)
 
-# Strict CORS configuration
-ALLOWED_ORIGINS = [
+# Observability Middleware: Request/Trace ID injection, latency tracking, structured completion logging
+app.add_middleware(ObservabilityMiddleware)
+
+# Robust CORS configuration supporting standalone website and Anna Partners embedded runtime
+DEFAULT_ALLOWED_ORIGINS = [
+    "https://anna.partners",
+    "https://ai-steam-lab.vercel.app",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "http://localhost:5173",
+    "http://localhost:80",
+    "http://127.0.0.1:5173",
+]
+
+env_origins = [
     origin.strip().rstrip("/")
-    for origin in os.getenv(
-        "ALLOWED_ORIGINS",
-        "http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://localhost:80,http://127.0.0.1:5173",
-    ).split(",")
+    for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
     if origin.strip()
 ]
 
+# Merge environment-configured origins with essential platform origins (deduplicated, order-preserving)
+ALLOWED_ORIGINS = list(dict.fromkeys(env_origins + DEFAULT_ALLOWED_ORIGINS))
+
+# Outermost middleware: guarantees CORS headers on all requests, preflights, and error responses
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
+    allow_origin_regex=r"^https:\/\/(?:[a-zA-Z0-9-]+\.)*(?:vercel\.app|anna\.partners)$",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-Trace-ID", "Content-Length", "Content-Range"],
+    max_age=86400,
 )
-
-# Observability Middleware: Request/Trace ID injection, latency tracking, structured completion logging
-app.add_middleware(ObservabilityMiddleware)
 
 # Unversioned API routes (backward-compatible legacy surface)
 app.include_router(tutor_router, prefix="/api/tutor", tags=["Tutor"])

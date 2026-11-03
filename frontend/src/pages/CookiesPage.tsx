@@ -7,7 +7,6 @@ export default function CookiesPage() {
   const navigate = useNavigate();
 
   const [saved, setSaved] = useState(false);
-  const [essential] = useState(true); // Mandatory
   const [analytical, setAnalytical] = useState(true);
   const [personalization, setPersonalization] = useState(true);
 

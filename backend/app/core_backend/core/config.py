@@ -74,7 +74,7 @@ class Settings(BaseSettings):
 
     # Security & Networking Configuration Contract
     allowed_origins: str = Field(
-        default="http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://127.0.0.1:5173",
+        default="https://anna.partners,https://ai-steam-lab.vercel.app,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173,http://localhost:80,http://127.0.0.1:5173",
         description="Comma-delimited list of permitted CORS frontend origins",
     )
     metrics_token: Optional[str] = Field(

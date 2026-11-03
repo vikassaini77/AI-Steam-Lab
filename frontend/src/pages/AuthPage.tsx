@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import {
   Mail, Lock, User, ArrowRight, Sparkles, Github, Chrome, Eye, EyeOff,
@@ -893,7 +894,7 @@ function Logo() {
   return (
     <div className="flex items-center gap-3 mb-8 justify-center">
       <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/30 overflow-hidden bg-[#070714]">
-        <img src="/logo.png" alt="NeuroLab Logo" className="w-full h-full object-cover" />
+        <img src={`${import.meta.env.BASE_URL}logo.png`} alt="NeuroLab Logo" className="w-full h-full object-cover" />
       </div>
       <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-400">
         NeuroLab AI
@@ -990,7 +991,7 @@ export default function AuthPage({ onAuthSuccess, initialView = 'signin' }: Auth
         <TrustBadges />
 
         <p className="text-center text-gray-600 text-xs mt-4">
-          <a href="/" className="hover:text-gray-400 transition-colors">← Back to home</a>
+          <Link to="/" className="hover:text-gray-400 transition-colors">← Back to home</Link>
         </p>
       </motion.div>
     </div>

@@ -1689,7 +1689,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/10 pb-6">
                   <div>
                     <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-4 overflow-hidden">
-                      <img src="/logo.png" alt="NeuroLab Logo" className="w-8 h-8 object-cover" />
+                      <img src={`${import.meta.env.BASE_URL}logo.png`} alt="NeuroLab Logo" className="w-8 h-8 object-cover" />
                     </div>
                     <h3 className="text-2xl font-black text-white">About NeuroLab Technologies</h3>
                     <p className="text-sm text-gray-400 mt-1 max-w-xl leading-relaxed">

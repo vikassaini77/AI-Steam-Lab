@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Camera, CameraOff, AlertTriangle, CheckCircle, RefreshCw, Activity, Gauge, MapPin, Circle,
-  WifiOff, Loader2, ShieldAlert, Smartphone, Info, X, HelpCircle, ExternalLink
+  WifiOff, Loader2, ShieldAlert, Info, X, HelpCircle
 } from 'lucide-react';
 
 /* ─── Types ─────────────────────────────────────── */
@@ -337,7 +337,6 @@ export default function WebcamPanel() {
   });
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animationRef = useRef<number>();
@@ -486,7 +485,6 @@ export default function WebcamPanel() {
   }, [cameraState]);
 
   const isActive = cameraState === 'active';
-  const isLoading = ['requesting', 'verifying', 'initializing'].includes(cameraState);
   const isError = ['denied', 'no_camera', 'busy', 'https_required', 'browser_blocked', 'error'].includes(cameraState);
 
   return (

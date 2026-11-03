@@ -1,10 +1,11 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useRef, useEffect } from 'react';
-import { Send, Mic, Sparkles, Plus, Square, Download, Share, CheckCircle2, RefreshCw, Edit2, Check, X, Volume2, Loader2 } from 'lucide-react';
+import { Send, Mic, Sparkles, Plus, Square, Download, Share, CheckCircle2, RefreshCw, Edit2, Volume2, Loader2 } from 'lucide-react';
 import { useChatStore } from '../../lib/chatStore';
 import type { Message } from '../../lib/chatStore';
 import ReactMarkdown from 'react-markdown';
 import { getApiBaseUrl, getAuthHeaders } from '../../lib/api';
+import { pushNotification } from '../../lib/notificationStore';
 
 export default function AITutorPanel() {
   const { chats = [], activeChatId, addMessage, updateMessage, createNewChat, setMessages, botName, botVoiceURI } = useChatStore();
@@ -33,7 +34,7 @@ export default function AITutorPanel() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      pushNotification(`Attached: ${file.name}`, 'success');
+      pushNotification(`Attached: ${file.name}`, 'info');
       setInput((prev) => prev + (prev ? '\n' : '') + `[Attached File: ${file.name}] `);
     }
     if (fileInputRef.current) {
@@ -270,7 +271,9 @@ export default function AITutorPanel() {
       try {
         const stored = localStorage.getItem('neurolab_experiment_state');
         if (stored) experimentState = JSON.parse(stored);
-      } catch (err) {}
+      } catch {
+        /* ignore invalid local storage state */
+      }
 
       const apiHost = getApiBaseUrl();
       const headers = await getAuthHeaders();
@@ -326,7 +329,9 @@ export default function AITutorPanel() {
                   setKgPopup(data.kg_update);
                   setTimeout(() => setKgPopup(''), 4000);
                 }
-              } catch (e) {}
+              } catch {
+                /* ignore partial stream chunks */
+              }
             }
           }
         }

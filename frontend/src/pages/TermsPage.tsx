@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
-  Shield, Scale, BadgeCheck, Landmark, ArrowLeft, Printer, Download, Share2, Menu, X
+  Scale, ArrowLeft, Printer, Download, Menu, X
 } from 'lucide-react';
 
 const sections = [
@@ -280,7 +279,7 @@ export default function TermsPage() {
                 <span className="text-cyan-500">9.</span> Privacy and Data Security
               </h2>
               <p className="leading-relaxed">
-                Your privacy is paramount. Our collection, use, and protection of your personal information are governed by our <a href="/privacy" className="text-cyan-400 hover:underline">Privacy Policy</a>. By using the Services, you consent to the data practices detailed therein. We implement industry-standard encryption (AES-256) and security protocols to safeguard your data.
+                Your privacy is paramount. Our collection, use, and protection of your personal information are governed by our <Link to="/privacy" className="text-cyan-400 hover:underline">Privacy Policy</Link>. By using the Services, you consent to the data practices detailed therein. We implement industry-standard encryption (AES-256) and security protocols to safeguard your data.
               </p>
             </section>
 

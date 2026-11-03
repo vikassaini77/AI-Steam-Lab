@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import AITutorSidebar from '../components/ai-tutor/AITutorSidebar';
 import AITutorPanel from '../components/ai-tutor/AITutorPanel';
@@ -50,7 +50,10 @@ export default function AITutorPage() {
           />
           
           {/* Subtle grid overlay */}
-          <div className="absolute inset-0 bg-[url('/grid.svg')] bg-center [mask-image:linear-gradient(180deg,rgba(0,0,0,0.8),transparent)] opacity-10" />
+          <div
+            className="absolute inset-0 bg-center [mask-image:linear-gradient(180deg,rgba(0,0,0,0.8),transparent)] opacity-10"
+            style={{ backgroundImage: `url("${import.meta.env.BASE_URL}grid.svg")` }}
+          />
         </div>
 
         {/* Foreground Panel */}

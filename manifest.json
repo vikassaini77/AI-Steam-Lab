@@ -1,0 +1,33 @@
+{
+  "schema": 2,
+  "required_executas": [],
+  "optional_executas": [],
+  "system_prompt_addendum": "You are NeuroLab AI, an interactive STEM learning assistant. Help learners understand physics, mathematics, science, and engineering through clear explanations and guided exploration.",
+  "tags": [
+    "education",
+    "stem",
+    "science",
+    "learning"
+  ],
+  "permissions": [],
+  "ui": {
+    "bundle": {
+      "format": "static-spa",
+      "entry": "index.html",
+      "external_origins": [
+        "https://neurolab-backend-uxhv.onrender.com"
+      ]
+    },
+    "views": [
+      {
+        "name": "main",
+        "title": "NeuroLab AI",
+        "default": true,
+        "resizable": true,
+        "movable": true,
+        "single_instance": false
+      }
+    ],
+    "host_api": {}
+  }
+}

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { pushNotification } from '../../lib/notificationStore';
 import { 
   X, Shield, Bell, Palette, LayoutGrid, 
-  Database, Lock, Keyboard, Settings2 
+  Database, Keyboard, Settings2 
 } from 'lucide-react';
 import { useChatStore } from '../../lib/chatStore';
 
@@ -312,7 +312,7 @@ export default function AITutorSettingsModal({ isOpen, onClose }: SettingsModalP
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-300">Export Chat History</span>
                       <button 
-                        onClick={() => pushNotification('Chat history exported successfully!', 'success')}
+                        onClick={() => pushNotification('Chat history exported successfully!', 'info')}
                         className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg transition-colors"
                       >
                         Export to CSV
@@ -356,7 +356,7 @@ export default function AITutorSettingsModal({ isOpen, onClose }: SettingsModalP
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-300">Active Sessions</span>
                       <button 
-                        onClick={() => pushNotification('Logged out from all other devices successfully.', 'success')}
+                        onClick={() => pushNotification('Logged out from all other devices successfully.', 'info')}
                         className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg transition-colors"
                       >
                         Log out all devices

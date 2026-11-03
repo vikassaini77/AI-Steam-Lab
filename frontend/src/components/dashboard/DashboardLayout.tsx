@@ -2,7 +2,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
 import {
   Home,
-  FlaskConical,
   Bot,
   Atom,
   Trophy,
@@ -15,7 +14,6 @@ import {
   Settings,
   LogOut,
   Shield,
-  History,
   Camera,
   Activity,
   Target
@@ -256,7 +254,11 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
           <div className="flex items-center justify-between p-6 border-b border-white/10">
             <Link to="/" className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20 overflow-hidden bg-[#0d0d20]">
-                <img src="/logo.png" alt="NeuroLab Logo" className="w-full h-full object-cover" />
+                <img
+  src={`${import.meta.env.BASE_URL}logo.png`}
+  alt="NeuroLab Logo"
+  className="w-full h-full object-cover"
+/>
               </div>
               <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-400">
                 NeuroLab
@@ -341,7 +343,11 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
         </button>
         <span className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden bg-[#0d0d20]">
-            <img src="/logo.png" alt="NeuroLab Logo" className="w-full h-full object-cover" />
+            <img
+  src={`${import.meta.env.BASE_URL}logo.png`}
+  alt="NeuroLab Logo"
+  className="w-full h-full object-cover"
+/>
           </div>
           <span className="font-semibold text-white">NeuroLab</span>
         </span>

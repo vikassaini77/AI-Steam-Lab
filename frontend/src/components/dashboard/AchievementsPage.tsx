@@ -1,11 +1,6 @@
-import React, { useState, useEffect, useRef, Suspense, lazy } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Link, useNavigate } from "react-router-dom";
-import { AreaChart, Area, ResponsiveContainer, LineChart, Line, YAxis, XAxis } from "recharts";
-import { Zap, Award, Trophy, Flame, Camera, Bot, Play, Pause, ArrowRight, Activity, CheckCircle2, Atom, Clock, Lock, Check, BookOpen, FlaskConical, Settings, Target, Brain, Star, Sparkles, RefreshCw, Sliders } from "lucide-react";
-import { pushNotification } from "../../lib/notificationStore";
-import { useUserStore } from "../../store/useUserStore";
-import { usePhysicsStore } from "../../store/usePhysicsStore";
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { Zap, Flame, Atom, Lock, FlaskConical, Target, Brain, Star } from "lucide-react";
 import { UserAvatar } from "./DashboardLayout";
 import { getApiBaseUrl } from "../../lib/api";
 

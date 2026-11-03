@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "prepare": "node -e \"if (!process.env.CI && !process.env.VERCEL) try { require('child_process').execSync('npx husky') } catch (e) {}\""
+    "prepare": "node -e \"if (!process.env.CI && !process.env.VERCEL) try { require('child_process').execSync('npx husky') } catch (e) {}\"",
+    "build:anna": "vite build --mode anna"
   },
   "dependencies": {
     "@react-three/drei": "9.92.7",

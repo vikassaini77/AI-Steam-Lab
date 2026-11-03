@@ -211,7 +211,7 @@ class MockAuth {
     return { data: { user }, error: null };
   }
 
-  async resetPasswordForEmail(email: string, options?: any) {
+  async resetPasswordForEmail(email: string) {
     if (!email) {
       return { data: null, error: new Error('Email is required') };
     }

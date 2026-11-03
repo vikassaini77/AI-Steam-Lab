@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
-  Plus, MessageSquare, PanelLeftClose, 
+  PanelLeftClose, 
   PanelLeftOpen, MoreHorizontal, Settings, ArrowLeft,
   Trash2, Zap, Sliders, User, HelpCircle, LogOut
 } from 'lucide-react';

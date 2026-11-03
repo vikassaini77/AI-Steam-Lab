@@ -1,11 +1,11 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { ShieldCheck, Settings, Eye, HelpCircle } from 'lucide-react';
+import { ShieldCheck, Settings } from 'lucide-react';
 
 export default function CookieConsent() {
   const [visible, setVisible] = useState<boolean>(false);
   const [showCustomize, setShowCustomize] = useState<boolean>(false);
-  const [essential, setEssential] = useState<boolean>(true);
+  const [essential] = useState<boolean>(true);
   const [analytics, setAnalytics] = useState<boolean>(true);
   const [personalization, setPersonalization] = useState<boolean>(false);
 

@@ -36,7 +36,7 @@ function playPopSound() {
     
     osc.start();
     osc.stop(ctx.currentTime + 0.1);
-  } catch (e) {
+  } catch {
     // silently ignore if audio fails or is blocked
   }
 }

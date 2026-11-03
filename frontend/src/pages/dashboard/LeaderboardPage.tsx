@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Trophy, Medal, Star, Target, Crown } from 'lucide-react';
+import { Trophy, Medal, Target, Crown } from 'lucide-react';
 import { UserAvatar } from '../../components/dashboard/DashboardLayout';
 import { getApiBaseUrl } from '../../lib/api';
 

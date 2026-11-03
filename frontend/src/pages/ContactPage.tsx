@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { ArrowLeft, Mail, Send, CheckCircle2, User, HelpCircle, Phone, MapPin } from 'lucide-react';
+import { ArrowLeft, Mail, Send, CheckCircle2, HelpCircle, Phone, MapPin } from 'lucide-react';
 
 export default function ContactPage() {
   const navigate = useNavigate();

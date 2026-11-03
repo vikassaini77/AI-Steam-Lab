@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import DashboardLayout from '../components/dashboard/DashboardLayout';
 import WebcamSection from './dashboard/WebcamSection';
@@ -13,7 +13,6 @@ import LeaderboardPage from './dashboard/LeaderboardPage';
 const ProfilePage = lazy(() => import('./ProfilePage'));
 const SecurityPage = lazy(() => import('./SecurityPage'));
 const LabHistory = lazy(() => import('./dashboard/LabHistory'));
-const AITutorPage = lazy(() => import('./AITutorPage'));
 
 interface DashboardProps {
   session: any;

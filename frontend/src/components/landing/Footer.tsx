@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Heart, Github, Twitter, Linkedin, ExternalLink, Shield, Lock, ChevronRight } from 'lucide-react';
+import { Heart, Github, Twitter, Linkedin, ExternalLink, Lock, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Footer() {
@@ -97,7 +97,11 @@ export default function Footer() {
           >
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/25 overflow-hidden bg-[#050511]">
-                <img src="/logo.png" alt="NeuroLab Logo" className="w-full h-full object-cover" />
+                <img
+                  src={`${import.meta.env.BASE_URL}logo.png`}
+                  alt="NeuroLab Logo"
+                  className="w-full h-full object-cover"
+                />
               </div>
               <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-400">
                 NeuroLab AI

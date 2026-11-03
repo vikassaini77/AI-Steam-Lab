@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ReactFlow, Background, Controls, Edge, Node } from '@xyflow/react';
+import { useState, useEffect } from 'react';
+import { ReactFlow, Background, Edge, Node } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Network } from 'lucide-react';
 
@@ -18,7 +18,7 @@ const initialEdges: Edge[] = [
 
 export default function KnowledgeMap({ unlockedNode }: { unlockedNode?: string }) {
   const [nodes, setNodes] = useState<Node[]>(initialNodes);
-  const [edges, setEdges] = useState<Edge[]>(initialEdges);
+  const [edges] = useState<Edge[]>(initialEdges);
 
   useEffect(() => {
     if (unlockedNode) {

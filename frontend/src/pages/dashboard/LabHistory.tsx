@@ -115,7 +115,7 @@ export default function LabHistory() {
             sync_percentage: "98.9%",
             pe_max: "12.40 J",
             ke_max: "18.20 J",
-            roundtable: "**Professor Nova**: The launch vector conforms beautifully to Newton's equations of motion. Decomposing the velocity vector gives us the vertical parameter $v_y(t) = v_0 \\sin\\theta - gt$ and horizontal parameter $v_x(t) = v_0 \\cos\\theta$.\n\n**Galileo**: Splendid trajectory! In a lunar vacuum, the projectile would form a mathematically perfect parabola. Here, air resistance slightly skews the symmetry, yielding a classical aerodynamic glide.\n\n**Dr. Telemetry**: The YOLOv8 model maintained a $98.7\%$ tracking confidence. No coordinate filtering glitches were observed during the deceleration phase."
+            roundtable: "**Professor Nova**: The launch vector conforms beautifully to Newton's equations of motion. Decomposing the velocity vector gives us the vertical parameter $v_y(t) = v_0 \\sin\\theta - gt$ and horizontal parameter $v_x(t) = v_0 \\cos\\theta$.\n\n**Galileo**: Splendid trajectory! In a lunar vacuum, the projectile would form a mathematically perfect parabola. Here, air resistance slightly skews the symmetry, yielding a classical aerodynamic glide.\n\n**Dr. Telemetry**: The YOLOv8 model maintained a $98.7%$ tracking confidence. No coordinate filtering glitches were observed during the deceleration phase."
           }
         }
       ]);

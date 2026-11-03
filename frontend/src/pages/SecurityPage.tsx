@@ -1,9 +1,9 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import {
-  ShieldCheck, Lock, Smartphone, RefreshCw, Key, LogOut, CheckCircle,
-  Terminal, AlertTriangle, Bell, Clock, Zap, Eye, ArrowLeft, Shield,
-  Wifi, Activity, UserCheck, Globe, ChevronRight, TrendingUp, Laptop, Trash2
+  ShieldCheck, Smartphone, RefreshCw, Key, LogOut, CheckCircle,
+  Terminal, AlertTriangle, Bell, Clock, Eye, ArrowLeft, Shield,
+  Wifi, Activity, TrendingUp
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 

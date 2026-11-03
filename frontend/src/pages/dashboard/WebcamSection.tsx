@@ -336,7 +336,7 @@ export default function WebcamSection() {
 
       // Clean LaTeX & mathematical syntax for fluent speech outputs
       let clean = text
-        .replace(/[\$\#\*\_]/g, '')
+        .replace(/[$#*_]/g, '')
         .replace(/\\pi/g, 'pi')
         .replace(/\\sqrt/g, 'square root of ')
         .replace(/KE/g, 'kinetic energy')
@@ -1194,7 +1194,6 @@ export default function WebcamSection() {
   const downloadCompiledReport = async () => {
     handleAutoSaveAction("Compiling PDF Lab Report...");
     try {
-      // @ts-ignore
       const html2pdf = (await import('html2pdf.js')).default;
       const element = document.getElementById('lab-report-content');
       if (!element) throw new Error("Content not found");
@@ -1202,9 +1201,9 @@ export default function WebcamSection() {
       const opt = {
         margin:       0.5,
         filename:     'NeuroLab_Live_Report.pdf',
-        image:        { type: 'jpeg', quality: 0.98 },
+        image:        { type: 'jpeg' as const, quality: 0.98 },
         html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#070714' },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' }
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' as const }
       };
       
       await html2pdf().set(opt).from(element).save();

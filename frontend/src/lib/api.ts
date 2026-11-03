@@ -14,6 +14,11 @@ export function getApiBaseUrl(): string {
 
   if (url) return url;
 
+  // In Anna embedded mode, always target the live Render backend
+  if (import.meta.env.MODE === 'anna') {
+    return 'https://neurolab-backend-uxhv.onrender.com';
+  }
+
   if (typeof window !== 'undefined') {
     const isLocal =
       window.location.hostname === 'localhost' ||

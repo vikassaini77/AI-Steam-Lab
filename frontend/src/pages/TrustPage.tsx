@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import {
-  Shield, Lock, Eye, CheckCircle, HardDrive, Brain, Users, Activity,
-  Star, Zap, Database, Globe, ArrowLeft, ShieldCheck, BadgeCheck
+  Shield, Lock, Eye, CheckCircle, Brain, Users, Activity,
+  Database, Globe, ArrowLeft, ShieldCheck, BadgeCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 

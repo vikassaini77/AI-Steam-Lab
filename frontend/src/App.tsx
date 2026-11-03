@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useState, useEffect, Suspense as ReactSuspense } from 'react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { lazy } from 'react';
@@ -281,12 +281,23 @@ const GlobalErrorFallback = ({ error, resetErrorBoundary }: any) => (
   </div>
 );
 
+const RouterComponent = import.meta.env.MODE === 'anna' ? HashRouter : BrowserRouter;
+
 export default function App() {
   return (
-    <ErrorBoundary FallbackComponent={GlobalErrorFallback} onReset={() => window.location.replace('/')}>
-      <BrowserRouter>
+    <ErrorBoundary
+      FallbackComponent={GlobalErrorFallback}
+      onReset={() => {
+        if (import.meta.env.MODE === 'anna') {
+          window.location.hash = '#/';
+        } else {
+          window.location.replace('/');
+        }
+      }}
+    >
+      <RouterComponent>
         <AppContent />
-      </BrowserRouter>
+      </RouterComponent>
     </ErrorBoundary>
   );
 }
