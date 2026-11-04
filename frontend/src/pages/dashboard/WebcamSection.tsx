@@ -333,11 +333,36 @@ export default function WebcamSection() {
   const sendIntervalRef = useRef<ReturnType<typeof setInterval>>();
   const sampleFeedIntervalRef = useRef<ReturnType<typeof setInterval>>();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sampleCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Anna Runtime & Video Fallback States
   const [isCameraBlockedByPolicy, setIsCameraBlockedByPolicy] = useState<boolean>(false);
   const [uploadedMediaName, setUploadedMediaName] = useState<string | null>(null);
   const [isVideoSource, setIsVideoSource] = useState<boolean>(false);
+
+  // Proactively check if Anna host iframe restricts camera permissions policy
+  useEffect(() => {
+    const isEmbeddedIframe = typeof window !== 'undefined' && window.self !== window.top;
+    if (isEmbeddedIframe) {
+      let isExplicitlyBlocked = false;
+      try {
+        const docWithPolicy = document as unknown as {
+          permissionsPolicy?: { allowsFeature?: (feat: string) => boolean };
+          featurePolicy?: { allowsFeature?: (feat: string) => boolean };
+        };
+        if (docWithPolicy.permissionsPolicy?.allowsFeature) {
+          isExplicitlyBlocked = !docWithPolicy.permissionsPolicy.allowsFeature('camera');
+        } else if (docWithPolicy.featurePolicy?.allowsFeature) {
+          isExplicitlyBlocked = !docWithPolicy.featurePolicy.allowsFeature('camera');
+        }
+      } catch {
+        // ignore
+      }
+      if (isExplicitlyBlocked) {
+        setIsCameraBlockedByPolicy(true);
+      }
+    }
+  }, []);
 
   // Playback/Analysis Simulation Loop
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
@@ -786,7 +811,15 @@ export default function WebcamSection() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const overlay = overlayCanvasRef.current;
-    if (!video || !canvas || !overlay || video.readyState < 2) return;
+    if (!canvas || !overlay) return;
+
+    let sourceDrawable: CanvasImageSource | null = null;
+    if (video && video.readyState >= 2) {
+      sourceDrawable = video;
+    } else if (sampleCanvasRef.current && isVideoSource) {
+      sourceDrawable = sampleCanvasRef.current;
+    }
+    if (!sourceDrawable) return;
 
     const W = 640, H = 360;
     canvas.width = W; canvas.height = H;
@@ -796,10 +829,10 @@ export default function WebcamSection() {
     const octx = overlay.getContext('2d');
     if (!ctx || !octx) return;
 
-    // Draw frame to hidden canvas (mirrored, to match video element)
+    // Draw frame to hidden canvas (mirrored only for raw selfie camera)
     ctx.save();
-    ctx.scale(-1, 1);
-    ctx.drawImage(video, -W, 0, W, H);
+    ctx.scale(isVideoSource ? 1 : -1, 1);
+    ctx.drawImage(sourceDrawable, isVideoSource ? 0 : -W, 0, W, H);
     ctx.restore();
 
     const frame = ctx.getImageData(0, 0, W, H);
@@ -1032,8 +1065,13 @@ export default function WebcamSection() {
     if (!cameraActive) {
       if (sendIntervalRef.current) clearInterval(sendIntervalRef.current);
       if (clientCvIntervalRef.current) clearInterval(clientCvIntervalRef.current);
+      if (sampleFeedIntervalRef.current) clearInterval(sampleFeedIntervalRef.current);
       if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
       if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+        videoRef.current.src = '';
+      }
       setAnnotatedImage(null);
       setRealPhysics(null);
       setBackendMode('connecting');
@@ -1092,13 +1130,20 @@ export default function WebcamSection() {
           sendIntervalRef.current = setInterval(() => {
             const video = videoRef.current;
             const canvas = canvasRef.current;
-            if (!video || !canvas || video.readyState < 2) return;
+            if (!canvas) return;
+            let sourceDrawable: CanvasImageSource | null = null;
+            if (video && video.readyState >= 2) {
+              sourceDrawable = video;
+            } else if (sampleCanvasRef.current && isVideoSource) {
+              sourceDrawable = sampleCanvasRef.current;
+            }
+            if (!sourceDrawable) return;
             const ctx = canvas.getContext('2d');
             if (!ctx) return;
             canvas.width = 640; canvas.height = 360;
             ctx.save();
             ctx.scale(isVideoSource ? 1 : -1, 1);
-            ctx.drawImage(video, isVideoSource ? 0 : -640, 0, 640, 360);
+            ctx.drawImage(sourceDrawable, isVideoSource ? 0 : -640, 0, 640, 360);
             ctx.restore();
             const b64 = canvas.toDataURL('image/jpeg', 0.6);
             if (ws.readyState === WebSocket.OPEN) {
@@ -1216,13 +1261,20 @@ export default function WebcamSection() {
         if (isFetching) return;
         const video = videoRef.current;
         const canvas = canvasRef.current;
-        if (!video || !canvas || video.readyState < 2) return;
+        if (!canvas) return;
+        let sourceDrawable: CanvasImageSource | null = null;
+        if (video && video.readyState >= 2) {
+          sourceDrawable = video;
+        } else if (sampleCanvasRef.current && isVideoSource) {
+          sourceDrawable = sampleCanvasRef.current;
+        }
+        if (!sourceDrawable) return;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
         canvas.width = 640; canvas.height = 360;
         ctx.save();
         ctx.scale(isVideoSource ? 1 : -1, 1);
-        ctx.drawImage(video, isVideoSource ? 0 : -640, 0, 640, 360);
+        ctx.drawImage(sourceDrawable, isVideoSource ? 0 : -640, 0, 640, 360);
         ctx.restore();
         const b64 = canvas.toDataURL('image/jpeg', 0.5);
         isFetching = true;
@@ -1274,9 +1326,9 @@ export default function WebcamSection() {
 
     // ── Client-side CV loop ──
     const startClientCV = () => {
-      // Wait for video to be ready
+      // Wait for video or sample canvas to be ready
       const waitAndStart = () => {
-        if (videoRef.current && videoRef.current.readyState >= 2) {
+        if ((videoRef.current && videoRef.current.readyState >= 2) || (sampleCanvasRef.current && isVideoSource)) {
           clientCvIntervalRef.current = setInterval(runClientSideCV, 80); // ~12 FPS
         } else {
           setTimeout(waitAndStart, 300);
@@ -1325,8 +1377,13 @@ export default function WebcamSection() {
     setAiStatus('Detecting');
     handleAutoSaveAction('🧪 Interactive STEM Sample Lab running! Computer vision tracking active.');
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!sampleCanvasRef.current) {
+      const c = document.createElement('canvas');
+      c.width = 640;
+      c.height = 360;
+      sampleCanvasRef.current = c;
+    }
+    const canvas = sampleCanvasRef.current;
     canvas.width = 640;
     canvas.height = 360;
 
@@ -1336,6 +1393,18 @@ export default function WebcamSection() {
     const pivotY = 40;
     const omega = Math.sqrt(9.81 / 1.5);
     const theta0 = 0.52; // ~30 deg
+
+    if (videoRef.current) {
+      try {
+        const stream = (canvas as HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream }).captureStream?.(30);
+        if (stream) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(err => console.warn('Stream play error:', err));
+        }
+      } catch (e) {
+        console.warn('Canvas captureStream not supported:', e);
+      }
+    }
 
     if (sampleFeedIntervalRef.current) clearInterval(sampleFeedIntervalRef.current);
     sampleFeedIntervalRef.current = setInterval(() => {
@@ -1410,6 +1479,7 @@ export default function WebcamSection() {
       videoRef.current.loop = true;
       videoRef.current.play().catch(err => console.warn('Video play error:', err));
     }
+    e.target.value = '';
   };
 
   const handleStartAnalysis = () => {
@@ -1998,7 +2068,7 @@ export default function WebcamSection() {
                         playsInline
                         muted
                         className="absolute inset-0 w-full h-full object-cover"
-                        style={{ transform: 'scaleX(-1)' }}
+                        style={{ transform: isVideoSource ? 'none' : 'scaleX(-1)' }}
                       />
                       
                       {/* Backend CV Image Overlay */}

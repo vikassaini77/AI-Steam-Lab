@@ -46,6 +46,9 @@ celery_app.conf.update(
     task_time_limit=60,                        # Default hard timeout
     task_soft_time_limit=50,                   # Default soft timeout
     result_expires=3600,                       # Results persist in Redis for 1 hour
+    redis_socket_connect_timeout=1,
+    redis_socket_timeout=1,
+    redis_retry_on_timeout=False,
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
@@ -356,7 +359,20 @@ def get_celery_task_status(task_id: str, requesting_user_id: Optional[str] = Non
     if task_owner and task_owner not in ("default_user", "anonymous") and requesting_user_id and task_owner != requesting_user_id:
         raise TaskOwnershipError(f"Forbidden: Authenticated user '{requesting_user_id}' does not own task '{task_id}'.")
 
-    # 1. Check Celery AsyncResult
+    # 1. Check internal in-memory task store first (instantaneous, non-blocking)
+    with _task_results_lock:
+        if task_id in _task_results_store:
+            stored = _task_results_store[task_id]
+            return {
+                "task_id": task_id,
+                "state": stored["state"],
+                "status": stored["status"],
+                "result": stored["result"],
+                "error": stored["error"],
+                "ready": stored["state"] in ("SUCCESS", "FAILURE"),
+            }
+
+    # 2. Check Celery AsyncResult
     try:
         async_res = celery_app.AsyncResult(task_id)
         state = async_res.state
@@ -393,7 +409,7 @@ def get_celery_task_status(task_id: str, requesting_user_id: Optional[str] = Non
     except Exception as e:
         logger.warning(f"Error checking Celery AsyncResult for task {task_id}: {e}")
 
-    # 2. Check durable Redis task store (Problem 18)
+    # 3. Check durable Redis task store (Problem 18)
     rc = get_redis_sync_client()
     if rc:
         try:
@@ -411,19 +427,6 @@ def get_celery_task_status(task_id: str, requesting_user_id: Optional[str] = Non
                 }
         except Exception as e:
             logger.debug(f"Redis task_meta retrieval error for {task_id}: {e}")
-
-    # 3. Check internal in-memory task store fallback
-    with _task_results_lock:
-        if task_id in _task_results_store:
-            stored = _task_results_store[task_id]
-            return {
-                "task_id": task_id,
-                "state": stored["state"],
-                "status": stored["status"],
-                "result": stored["result"],
-                "error": stored["error"],
-                "ready": stored["state"] in ("SUCCESS", "FAILURE"),
-            }
 
     # 4. Default PENDING state
     return {

@@ -208,8 +208,8 @@ class TrajectoryTracker:
         self,
         max_gap_seconds: float = 10.0,
         distance_threshold_px: float = 150.0,
-        pos_filter_alpha: float = 0.70,
-        vel_filter_beta: float = 0.65,
+        pos_filter_alpha: float = 1.0,
+        vel_filter_beta: float = 1.0,
     ):
         self.next_id: int = 1
         self.tracks: Dict[int, Dict[str, Any]] = {}
@@ -443,22 +443,30 @@ class TrajectoryTracker:
                 }
             )
 
-        # 4. Position noise filtering (EMA)
-        alpha = self.pos_filter_alpha
-        fx = alpha * float(cx) + (1.0 - alpha) * prev_fx
-        fy = alpha * float(cy) + (1.0 - alpha) * prev_fy
+        # 4. Position and Velocity Filtering (EMA with first-step initialization)
+        is_first_motion_step = len(track["positions"]) == 1
 
-        # 5. Displacement and Instantaneous Velocity Vector
-        dx_m = (fx - prev_fx) * scale
-        dy_m = (fy - prev_fy) * scale
+        if is_first_motion_step:
+            fx = float(cx)
+            fy = float(cy)
+            dx_m = (float(cx) - float(prev_cx)) * scale
+            dy_m = (float(cy) - float(prev_cy)) * scale
+            inst_vx = dx_m / dt
+            inst_vy = dy_m / dt
+            filt_vx = inst_vx
+            filt_vy = inst_vy
+        else:
+            alpha = self.pos_filter_alpha
+            fx = alpha * float(cx) + (1.0 - alpha) * prev_fx
+            fy = alpha * float(cy) + (1.0 - alpha) * prev_fy
+            dx_m = (fx - prev_fx) * scale
+            dy_m = (fy - prev_fy) * scale
+            inst_vx = dx_m / dt
+            inst_vy = dy_m / dt
+            beta = self.vel_filter_beta
+            filt_vx = beta * inst_vx + (1.0 - beta) * prev_vx
+            filt_vy = beta * inst_vy + (1.0 - beta) * prev_vy
 
-        inst_vx = dx_m / dt
-        inst_vy = dy_m / dt
-
-        # Velocity noise filtering (EMA)
-        beta = self.vel_filter_beta
-        filt_vx = beta * inst_vx + (1.0 - beta) * prev_vx
-        filt_vy = beta * inst_vy + (1.0 - beta) * prev_vy
         speed = math.hypot(filt_vx, filt_vy)
 
         # 6. Vector Acceleration (differentiation of velocity vectors)
@@ -804,7 +812,9 @@ class CVTracker:
         # 1. Routing by Tracking Method
         is_degraded = False
         degraded_reason = None
-        active_detector = active_model
+        active_model = "unknown"
+        active_detector = "unknown"
+        detection_message = ""
 
         if method == "yolo":
             if self.yolo_model is not None:
