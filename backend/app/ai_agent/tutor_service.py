@@ -10,7 +10,6 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, AsyncGenerator, List, Optional
 
-import google.generativeai as genai
 from fastapi import Request
 
 from app.ai_agent.ai_client import _DEFAULT_MODEL, GeminiAIClient, check_cancellation
