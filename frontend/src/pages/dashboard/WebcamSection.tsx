@@ -32,6 +32,7 @@ import {
   Accessibility,
   Upload,
   AlertCircle,
+  AlertTriangle,
   FileVideo
 } from 'lucide-react';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
@@ -284,10 +285,14 @@ interface RealPhysicsData {
   distance: number;
   velocity_x?: number;
   velocity_y?: number;
+  acceleration_x?: number;
+  acceleration_y?: number;
   kinetic_energy?: number;
   potential_energy?: number;
   total_energy?: number;
   experiment_type?: string;
+  is_calibrated?: boolean;
+  calibration_status?: string;
   pendulum_params?: { angle?: number; estimated_length?: number };
   projectile_params?: { launch_angle?: number };
   trajectory?: { x: number; y: number; t: number }[];
@@ -313,6 +318,11 @@ export default function WebcamSection() {
   const [colorTarget, setColorTarget] = useState<'red' | 'green' | 'blue'>('green');
   const [annotatedImage, setAnnotatedImage] = useState<string | null>(null);
   const [realPhysics, setRealPhysics] = useState<RealPhysicsData | null>(null);
+  const [activeDetector, setActiveDetector] = useState<string>('OpenCV HSV Blob');
+  const [isCvDegraded, setIsCvDegraded] = useState<boolean>(false);
+  const [cvDegradedReason, setCvDegradedReason] = useState<string | null>(null);
+  const [cvDetectionMessage, setCvDetectionMessage] = useState<string | null>(null);
+  const [hasDetectedObject, setHasDetectedObject] = useState<boolean>(false);
   const [selectedCVSource, setSelectedCVSource] = useState<'auto' | 'cloud' | 'client'>('auto');
   const [showSettings, setShowSettings] = useState<boolean>(false);
 
@@ -1101,15 +1111,39 @@ export default function WebcamSection() {
           try {
             const data = JSON.parse(event.data);
             if (data.annotated_image) setAnnotatedImage(data.annotated_image);
+            if (data.active_detector) setActiveDetector(data.active_detector);
+            else if (data.model_name) setActiveDetector(data.model_name);
+            if (data.is_degraded !== undefined) setIsCvDegraded(Boolean(data.is_degraded));
+            if (data.degraded_reason) setCvDegradedReason(data.degraded_reason);
+            if (data.detection_message) setCvDetectionMessage(data.detection_message);
+            setHasDetectedObject(Boolean(data.centroid && data.detections && data.detections.length > 0));
+
             if (data.physics) {
-              setRealPhysics(data.physics);
               const phys = data.physics;
+              const mappedSpeed = Number(phys.velocity_mps ?? phys.speed ?? 0);
+              const mappedAccel = Number(phys.acceleration_mps2 ?? phys.acceleration ?? 0);
+              const mappedDist = Number(phys.x_meters ?? phys.distance ?? 0);
+              const mappedPhysics: RealPhysicsData = {
+                speed: mappedSpeed,
+                acceleration: mappedAccel,
+                distance: mappedDist,
+                velocity_x: phys.velocity_x_mps ?? phys.velocity_x,
+                velocity_y: phys.velocity_y_mps ?? phys.velocity_y,
+                acceleration_x: phys.acceleration_x_mps2,
+                acceleration_y: phys.acceleration_y_mps2,
+                is_calibrated: phys.is_calibrated,
+                calibration_status: phys.calibration_status,
+                pendulum_params: phys.pendulum_params,
+                projectile_params: phys.projectile_params,
+                trajectory: phys.trajectory,
+              };
+              setRealPhysics(mappedPhysics);
               const g = 9.81;
               const angleVal = phys.pendulum_params?.angle ?? phys.projectile_params?.launch_angle ?? 0;
-              const keVal = 0.5 * mass * phys.speed * phys.speed;
+              const keVal = 0.5 * mass * mappedSpeed * mappedSpeed;
               const peVal = mass * g * (phys.pendulum_params?.estimated_length ?? length) * (1 - Math.cos(angleVal * Math.PI/180));
               setChartData(prev => {
-                const next = [...prev, { time: Number((performance.now()/1000).toFixed(2)), position: Number((phys.distance||0).toFixed(3)), velocity: Number(phys.speed.toFixed(3)), ke: Number(keVal.toFixed(2)), pe: Number(peVal.toFixed(2)) }];
+                const next = [...prev, { time: Number((performance.now()/1000).toFixed(2)), position: Number((phys.distance||0).toFixed(3)), velocity: Number(mappedSpeed.toFixed(3)), ke: Number(keVal.toFixed(2)), pe: Number(peVal.toFixed(2)) }];
                 return next.length > 30 ? next.slice(-30) : next;
               });
             }
@@ -1202,7 +1236,34 @@ export default function WebcamSection() {
           if (res.ok) {
             const data = await res.json();
             if (data.annotated_image) setAnnotatedImage(data.annotated_image);
-            if (data.physics) setRealPhysics(data.physics);
+            if (data.active_detector) setActiveDetector(data.active_detector);
+            else if (data.model_name) setActiveDetector(data.model_name);
+            if (data.is_degraded !== undefined) setIsCvDegraded(Boolean(data.is_degraded));
+            if (data.degraded_reason) setCvDegradedReason(data.degraded_reason);
+            if (data.detection_message) setCvDetectionMessage(data.detection_message);
+            setHasDetectedObject(Boolean(data.centroid && data.detections && data.detections.length > 0));
+
+            if (data.physics) {
+              const phys = data.physics;
+              const mappedSpeed = Number(phys.velocity_mps ?? phys.speed ?? 0);
+              const mappedAccel = Number(phys.acceleration_mps2 ?? phys.acceleration ?? 0);
+              const mappedDist = Number(phys.x_meters ?? phys.distance ?? 0);
+              const mappedPhysics: RealPhysicsData = {
+                speed: mappedSpeed,
+                acceleration: mappedAccel,
+                distance: mappedDist,
+                velocity_x: phys.velocity_x_mps ?? phys.velocity_x,
+                velocity_y: phys.velocity_y_mps ?? phys.velocity_y,
+                acceleration_x: phys.acceleration_x_mps2,
+                acceleration_y: phys.acceleration_y_mps2,
+                is_calibrated: phys.is_calibrated,
+                calibration_status: phys.calibration_status,
+                pendulum_params: phys.pendulum_params,
+                projectile_params: phys.projectile_params,
+                trajectory: phys.trajectory,
+              };
+              setRealPhysics(mappedPhysics);
+            }
           }
         } catch { /* ignore frame failures */ }
         finally {
@@ -1491,14 +1552,21 @@ export default function WebcamSection() {
         headers,
         body: JSON.stringify({
           name: 'Live Pendulum Oscillation',
+          data_source: cameraActive ? 'vision_tracking' : 'simulation',
           metrics: {
             subject: 'Physics',
             tier: 'Intermediate',
-            tracking_method: trackingMethod === 'yolo' ? 'YOLOv8 Target Tracker' : 'OpenCV HSV Blob',
+            data_source: cameraActive ? 'vision_tracking' : 'simulation',
+            tracking_method: activeDetector,
+            is_degraded: isCvDegraded,
+            is_calibrated: Boolean(realPhysics?.is_calibrated),
+            calibration_status: realPhysics?.calibration_status || (cameraActive ? 'calibrated' : 'theoretical_model'),
             target_color: colorTarget.charAt(0).toUpperCase() + colorTarget.slice(1),
             accuracy: `${accuracy.toFixed(1)}%`,
             fps: `${fps} FPS`,
             velocity_peak: `${calcPeakVel.toFixed(2)} m/s`,
+            velocity_x: realPhysics?.velocity_x !== undefined ? `${realPhysics.velocity_x.toFixed(2)} m/s` : undefined,
+            velocity_y: realPhysics?.velocity_y !== undefined ? `${realPhysics.velocity_y.toFixed(2)} m/s` : undefined,
             displacement_max: `${calcMaxDisp.toFixed(2)} m`,
             gravity_verified: '9.81 m/s²',
             sync_percentage: `${simSync}%`,
@@ -1519,14 +1587,21 @@ export default function WebcamSection() {
           id: data.experiment_id || `exp_${Date.now()}`,
           name: 'Live Pendulum Oscillation',
           date: new Date().toISOString().split('T')[0],
+          data_source: cameraActive ? 'vision_tracking' : 'simulation',
           metrics: {
             subject: 'Physics',
             tier: 'Intermediate',
-            tracking_method: trackingMethod === 'yolo' ? 'YOLOv8 Target Tracker' : 'OpenCV HSV Blob',
+            data_source: cameraActive ? 'vision_tracking' : 'simulation',
+            tracking_method: activeDetector,
+            is_degraded: isCvDegraded,
+            is_calibrated: Boolean(realPhysics?.is_calibrated),
+            calibration_status: realPhysics?.calibration_status || (cameraActive ? 'calibrated' : 'theoretical_model'),
             target_color: colorTarget.charAt(0).toUpperCase() + colorTarget.slice(1),
             accuracy: `${accuracy.toFixed(1)}%`,
             fps: `${fps} FPS`,
             velocity_peak: `${calcPeakVel.toFixed(2)} m/s`,
+            velocity_x: realPhysics?.velocity_x !== undefined ? `${realPhysics.velocity_x.toFixed(2)} m/s` : undefined,
+            velocity_y: realPhysics?.velocity_y !== undefined ? `${realPhysics.velocity_y.toFixed(2)} m/s` : undefined,
             displacement_max: `${calcMaxDisp.toFixed(2)} m`,
             gravity_verified: '9.81 m/s²',
             sync_percentage: `${simSync}%`,
@@ -1558,14 +1633,21 @@ export default function WebcamSection() {
         id: `exp_${Date.now()}`,
         name: 'Live Pendulum Oscillation',
         date: new Date().toISOString().split('T')[0],
+        data_source: cameraActive ? 'vision_tracking' : 'simulation',
         metrics: {
           subject: 'Physics',
           tier: 'Intermediate',
-          tracking_method: trackingMethod === 'yolo' ? 'YOLOv8 Target Tracker' : 'OpenCV HSV Blob',
+          data_source: cameraActive ? 'vision_tracking' : 'simulation',
+          tracking_method: activeDetector,
+          is_degraded: isCvDegraded,
+          is_calibrated: Boolean(realPhysics?.is_calibrated),
+          calibration_status: realPhysics?.calibration_status || (cameraActive ? 'calibrated' : 'theoretical_model'),
           target_color: colorTarget.charAt(0).toUpperCase() + colorTarget.slice(1),
           accuracy: `${accuracy.toFixed(1)}%`,
           fps: `${fps} FPS`,
           velocity_peak: `${calcPeakVel.toFixed(2)} m/s`,
+          velocity_x: realPhysics?.velocity_x !== undefined ? `${realPhysics.velocity_x.toFixed(2)} m/s` : undefined,
+          velocity_y: realPhysics?.velocity_y !== undefined ? `${realPhysics.velocity_y.toFixed(2)} m/s` : undefined,
           displacement_max: `${calcMaxDisp.toFixed(2)} m`,
           gravity_verified: '9.81 m/s²',
           sync_percentage: `${simSync}%`,
@@ -1747,8 +1829,22 @@ export default function WebcamSection() {
             {/* LEFT ENGINE: Real Camera Vision / simulated HSV Overlay */}
             <div className="bg-[#12121a] border border-[#22222f] rounded-3xl overflow-hidden shadow-2xl relative flex flex-col justify-between">
               <div className="absolute inset-0 bg-scanlines pointer-events-none opacity-20" />
-              <div className="absolute top-4 left-4 z-20 flex gap-2">
+              <div className="absolute top-4 left-4 z-20 flex flex-wrap gap-2 items-center">
                 <span className="px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/20 text-[9px] font-extrabold text-cyan-400 rounded-md tracking-wider uppercase">{t.webcamTitle}</span>
+                <span className="px-2 py-0.5 bg-purple-500/10 border border-purple-500/20 text-[9px] font-bold text-purple-300 rounded-md tracking-wider">
+                  Detector: {activeDetector}
+                </span>
+                {isCvDegraded && (
+                  <span className="px-2 py-0.5 bg-amber-500/15 border border-amber-500/30 text-[9px] font-bold text-amber-300 rounded-md tracking-wider flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3 text-amber-400" />
+                    Degraded Mode (YOLO Fallback)
+                  </span>
+                )}
+                {cameraActive && !hasDetectedObject && (
+                  <span className="px-2 py-0.5 bg-red-500/15 border border-red-500/30 text-[9px] font-bold text-red-300 rounded-md tracking-wider">
+                    {cvDetectionMessage || 'Searching for target...'}
+                  </span>
+                )}
               </div>
               
               <div className="w-full relative bg-[#06060f] border-b border-[#22222f] overflow-hidden">
@@ -1829,6 +1925,12 @@ export default function WebcamSection() {
                                 </button>
                               ))}
                             </div>
+                            {trackingMethod === 'yolo' && isCvDegraded && (
+                              <div className="mt-1.5 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[9px] text-amber-300 leading-tight">
+                                <span className="font-bold block text-amber-400 mb-0.5">⚠️ Degraded Mode Notice:</span>
+                                {cvDegradedReason || 'YOLOv8 is disabled to prevent out-of-memory termination on Render free tier (512MB RAM). OpenCV HSV fallback is actively tracking.'}
+                              </div>
+                            )}
                           </div>
 
                           {/* HSV Target Color Selection */}
@@ -1983,22 +2085,30 @@ export default function WebcamSection() {
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: -20 }}
-                          className="absolute top-20 left-4 z-40 w-48 bg-black/80 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-3 shadow-2xl"
+                          className="absolute top-20 left-4 z-40 w-52 bg-black/85 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-3 shadow-2xl space-y-2.5"
                         >
-                          <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-2">
-                            <Activity className="w-3.5 h-3.5 text-cyan-400" />
-                            <span className="text-[10px] font-bold text-cyan-100 tracking-wider uppercase">Live Telemetry</span>
+                          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                            <div className="flex items-center gap-1.5">
+                              <Activity className="w-3.5 h-3.5 text-cyan-400" />
+                              <span className="text-[10px] font-bold text-cyan-100 tracking-wider uppercase">Live Telemetry</span>
+                            </div>
+                            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 uppercase">
+                              {realPhysics.is_calibrated ? 'Calibrated' : 'Default Scale'}
+                            </span>
                           </div>
                           
-                          <div className="space-y-3">
+                          <div className="space-y-2">
                             <div>
-                              <div className="text-[9px] text-gray-400 uppercase tracking-widest mb-0.5">Instant Velocity</div>
-                              <div className="text-xl font-black text-white font-mono">
-                                {realPhysics.speed.toFixed(2)} <span className="text-xs text-cyan-400">m/s</span>
+                              <div className="text-[8px] text-gray-400 uppercase tracking-widest mb-0.5">Velocity (Speed / Vector)</div>
+                              <div className="text-lg font-black text-white font-mono flex items-baseline gap-1">
+                                {realPhysics.speed.toFixed(2)} <span className="text-[10px] text-cyan-400 font-normal">m/s</span>
+                              </div>
+                              <div className="text-[9px] text-cyan-300/80 font-mono">
+                                vx: {realPhysics.velocity_x?.toFixed(2) ?? '0.00'} · vy: {realPhysics.velocity_y?.toFixed(2) ?? '0.00'} m/s
                               </div>
                             </div>
                             
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/5">
                               <div>
                                 <div className="text-[8px] text-gray-400 uppercase tracking-widest">Displacement</div>
                                 <div className="text-xs font-bold text-purple-400 font-mono mt-0.5">
@@ -2010,7 +2120,17 @@ export default function WebcamSection() {
                                 <div className="text-xs font-bold text-emerald-400 font-mono mt-0.5">
                                   {Math.abs(realPhysics.acceleration).toFixed(2)} m/s²
                                 </div>
+                                <div className="text-[8px] text-emerald-400/70 font-mono">
+                                  ax: {realPhysics.acceleration_x?.toFixed(1) ?? '0.0'} ay: {realPhysics.acceleration_y?.toFixed(1) ?? '0.0'}
+                                </div>
                               </div>
+                            </div>
+
+                            <div className="pt-1 border-t border-white/5 text-[8px] text-gray-400 flex items-center justify-between">
+                              <span>Detector:</span>
+                              <span className="text-cyan-300 font-semibold truncate max-w-[120px]" title={activeDetector}>
+                                {activeDetector}
+                              </span>
                             </div>
                           </div>
                         </motion.div>

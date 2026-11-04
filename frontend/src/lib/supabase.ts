@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -15,10 +16,29 @@ const realSupabase = createClient(
   supabaseAnonKey || 'sb_publishable_Cmpj3H-TzdYLRo0qCMZltQ_CQ3aHtQ8'
 );
 
+interface MockSignUpParams {
+  email?: string;
+  password?: string;
+  options?: {
+    data?: {
+      full_name?: string;
+      username?: string;
+      country?: string;
+      education?: string;
+      stem_interest?: string;
+    };
+  };
+}
+
+interface MockSignInParams {
+  email?: string;
+  password?: string;
+}
+
 // Robust mock auth system to handle offline mode or when credentials are placeholders
 class MockAuth {
-  private listeners: ((event: string, session: any) => void)[] = [];
-  private currentSession: any = null;
+  private listeners: ((event: string, session: Session | null) => void)[] = [];
+  private currentSession: Session | null = null;
 
   constructor() {
     // Load active session from local storage on init
@@ -46,7 +66,7 @@ class MockAuth {
     return { data: { session: this.currentSession }, error: null };
   }
 
-  onAuthStateChange(callback: (event: string, session: any) => void) {
+  onAuthStateChange(callback: (event: string, session: Session | null) => void) {
     this.listeners.push(callback);
     // Call instantly with current session
     callback('INITIAL_SESSION', this.currentSession);
@@ -62,7 +82,7 @@ class MockAuth {
     };
   }
 
-  async signUp({ email, password, options }: any) {
+  async signUp({ email, password, options }: MockSignUpParams) {
     if (!email || !password) {
       return { data: { session: null, user: null }, error: new Error('Email and password are required') };
     }
@@ -91,7 +111,7 @@ class MockAuth {
 
     users[normalizedEmail] = {
       password, // In mock, we store the password for demo simplicity
-      user: mockUser,
+      user: mockUser as unknown as User,
     };
     this.saveMockUsers(users);
 
@@ -103,14 +123,14 @@ class MockAuth {
       user: mockUser,
     };
 
-    this.currentSession = mockSession;
+    this.currentSession = mockSession as unknown as Session;
     localStorage.setItem('neurolab_session', JSON.stringify(mockSession));
     this.triggerChange('SIGNED_IN');
 
-    return { data: { session: mockSession, user: mockUser }, error: null };
+    return { data: { session: mockSession as unknown as Session, user: mockUser as unknown as User }, error: null };
   }
 
-  async signInWithPassword({ email, password }: any) {
+  async signInWithPassword({ email, password }: MockSignInParams) {
     if (!email || !password) {
       return { data: { session: null, user: null }, error: new Error('Email and password are required') };
     }
@@ -131,14 +151,14 @@ class MockAuth {
       user: existing.user,
     };
 
-    this.currentSession = mockSession;
+    this.currentSession = mockSession as unknown as Session;
     localStorage.setItem('neurolab_session', JSON.stringify(mockSession));
     this.triggerChange('SIGNED_IN');
 
-    return { data: { session: mockSession, user: existing.user }, error: null };
+    return { data: { session: mockSession as unknown as Session, user: existing.user as unknown as User }, error: null };
   }
 
-  async signInWithOAuth({ provider, options }: any) {
+  async signInWithOAuth({ provider, options }: { provider: string; options?: { redirectTo?: string } }) {
     const mockUser = {
       id: 'oauth_user_' + Math.random().toString(36).substr(2, 9),
       email: `${provider}_student@neurolab.ai`,
@@ -156,7 +176,7 @@ class MockAuth {
       user: mockUser,
     };
 
-    this.currentSession = mockSession;
+    this.currentSession = mockSession as unknown as Session;
     localStorage.setItem('neurolab_session', JSON.stringify(mockSession));
     this.triggerChange('SIGNED_IN');
 
@@ -167,7 +187,7 @@ class MockAuth {
       }
     }, 100);
 
-    return { data: { session: mockSession, user: mockUser }, error: null };
+    return { data: { session: mockSession as unknown as Session, user: mockUser as unknown as User }, error: null };
   }
 
   async signOut() {
@@ -177,7 +197,7 @@ class MockAuth {
     return { error: null };
   }
 
-  async updateUser(attributes: { password?: string; data?: any }) {
+  async updateUser(attributes: { password?: string; data?: Record<string, unknown> }) {
     if (!this.currentSession?.user) {
       return { data: { user: null }, error: new Error('No active session') };
     }
@@ -225,7 +245,7 @@ class MockAuth {
     return { data: {}, error: null };
   }
 
-  private getMockUsers(): Record<string, { password: string; user: any }> {
+  private getMockUsers(): Record<string, { password: string; user: User }> {
     try {
       const data = localStorage.getItem('neurolab_mock_users');
       return data ? JSON.parse(data) : {};
@@ -234,7 +254,7 @@ class MockAuth {
     }
   }
 
-  private saveMockUsers(users: Record<string, { password: string; user: any }>) {
+  private saveMockUsers(users: Record<string, { password: string; user: User }>) {
     try {
       localStorage.setItem('neurolab_mock_users', JSON.stringify(users));
     } catch (e) {
@@ -258,7 +278,7 @@ export const supabase = new Proxy(realSupabase, {
       const realAuth = target.auth;
       return new Proxy(realAuth, {
         get(authTarget, authProp, authReceiver) {
-          const original = (authTarget as any)[authProp];
+          const original = (authTarget as unknown as Record<string | symbol, unknown>)[authProp];
           if (typeof original !== 'function') {
             return Reflect.get(authTarget, authProp, authReceiver);
           }
@@ -268,26 +288,29 @@ export const supabase = new Proxy(realSupabase, {
             return original.bind(authTarget);
           }
 
-          return async function (...args: any[]) {
+          return async function (...args: unknown[]) {
             try {
-              const result = await original.apply(authTarget, args);
+              const result = (await (original as (...a: unknown[]) => unknown).apply(authTarget, args)) as { error?: { message?: string; status?: number } } | null;
               if (result?.error && (
                 result.error.message?.includes('Failed to fetch') ||
                 result.error.message?.includes('NetworkError') ||
                 result.error.status === 0
               )) {
                 console.warn('[Supabase] Real auth failed, falling back to mock authentication:', result.error);
-                return await (mockAuthInstance as any)[authProp].apply(mockAuthInstance, args);
+                const mockFn = (mockAuthInstance as unknown as Record<string | symbol, (...a: unknown[]) => unknown>)[authProp];
+                return await mockFn.apply(mockAuthInstance, args);
               }
               return result;
-            } catch (err: any) {
+            } catch (err: unknown) {
+              const errorObj = err as { message?: string; status?: number };
               if (
-                err.message?.includes('Failed to fetch') ||
-                err.message?.includes('NetworkError') ||
-                err.status === 0
+                errorObj?.message?.includes('Failed to fetch') ||
+                errorObj?.message?.includes('NetworkError') ||
+                errorObj?.status === 0
               ) {
                 console.warn('[Supabase] Network exception caught. Switching to mock authentication offline mode:', err);
-                return await (mockAuthInstance as any)[authProp].apply(mockAuthInstance, args);
+                const mockFn = (mockAuthInstance as unknown as Record<string | symbol, (...a: unknown[]) => unknown>)[authProp];
+                return await mockFn.apply(mockAuthInstance, args);
               }
               throw err;
             }

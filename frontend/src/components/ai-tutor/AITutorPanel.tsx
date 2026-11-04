@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, Mic, Sparkles, Plus, Square, Download, Share, CheckCircle2, RefreshCw, Edit2, Volume2, Loader2 } from 'lucide-react';
 import { useChatStore } from '../../lib/chatStore';
 import type { Message } from '../../lib/chatStore';
@@ -7,10 +7,34 @@ import ReactMarkdown from 'react-markdown';
 import { getApiBaseUrl, getAuthHeaders } from '../../lib/api';
 import { pushNotification } from '../../lib/notificationStore';
 
+interface SpeechRecognitionResultItem {
+  transcript: string;
+}
+interface SpeechRecognitionResultList {
+  length: number;
+  [index: number]: {
+    isFinal: boolean;
+    [index: number]: SpeechRecognitionResultItem;
+  };
+}
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: { error: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
 export default function AITutorPanel() {
   const { chats = [], activeChatId, addMessage, updateMessage, createNewChat, setMessages, botName, botVoiceURI } = useChatStore();
   const currentChat = chats.find(c => c.id === activeChatId);
-  const messages = currentChat?.messages || [];
+  const messages = useMemo(() => currentChat?.messages || [], [currentChat?.messages]);
 
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -46,7 +70,7 @@ export default function AITutorPanel() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,13 +106,14 @@ export default function AITutorPanel() {
   // Setup Speech Recognition
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const windowWithSpeech = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike };
+      const SpeechRecognition = windowWithSpeech.SpeechRecognition || windowWithSpeech.webkitSpeechRecognition;
       if (SpeechRecognition) {
         recognitionRef.current = new SpeechRecognition();
         recognitionRef.current.continuous = true;
         recognitionRef.current.interimResults = true;
 
-        recognitionRef.current.onresult = (event: any) => {
+        recognitionRef.current.onresult = (event: SpeechRecognitionEventLike) => {
           let currentTranscript = '';
           for (let i = event.resultIndex; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
@@ -100,7 +125,7 @@ export default function AITutorPanel() {
           setInput((prev) => prev + currentTranscript);
         };
 
-        recognitionRef.current.onerror = (event: any) => {
+        recognitionRef.current.onerror = (event: { error: string }) => {
           console.error('Speech recognition error', event.error);
           setIsListening(false);
         };
@@ -111,6 +136,10 @@ export default function AITutorPanel() {
       }
     }
   }, []);
+
+  const handleSendRef = useRef<() => void>(() => {});
+  const isTypingRef = useRef(isTyping);
+  isTypingRef.current = isTyping;
 
   // Handle Engagement States
   useEffect(() => {
@@ -123,10 +152,10 @@ export default function AITutorPanel() {
       if (disengagedTimerRef.current) clearTimeout(disengagedTimerRef.current);
     }
 
-    if (engagementState === 'CONFUSED' && !isTyping) {
+    if (engagementState === 'CONFUSED' && !isTypingRef.current) {
       // Automatically ask the agent to simplify
       setInput("[SYSTEM: CONFUSED_USER]");
-      setTimeout(() => handleSend(), 500);
+      setTimeout(() => handleSendRef.current(), 500);
       setEngagementState(null); // Reset
     }
 
@@ -355,8 +384,9 @@ export default function AITutorPanel() {
         }
       }
 
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      const err = error as { name?: string; message?: string };
+      if (err?.name === 'AbortError') {
         console.log('Stream aborted');
       } else {
         console.error('Tutor chat API connection failed:', error);
@@ -372,6 +402,7 @@ export default function AITutorPanel() {
       abortControllerRef.current = null;
     }
   };
+  handleSendRef.current = handleSend;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

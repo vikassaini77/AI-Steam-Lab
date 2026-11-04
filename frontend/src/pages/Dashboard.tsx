@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import DashboardLayout from '../components/dashboard/DashboardLayout';
 import WebcamSection from './dashboard/WebcamSection';
@@ -15,7 +16,7 @@ const SecurityPage = lazy(() => import('./SecurityPage'));
 const LabHistory = lazy(() => import('./dashboard/LabHistory'));
 
 interface DashboardProps {
-  session: any;
+  session: Session | null;
 }
 
 export default function Dashboard({ session }: DashboardProps) {

@@ -132,6 +132,12 @@ class ExperimentDetailResponse(BaseModel):
     experiment: Dict[str, Any] = Field(..., description="Saved experiment record details")
 
 
+class ExperimentDeleteResponse(BaseModel):
+    status: str = Field(..., description="Operation status ('success')")
+    message: str = Field(..., description="Confirmation message")
+    experiment_id: str = Field(..., description="ID of deleted experiment")
+
+
 @router.post("/analyze/{exp_type}", response_model=ExperimentAnalysisResponse)
 def analyze_experiment(exp_type: str, data: Dict[str, Any]):
     """
@@ -460,11 +466,21 @@ def save_experiment(
         "recorded_at": datetime.now(timezone.utc).isoformat(),
     }
 
+    source_type = (
+        getattr(data, "data_source", None)
+        or getattr(data, "source", None)
+        or (data.metrics.get("data_source") if data.metrics else None)
+        or "simulation"
+    )
+    prov_record["source"] = source_type
+
     record_payload = {
         "id": record_id,
         "user_id": canonical_uid,
         "experiment_type": exp_type_enum.value,
         "type": exp_type_enum.value,
+        "data_source": source_type,
+        "source": source_type,
         "model_name": "PhysicsEngine",
         "model_version": model_version,
         "algorithm_version": algo_version,
@@ -586,6 +602,53 @@ def get_experiment(
         )
 
     return {"experiment": target_exp}
+
+
+@router.delete("/experiment/{experiment_id}", response_model=ExperimentDeleteResponse)
+def delete_experiment(
+    experiment_id: str,
+    current_user: dict = Depends(get_current_user),
+    active_db = Depends(get_db),
+):
+    """
+    Deletes an experiment record by ID with strict user ownership enforcement.
+    Rejects unauthorized access with 403 Forbidden or 404 Not Found.
+    """
+    canonical_uid = str(current_user["id"])
+    active_db = active_db or get_db()
+    try:
+        target_exp = active_db.get_experiment_by_id(experiment_id)
+    except DatabasePersistenceError as pe:
+        logger.error(f"Failed to query experiment for deletion: {pe}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database persistence unavailable.",
+        )
+
+    if not target_exp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Experiment not found.",
+        )
+
+    if str(target_exp.get("user_id")) != canonical_uid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not own this experiment resource.",
+        )
+
+    deleted = active_db.delete_experiment(experiment_id, canonical_uid)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Experiment could not be deleted or was already removed.",
+        )
+
+    return {
+        "status": "success",
+        "message": f"Experiment '{experiment_id}' deleted successfully.",
+        "experiment_id": experiment_id,
+    }
 
 
 @router.post("/reproduce/{experiment_id}", response_model=ReproductionReport)

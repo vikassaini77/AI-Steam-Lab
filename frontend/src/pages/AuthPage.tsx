@@ -37,7 +37,7 @@ function InputField({
   label, icon: Icon, type = 'text', value, onChange, placeholder, required, error, success,
   rightElement
 }: {
-  label: string; icon: any; type?: string; value: string; onChange: (v: string) => void;
+  label: string; icon: React.ComponentType<{ className?: string }>; type?: string; value: string; onChange: (v: string) => void;
   placeholder: string; required?: boolean; error?: string; success?: boolean; rightElement?: React.ReactNode;
 }) {
   return (
@@ -73,7 +73,7 @@ function InputField({
 }
 
 /* ─── Social Button ──────────────────────────────── */
-function SocialButton({ icon: Icon, label, onClick, disabled }: { icon: any; label: string; onClick: () => void; disabled: boolean }) {
+function SocialButton({ icon: Icon, label, onClick, disabled }: { icon: React.ComponentType<{ className?: string }>; label: string; onClick: () => void; disabled: boolean }) {
   return (
     <motion.button
       whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.08)' }}
@@ -145,8 +145,9 @@ function SignInForm({ onSwitch, onAuthSuccess, onForgot }: { onSwitch: () => voi
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       onAuthSuccess?.();
-    } catch (err: any) {
-      setError(err.message || 'Invalid email or password.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || 'Invalid email or password.');
     } finally {
       setLoading(false);
     }
@@ -304,8 +305,9 @@ function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (e
       });
       if (error) throw error;
       onVerify(formData.email);
-    } catch (err: any) {
-      setError(err.message || 'Could not create account. Please try again.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || 'Could not create account. Please try again.');
       setShowTerms(false); // Go back to form to show error
     } finally {
       setLoading(false);
@@ -553,8 +555,9 @@ function ForgotPasswordForm({ onBack }: { onBack: () => void }) {
       });
       if (error) throw error;
       setSent(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to send reset email.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || 'Failed to send reset email.');
     } finally {
       setLoading(false);
     }
@@ -669,8 +672,9 @@ function ResetPasswordForm({ onBack }: { onBack: () => void }) {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to reset password.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || 'Failed to reset password.');
     } finally {
       setLoading(false);
     }

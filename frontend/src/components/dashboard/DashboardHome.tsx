@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import type { Session } from "@supabase/supabase-js";
 import { Link, useNavigate } from "react-router-dom";
 import { Zap, Award, Trophy, Flame, Camera, Bot, Play, ArrowRight, Activity, Clock } from "lucide-react";
 import { pushNotification } from "../../lib/notificationStore";
@@ -6,7 +7,7 @@ import { pushNotification } from "../../lib/notificationStore";
 // -------------------------------------------------------------
 // Component: DashboardHome
 // -------------------------------------------------------------
-function DashboardHome({ session }: { session: any }) {
+function DashboardHome({ session }: { session: Session | null }) {
   const navigate = useNavigate();
   const user = session?.user;
   const fullName = user?.user_metadata?.full_name || 'Student';

@@ -1,14 +1,15 @@
 import { create } from 'zustand';
+import type { User } from '@supabase/supabase-js';
 
 interface UserState {
-  user: any | null; // Can type better later with supabase types
+  user: User | null;
   fullName: string;
   xp: number;
   level: number;
   dailyStreak: number;
   completedLabs: number;
   aiInteractions: number;
-  setUser: (user: any) => void;
+  setUser: (user: User | null) => void;
   setXp: (xp: number) => void;
   addXp: (amount: number) => void;
   setLevel: (level: number) => void;

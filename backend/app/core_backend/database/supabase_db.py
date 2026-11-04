@@ -19,10 +19,10 @@ db_lock = threading.Lock()
 
 
 class DatabaseManager:
-    def __init__(self):
+    def __init__(self, local_db_path: Optional[str] = None):
         self.url = os.getenv("SUPABASE_URL")
         self.key = os.getenv("SUPABASE_KEY")
-        self.local_db_path = os.path.join(os.path.dirname(__file__), "local_stem_db.json")
+        self.local_db_path = local_db_path or os.path.join(os.path.dirname(__file__), "local_stem_db.json")
         self.last_retrieval_metadata: List[Dict[str, Any]] = []
         self._init_local_db()
 
@@ -127,6 +127,28 @@ class DatabaseManager:
                 (exp for exp in db.get("experiments", []) if str(exp.get("id")) == str(experiment_id)),
                 None,
             )
+
+    def delete_experiment(self, experiment_id: str, user_id: str) -> bool:
+        """
+        Deletes an experiment record ensuring strict user ownership.
+        Returns True if deleted, False if record does not exist or belongs to another user.
+        """
+        if not experiment_id or not user_id:
+            return False
+        canonical_uid = str(user_id)
+        with db_lock:
+            db = self._read_local()
+            experiments = db.get("experiments", [])
+            initial_count = len(experiments)
+            updated = [
+                exp for exp in experiments
+                if not (str(exp.get("id")) == str(experiment_id) and str(exp.get("user_id")) == canonical_uid)
+            ]
+            if len(updated) < initial_count:
+                db["experiments"] = updated
+                self._write_local(db)
+                return True
+            return False
 
     def record_xp_event(
         self,

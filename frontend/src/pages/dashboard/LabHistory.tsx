@@ -230,7 +230,7 @@ export default function LabHistory() {
       const cached = localStorage.getItem('local_stem_db');
       if (cached) {
         const store = JSON.parse(cached);
-        store.experiments = store.experiments.filter((e: any) => e.id !== id);
+        store.experiments = store.experiments.filter((e: { id?: string }) => e.id !== id);
         localStorage.setItem('local_stem_db', JSON.stringify(store));
       }
       setExperiments(prev => prev.filter(e => e.id !== id));

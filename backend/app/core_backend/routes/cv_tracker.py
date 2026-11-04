@@ -208,9 +208,22 @@ class CleanupSessionsResponse(BaseModel):
 class PhysicsTrackingMetrics(BaseModel):
     x_meters: Optional[float] = Field(None, description="Displacement along x axis in meters")
     y_meters: Optional[float] = Field(None, description="Displacement along y axis in meters")
-    velocity_mps: Optional[float] = Field(0.0, description="Estimated velocity in m/s")
-    acceleration_mps2: Optional[float] = Field(0.0, description="Estimated acceleration in m/s^2")
+    dx_meters: Optional[float] = Field(0.0, description="Differential displacement along x axis in meters")
+    dy_meters: Optional[float] = Field(0.0, description="Differential displacement along y axis in meters")
+    velocity_mps: Optional[float] = Field(0.0, description="Estimated velocity magnitude (speed) in m/s")
+    velocity_x_mps: Optional[float] = Field(0.0, description="Estimated velocity along x axis in m/s")
+    velocity_y_mps: Optional[float] = Field(0.0, description="Estimated velocity along y axis in m/s")
+    acceleration_mps2: Optional[float] = Field(0.0, description="Estimated acceleration magnitude in m/s^2")
+    acceleration_x_mps2: Optional[float] = Field(0.0, description="Estimated acceleration along x axis in m/s^2")
+    acceleration_y_mps2: Optional[float] = Field(0.0, description="Estimated acceleration along y axis in m/s^2")
     track_id: Optional[int] = Field(None, description="Persistent tracking ID")
+    dt_seconds: Optional[float] = Field(None, description="Frame interval in seconds")
+    calibration_status: Optional[str] = Field("calibrated", description="Status of pixel-to-meter calibration")
+    is_calibrated: Optional[bool] = Field(True, description="Whether explicit scale calibration was verified")
+    is_estimated: Optional[bool] = Field(True, description="Flag indicating measurements are empirical estimates")
+    units: Optional[Dict[str, str]] = Field(None, description="Physical measurement units mapping")
+
+    model_config = {"extra": "allow"}
 
 
 class FrameProcessResponse(BaseModel):
@@ -222,6 +235,10 @@ class FrameProcessResponse(BaseModel):
     height: int = Field(..., description="Image height in pixels")
     physics: Optional[PhysicsTrackingMetrics] = Field(None, description="Extracted kinematics and trajectory physics")
     model_name: str = Field(..., description="Inference model or detector used")
+    active_detector: Optional[str] = Field(None, description="Detailed active detector description")
+    is_degraded: Optional[bool] = Field(False, description="Whether pipeline is in degraded fallback mode")
+    degraded_reason: Optional[str] = Field(None, description="Reason if running in degraded mode")
+    detection_message: Optional[str] = Field(None, description="Human-readable detection status message")
     inference_latency_ms: float = Field(..., description="Inference execution duration in milliseconds")
     user_id: Optional[str] = Field(None, description="Authenticated user ID who submitted the frame")
     session_id: Optional[str] = Field(None, description="Session ID for the isolated tracker instance")

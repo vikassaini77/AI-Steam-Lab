@@ -192,7 +192,7 @@ function TroubleshootingModal({ onClose, onRetry, errorType }: {
 
 /* ─── Camera Request Screen ───────────────────────── */
 function CameraRequestScreen({ onRequest, state }: { onRequest: () => void; state: CameraState }) {
-  const errorMessages: Partial<Record<CameraState, { icon: any; title: string; desc: string; color: string }>> = {
+  const errorMessages: Partial<Record<CameraState, { icon: React.ComponentType<{ className?: string }>; title: string; desc: string; color: string }>> = {
     denied: {
       icon: ShieldAlert,
       title: 'Camera Access Denied',
@@ -387,16 +387,17 @@ export default function WebcamPanel() {
       // Step 4: Active!
       setCameraState('active');
 
-    } catch (err: any) {
-      console.error('Camera error:', err.name, err.message);
+    } catch (err: unknown) {
+      const error = (err && typeof err === 'object') ? (err as { name?: string; message?: string }) : { name: 'UnknownError', message: String(err) };
+      console.error('Camera error:', error.name, error.message);
 
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
         setCameraState('denied');
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
         setCameraState('no_camera');
-      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
         setCameraState('busy');
-      } else if (err.name === 'OverconstrainedError') {
+      } else if (error.name === 'OverconstrainedError') {
         setCameraState('error');
       } else {
         setCameraState('error');

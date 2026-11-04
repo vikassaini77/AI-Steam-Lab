@@ -188,6 +188,8 @@ class ExperimentData(BaseModel):
     frame_metadata: Optional[Dict[str, Any]] = Field(None, description="Frame metadata")
     consent_to_record: Optional[bool] = Field(False, description="Consent to record raw footage")
     provenance: Optional[Dict[str, Any]] = Field(None, description="Provenance audit metadata")
+    data_source: Optional[str] = Field("simulation", max_length=50, description="Distinguishes 'simulation' from 'vision_tracking'")
+    source: Optional[str] = Field("simulation", max_length=50, description="Alias for data_source")
 
     model_config = {
         "extra": "forbid",

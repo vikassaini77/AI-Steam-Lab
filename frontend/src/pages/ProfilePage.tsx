@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { pushNotification } from '../lib/notificationStore';
 import {
@@ -41,7 +42,7 @@ import {
 } from 'lucide-react';
 
 interface ProfilePageProps {
-  session: any;
+  session: Session | null;
 }
 
 export default function ProfilePage({ session }: ProfilePageProps) {
@@ -298,14 +299,14 @@ export default function ProfilePage({ session }: ProfilePageProps) {
     setToastMessage(message);
   };
 
-  const handleSaveChangesToSupabase = async (message: string, updates: any) => {
+  const handleSaveChangesToSupabase = async (message: string, updates: Record<string, unknown>) => {
     try {
       const { error } = await supabase.auth.updateUser({
         data: updates
       });
       if (error) throw error;
       handleAutoSaveAction(message);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.warn('Real Supabase update skipped or failed. Saving to local storage profile:', err);
       // Update mock session if we are in mock mode
       try {
@@ -354,7 +355,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
   };
 
   // Nav menu section categories
-  const menuGroups = [
+  const menuGroups = useMemo(() => [
     {
       group: 'Profile & Identity',
       items: [
@@ -395,7 +396,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
         { id: 'about', label: 'About Platform', icon: Info, keywords: ['version', 'release', 'terms', 'saas'] }
       ]
     }
-  ];
+  ], []);
 
   // Filtering sidebar sections on settingsSearchQuery value
   const filteredGroups = menuGroups.map(group => {
@@ -419,7 +420,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
         setActiveTab(firstMatch.id);
       }
     }
-  }, [settingsSearch]);
+  }, [settingsSearch, menuGroups]);
 
   // Custom action handlers
   const handleRevokeDevice = (id: number) => {
@@ -439,9 +440,10 @@ export default function ProfilePage({ session }: ProfilePageProps) {
       setPasswordCurrent('');
       setPasswordNew('');
       handleAutoSaveAction('Password successfully updated! 🔑');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      handleAutoSaveAction(`Failed to update password: ${err.message || err} ⚠️`);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      handleAutoSaveAction(`Failed to update password: ${errMsg} ⚠️`);
     }
   };
 
@@ -1176,7 +1178,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                       <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Font Scaling</label>
                       <select
                         value={fontScale}
-                        onChange={(e) => setFontScale(e.target.value as any)}
+                        onChange={(e) => setFontScale(e.target.value as 'small' | 'medium' | 'large')}
                         className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold focus:outline-none"
                       >
                         <option>small</option>
@@ -1189,7 +1191,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                       <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">UI Density</label>
                       <select
                         value={uiDensity}
-                        onChange={(e) => setUiDensity(e.target.value as any)}
+                        onChange={(e) => setUiDensity(e.target.value as 'comfortable' | 'compact')}
                         className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold focus:outline-none"
                       >
                         <option>comfortable</option>
@@ -1225,8 +1227,8 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                         <span>{subj}</span>
                         <input
                           type="checkbox"
-                          checked={(preferredSubjects as any)[subj]}
-                          onChange={() => setPreferredSubjects(prev => ({ ...prev, [subj]: !(prev as any)[subj] }))}
+                          checked={(preferredSubjects as Record<string, boolean>)[subj]}
+                          onChange={() => setPreferredSubjects(prev => ({ ...prev, [subj]: !(prev as Record<string, boolean>)[subj] }))}
                           className="w-4 h-4 rounded accent-cyan-500 bg-[#13131c] border border-[#22222f]"
                         />
                       </div>
@@ -1239,7 +1241,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Preferred Learning Style</label>
                     <select
                       value={learningStyle}
-                      onChange={(e) => setLearningStyle(e.target.value as any)}
+                      onChange={(e) => setLearningStyle(e.target.value as 'Video' | 'Interactive' | 'Reading' | 'Practice Based')}
                       className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold focus:outline-none"
                     >
                       <option>Video</option>
@@ -1253,7 +1255,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Difficulty Focus</label>
                     <select
                       value={difficultyLevel}
-                      onChange={(e) => setDifficultyLevel(e.target.value as any)}
+                      onChange={(e) => setDifficultyLevel(e.target.value as 'Beginner' | 'Intermediate' | 'Advanced')}
                       className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold focus:outline-none"
                     >
                       <option>Beginner</option>
@@ -1286,7 +1288,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Explanation Complexity</label>
                     <select
                       value={explainLength}
-                      onChange={(e) => setExplainLength(e.target.value as any)}
+                      onChange={(e) => setExplainLength(e.target.value as 'Short' | 'Medium' | 'Detailed')}
                       className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold focus:outline-none"
                     >
                       <option>Short</option>
@@ -1299,7 +1301,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">AI Persona Profile</label>
                     <select
                       value={tutorPersonality}
-                      onChange={(e) => setTutorPersonality(e.target.value as any)}
+                      onChange={(e) => setTutorPersonality(e.target.value as 'Friendly' | 'Professional' | 'Teacher' | 'Scientist')}
                       className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold"
                     >
                       <option>Friendly</option>
@@ -1351,7 +1353,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Simulation Quality</label>
                     <select
                       value={simQuality}
-                      onChange={(e) => setSimQuality(e.target.value as any)}
+                      onChange={(e) => setSimQuality(e.target.value as 'low' | 'high' | 'ultra')}
                       className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold focus:outline-none"
                     >
                       <option>low</option>
@@ -1364,7 +1366,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                     <label className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Kinetic Engine Precision</label>
                     <select
                       value={physicsAccuracy}
-                      onChange={(e) => setPhysicsAccuracy(e.target.value as any)}
+                      onChange={(e) => setPhysicsAccuracy(e.target.value as 'standard' | 'high' | 'absolute')}
                       className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold"
                     >
                       <option>standard</option>

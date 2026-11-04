@@ -70,6 +70,10 @@ class FrameResult(BaseModel):
     height: int
     physics: Optional[Dict[str, Any]] = None
     model_name: str = Field(default="yolov8n", description="Inference model or detector used")
+    active_detector: Optional[str] = Field(None, description="Detailed active detector name")
+    is_degraded: bool = Field(default=False, description="Whether inference is running in degraded fallback mode")
+    degraded_reason: Optional[str] = Field(None, description="Diagnostic reason if running in degraded mode")
+    detection_message: Optional[str] = Field(None, description="Human-readable detection status message")
     inference_latency_ms: float = Field(0.0, description="Inference execution duration in milliseconds")
     model_version: str = Field(default="v1.0.0", description="Semantic model version")
     configuration_version: str = Field(default="cv_config_v1.0", description="CV configuration version")
@@ -78,6 +82,8 @@ class FrameResult(BaseModel):
     inference_status: str = Field(default="completed", description="Inference status: completed or degraded")
     raw_footage_stored: bool = Field(default=False, description="Privacy flag: whether raw footage was persisted")
     provenance: Optional[Dict[str, Any]] = None
+
+    model_config = {"extra": "allow"}
 
 
 # ==============================================================================
@@ -173,18 +179,44 @@ def decode_binary_frame(
 # Object Trajectory & Kinematics Tracker
 # ==============================================================================
 
+class KinematicsResult(tuple):
+    """
+    Tuple subclass behaving as (track_id, velocity_mps, acceleration_mps2)
+    for 100% backward compatibility with unpackers, while also providing
+    full vector kinematics, noise filtering, and calibration audit details.
+    """
+    def __new__(cls, track_id: Optional[int], velocity_mps: float, acceleration_mps2: float, details: Optional[Dict[str, Any]] = None):
+        return super().__new__(cls, (track_id, velocity_mps, acceleration_mps2))
+
+    def __init__(self, track_id: Optional[int], velocity_mps: float, acceleration_mps2: float, details: Optional[Dict[str, Any]] = None):
+        self.track_id = track_id
+        self.velocity_mps = velocity_mps
+        self.acceleration_mps2 = acceleration_mps2
+        self.details = details or {}
+
+
 class TrajectoryTracker:
     """
     Tracks object trajectories across frames, assigning persistent IDs and
-    computing velocity (m/s) and acceleration (m/s^2) across timestamps.
-    Handles dropped frames and automatic tracker timeouts.
+    computing vector velocity (vx, vy, v) and vector acceleration (ax, ay, a).
+    Applies exponential moving average (EMA) noise filtering on coordinates and velocities
+    to prevent pixel quantization noise from corrupting second-derivative calculations.
+    Handles irregular frame intervals (dt), dropped frames, and tracker timeouts.
     Supports serialization for multi-backend shared state synchronization.
     """
-    def __init__(self, max_gap_seconds: float = 10.0, distance_threshold_px: float = 150.0):
+    def __init__(
+        self,
+        max_gap_seconds: float = 10.0,
+        distance_threshold_px: float = 150.0,
+        pos_filter_alpha: float = 0.70,
+        vel_filter_beta: float = 0.65,
+    ):
         self.next_id: int = 1
         self.tracks: Dict[int, Dict[str, Any]] = {}
         self.max_gap_seconds: float = max_gap_seconds
         self.distance_threshold_px: float = distance_threshold_px
+        self.pos_filter_alpha: float = pos_filter_alpha
+        self.vel_filter_beta: float = vel_filter_beta
 
     def reset(self):
         """Resets all tracking history."""
@@ -198,10 +230,15 @@ class TrajectoryTracker:
             "next_id": self.next_id,
             "max_gap_seconds": self.max_gap_seconds,
             "distance_threshold_px": self.distance_threshold_px,
+            "pos_filter_alpha": self.pos_filter_alpha,
+            "vel_filter_beta": self.vel_filter_beta,
             "tracks": {
                 str(tid): {
                     "positions": [list(p) for p in track["positions"]],
+                    "filtered_positions": [list(p) for p in track.get("filtered_positions", [])],
+                    "filtered_velocities": [list(v) for v in track.get("filtered_velocities", [])],
                     "velocities": [float(v) for v in track["velocities"]],
+                    "accelerations": [list(a) for a in track.get("accelerations", [])],
                     "last_seen": float(track["last_seen"]),
                 }
                 for tid, track in self.tracks.items()
@@ -217,6 +254,10 @@ class TrajectoryTracker:
             self.max_gap_seconds = float(data["max_gap_seconds"])
         if "distance_threshold_px" in data:
             self.distance_threshold_px = float(data["distance_threshold_px"])
+        if "pos_filter_alpha" in data:
+            self.pos_filter_alpha = float(data["pos_filter_alpha"])
+        if "vel_filter_beta" in data:
+            self.vel_filter_beta = float(data["vel_filter_beta"])
         tracks_raw = data.get("tracks", {})
         restored = {}
         if isinstance(tracks_raw, dict):
@@ -224,11 +265,17 @@ class TrajectoryTracker:
                 try:
                     tid = int(tid_str)
                     raw_pos = track.get("positions", [])
+                    raw_filt_pos = track.get("filtered_positions", [])
+                    raw_filt_vel = track.get("filtered_velocities", [])
                     raw_vel = track.get("velocities", [])
+                    raw_acc = track.get("accelerations", [])
                     last_seen = float(track.get("last_seen", 0.0))
                     restored[tid] = {
                         "positions": [tuple(p) for p in raw_pos],
+                        "filtered_positions": [tuple(p) for p in raw_filt_pos] if raw_filt_pos else [tuple(p[:2]) for p in raw_pos],
+                        "filtered_velocities": [tuple(v) for v in raw_filt_vel] if raw_filt_vel else [(0.0, float(v)) for v in raw_vel],
                         "velocities": [float(v) for v in raw_vel],
+                        "accelerations": [tuple(a) for a in raw_acc] if raw_acc else [],
                         "last_seen": last_seen,
                     }
                 except (ValueError, TypeError):
@@ -240,21 +287,41 @@ class TrajectoryTracker:
         tracker = TrajectoryTracker(
             max_gap_seconds=self.max_gap_seconds,
             distance_threshold_px=self.distance_threshold_px,
+            pos_filter_alpha=self.pos_filter_alpha,
+            vel_filter_beta=self.vel_filter_beta,
         )
         tracker.from_dict(self.to_dict())
         return tracker
+
+    def validate_calibration(self, px_to_meters: float) -> Tuple[float, str, bool]:
+        """
+        Validates the pixel-to-meter calibration scale factor.
+        Returns: (safe_scale, calibration_status, is_calibrated)
+        """
+        if (
+            px_to_meters is None
+            or px_to_meters <= 0.0
+            or math.isnan(px_to_meters)
+            or math.isinf(px_to_meters)
+        ):
+            return 0.005, "uncalibrated_default", False
+        if px_to_meters < 1e-6 or px_to_meters > 1.0:
+            return 0.005, "uncalibrated_out_of_bounds", False
+        return px_to_meters, "calibrated", True
 
     def update(
         self,
         centroid: Optional[Tuple[int, int]],
         timestamp_seconds: float,
         px_to_meters: float,
-    ) -> Tuple[Optional[int], float, float]:
+    ) -> KinematicsResult:
         """
-        Updates trajectory with a new observation.
-        Returns: (track_id, velocity_mps, acceleration_mps2)
+        Updates trajectory with a new observation, calculating vector velocities
+        and vector accelerations with exponential smoothing.
+        Returns: KinematicsResult (track_id, velocity_mps, acceleration_mps2) with .details
         """
         now = timestamp_seconds
+        scale, calib_status, is_calibrated = self.validate_calibration(px_to_meters)
 
         # 1. Prune expired tracks (dropped frames / object out of view)
         expired_ids = [
@@ -265,7 +332,22 @@ class TrajectoryTracker:
             del self.tracks[tid]
 
         if centroid is None:
-            return None, 0.0, 0.0
+            return KinematicsResult(
+                None, 0.0, 0.0,
+                details={
+                    "dx_meters": 0.0,
+                    "dy_meters": 0.0,
+                    "velocity_x_mps": 0.0,
+                    "velocity_y_mps": 0.0,
+                    "velocity_mps": 0.0,
+                    "acceleration_x_mps2": 0.0,
+                    "acceleration_y_mps2": 0.0,
+                    "acceleration_mps2": 0.0,
+                    "dt_seconds": None,
+                    "calibration_status": "no_target",
+                    "is_calibrated": is_calibrated,
+                }
+            )
 
         cx, cy = centroid
         best_id = None
@@ -279,42 +361,143 @@ class TrajectoryTracker:
                 min_dist = dist
                 best_id = tid
 
+        # Initial track instantiation
         if best_id is None:
             best_id = self.next_id
             self.next_id += 1
             self.tracks[best_id] = {
                 "positions": [(cx, cy, now)],
-                "velocities": [],
+                "filtered_positions": [(float(cx), float(cy))],
+                "filtered_velocities": [(0.0, 0.0)],
+                "velocities": [0.0],
+                "accelerations": [(0.0, 0.0)],
                 "last_seen": now,
             }
-            return best_id, 0.0, 0.0
+            return KinematicsResult(
+                best_id, 0.0, 0.0,
+                details={
+                    "dx_meters": 0.0,
+                    "dy_meters": 0.0,
+                    "velocity_x_mps": 0.0,
+                    "velocity_y_mps": 0.0,
+                    "velocity_mps": 0.0,
+                    "acceleration_x_mps2": 0.0,
+                    "acceleration_y_mps2": 0.0,
+                    "acceleration_mps2": 0.0,
+                    "dt_seconds": 0.0,
+                    "calibration_status": calib_status,
+                    "is_calibrated": is_calibrated,
+                }
+            )
 
         # 3. Update matched track
         track = self.tracks[best_id]
         prev_cx, prev_cy, prev_t = track["positions"][-1]
-        dt = max(now - prev_t, 1e-4)
+        prev_fx, prev_fy = track["filtered_positions"][-1]
+        prev_vx, prev_vy = track["filtered_velocities"][-1]
 
-        dx_m = (cx - prev_cx) * px_to_meters
-        dy_m = (cy - prev_cy) * px_to_meters
-        dist_m = math.hypot(dx_m, dy_m)
-        v = dist_m / dt
+        dt = now - prev_t
 
-        # Calculate acceleration if previous velocity exists
-        a = 0.0
-        if track["velocities"]:
-            prev_v = track["velocities"][-1]
-            a = (v - prev_v) / dt
+        # Guard: Clock jitter or duplicate client frame (dt <= 1ms)
+        if dt <= 0.001:
+            speed = math.hypot(prev_vx, prev_vy)
+            return KinematicsResult(
+                best_id, speed, 0.0,
+                details={
+                    "dx_meters": 0.0,
+                    "dy_meters": 0.0,
+                    "velocity_x_mps": prev_vx,
+                    "velocity_y_mps": prev_vy,
+                    "velocity_mps": speed,
+                    "acceleration_x_mps2": 0.0,
+                    "acceleration_y_mps2": 0.0,
+                    "acceleration_mps2": 0.0,
+                    "dt_seconds": dt,
+                    "calibration_status": calib_status,
+                    "is_calibrated": is_calibrated,
+                }
+            )
 
+        # Guard: Large gap/camera pause (> 1.5s): re-anchor without generating astronomical velocities
+        if dt > 1.5:
+            track["positions"].append((cx, cy, now))
+            track["filtered_positions"].append((float(cx), float(cy)))
+            track["filtered_velocities"].append((0.0, 0.0))
+            track["velocities"].append(0.0)
+            track["accelerations"].append((0.0, 0.0))
+            track["last_seen"] = now
+            return KinematicsResult(
+                best_id, 0.0, 0.0,
+                details={
+                    "dx_meters": 0.0,
+                    "dy_meters": 0.0,
+                    "velocity_x_mps": 0.0,
+                    "velocity_y_mps": 0.0,
+                    "velocity_mps": 0.0,
+                    "acceleration_x_mps2": 0.0,
+                    "acceleration_y_mps2": 0.0,
+                    "acceleration_mps2": 0.0,
+                    "dt_seconds": dt,
+                    "calibration_status": calib_status,
+                    "is_calibrated": is_calibrated,
+                }
+            )
+
+        # 4. Position noise filtering (EMA)
+        alpha = self.pos_filter_alpha
+        fx = alpha * float(cx) + (1.0 - alpha) * prev_fx
+        fy = alpha * float(cy) + (1.0 - alpha) * prev_fy
+
+        # 5. Displacement and Instantaneous Velocity Vector
+        dx_m = (fx - prev_fx) * scale
+        dy_m = (fy - prev_fy) * scale
+
+        inst_vx = dx_m / dt
+        inst_vy = dy_m / dt
+
+        # Velocity noise filtering (EMA)
+        beta = self.vel_filter_beta
+        filt_vx = beta * inst_vx + (1.0 - beta) * prev_vx
+        filt_vy = beta * inst_vy + (1.0 - beta) * prev_vy
+        speed = math.hypot(filt_vx, filt_vy)
+
+        # 6. Vector Acceleration (differentiation of velocity vectors)
+        ax = (filt_vx - prev_vx) / dt
+        ay = (filt_vy - prev_vy) / dt
+        accel_mag = math.hypot(ax, ay)
+
+        # Append to track history
         track["positions"].append((cx, cy, now))
-        track["velocities"].append(v)
+        track["filtered_positions"].append((fx, fy))
+        track["filtered_velocities"].append((filt_vx, filt_vy))
+        track["velocities"].append(speed)
+        track["accelerations"].append((ax, ay))
         track["last_seen"] = now
 
         # Keep history bounded (max 50 points)
         if len(track["positions"]) > 50:
             track["positions"] = track["positions"][-50:]
+            track["filtered_positions"] = track["filtered_positions"][-50:]
+            track["filtered_velocities"] = track["filtered_velocities"][-50:]
             track["velocities"] = track["velocities"][-50:]
+            track["accelerations"] = track["accelerations"][-50:]
 
-        return best_id, v, a
+        return KinematicsResult(
+            best_id, speed, accel_mag,
+            details={
+                "dx_meters": round(dx_m, 6),
+                "dy_meters": round(dy_m, 6),
+                "velocity_x_mps": round(filt_vx, 4),
+                "velocity_y_mps": round(filt_vy, 4),
+                "velocity_mps": round(speed, 4),
+                "acceleration_x_mps2": round(ax, 4),
+                "acceleration_y_mps2": round(ay, 4),
+                "acceleration_mps2": round(accel_mag, 4),
+                "dt_seconds": round(dt, 4),
+                "calibration_status": calib_status,
+                "is_calibrated": is_calibrated,
+            }
+        )
 
 
 # ==============================================================================
@@ -619,25 +802,43 @@ class CVTracker:
         inference_status = "completed"
 
         # 1. Routing by Tracking Method
+        is_degraded = False
+        degraded_reason = None
+        active_detector = active_model
+
         if method == "yolo":
             if self.yolo_model is not None:
                 detections = self._detect_yolo(img, conf_thresh, nms_thresh)
                 active_model = "yolov8n"
+                active_detector = "YOLOv8 Neural Network (Ultralytics)"
                 inference_status = "completed"
+                is_degraded = False
+                detection_message = "YOLOv8 target detection active." if detections else "No object detected by YOLO in current frame."
             else:
                 # YOLO requested but weights missing/corrupted/incompatible
                 detections = self._detect_color(img, color_target, conf_thresh)
                 active_model = f"yolo_fallback_color_{color_target or 'red'}"
+                active_detector = f"OpenCV HSV Blob Fallback ({color_target or 'red'})"
                 inference_status = "degraded"
+                is_degraded = True
+                degraded_reason = f"YOLO weights unavailable ({self.yolo_status}): {self.yolo_error or 'Disabled in memory-constrained environment'}"
+                detection_message = f"YOLO unavailable. Using OpenCV {color_target or 'red'} fallback. {'Target locked.' if detections else 'No target detected.'}"
         elif method in ("optical_flow", "opticalflow"):
             detections, recovered = self._track_optical_flow(img, conf_thresh)
             active_model = "lucas_kanade_optical_flow"
-            inference_status = "completed" if (detections or not recovered) else "degraded"
+            active_detector = "Lucas-Kanade Pyramidal Optical Flow"
+            is_degraded = bool(recovered or not detections)
+            inference_status = "completed" if (detections and not recovered) else "degraded"
+            degraded_reason = "Feature points lost; re-seeded Shi-Tomasi corners." if recovered else None
+            detection_message = "Lucas-Kanade optical flow motion tracking active." if detections else "No optical flow features detected. Move target across frame."
         else:
             # Color tracking (HSV segmentation + morphology + contour filtering)
             detections = self._detect_color(img, color_target, conf_thresh)
             active_model = f"color_{color_target or 'red'}"
+            active_detector = f"OpenCV HSV Blob Tracker ({color_target or 'red'})"
             inference_status = "completed"
+            is_degraded = False
+            detection_message = f"OpenCV HSV color tracker active ({color_target or 'red'}). Target locked." if detections else f"No {color_target or 'red'} target detected. Adjust lighting or present target."
 
         # 2. Determine Centroid and Update Trajectory Tracking
         centroid: Optional[List[int]] = None
@@ -645,6 +846,7 @@ class CVTracker:
         track_id = None
         v = 0.0
         a = 0.0
+        kinematics_details: Dict[str, Any] = {}
 
         if detections:
             # Select highest confidence detection as primary physics tracking target
@@ -655,25 +857,46 @@ class CVTracker:
             centroid = [cx, cy]
 
             # Update trajectory
-            track_id, v, a = self.trajectory_tracker.update(
+            kinematics_res = self.trajectory_tracker.update(
                 centroid=(cx, cy),
                 timestamp_seconds=timestamp_s,
                 px_to_meters=px_to_meters,
             )
+            track_id = kinematics_res.track_id
+            v = kinematics_res.velocity_mps
+            a = kinematics_res.acceleration_mps2
             primary.track_id = track_id
+            kinematics_details = kinematics_res.details
         else:
             # Explicitly NO detection (never return fake center of image)
             centroid = None
-            self.trajectory_tracker.update(None, timestamp_s, px_to_meters)
+            kinematics_res = self.trajectory_tracker.update(None, timestamp_s, px_to_meters)
+            kinematics_details = kinematics_res.details
 
         latency_ms = round((time.perf_counter() - t_start) * 1000, 2)
 
         physics = {
             "x_meters": round(centroid[0] * px_to_meters, 4) if centroid else None,
             "y_meters": round(centroid[1] * px_to_meters, 4) if centroid else None,
+            "dx_meters": kinematics_details.get("dx_meters", 0.0),
+            "dy_meters": kinematics_details.get("dy_meters", 0.0),
             "velocity_mps": round(v, 4),
+            "velocity_x_mps": kinematics_details.get("velocity_x_mps", 0.0),
+            "velocity_y_mps": kinematics_details.get("velocity_y_mps", 0.0),
             "acceleration_mps2": round(a, 4),
+            "acceleration_x_mps2": kinematics_details.get("acceleration_x_mps2", 0.0),
+            "acceleration_y_mps2": kinematics_details.get("acceleration_y_mps2", 0.0),
             "track_id": track_id,
+            "dt_seconds": kinematics_details.get("dt_seconds"),
+            "calibration_status": kinematics_details.get("calibration_status", "calibrated"),
+            "is_calibrated": kinematics_details.get("is_calibrated", True),
+            "is_estimated": True,
+            "units": {
+                "position": "meters",
+                "velocity": "m/s",
+                "acceleration": "m/s^2",
+                "time": "seconds",
+            },
         }
 
         # Model provenance metadata
@@ -710,6 +933,8 @@ class CVTracker:
             "preprocessing_version": preprocess_ver,
             "reproducible": True,
             "tracking_method": method,
+            "active_detector": active_detector,
+            "is_degraded": is_degraded,
         }
 
         if method == "yolo" and self.yolo_model is None:
@@ -730,6 +955,10 @@ class CVTracker:
             height=height,
             physics=physics,
             model_name=active_model,
+            active_detector=active_detector,
+            is_degraded=is_degraded,
+            degraded_reason=degraded_reason,
+            detection_message=detection_message,
             inference_latency_ms=latency_ms,
             model_version=model_ver,
             configuration_version="cv_config_v1.0",

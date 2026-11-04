@@ -1,6 +1,8 @@
 import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useState, useEffect, Suspense as ReactSuspense } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { ErrorBoundary } from 'react-error-boundary';
+import type { FallbackProps } from 'react-error-boundary';
 import { lazy } from 'react';
 import { supabase } from './lib/supabase';
 import LandingPage from './pages/LandingPage';
@@ -37,7 +39,7 @@ const PageLoader = () => (
 
 function AppContent() {
   const navigate = useNavigate();
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<'landing' | 'intro' | 'auth'>('landing');
 
@@ -260,26 +262,29 @@ function AppContent() {
   );
 }
 
-const GlobalErrorFallback = ({ error, resetErrorBoundary }: any) => (
-  <div className="min-h-screen bg-[#0a0a1a] flex flex-col items-center justify-center p-6 text-center font-sans">
-    <div className="bg-red-500/10 border border-red-500/20 p-8 rounded-2xl max-w-lg w-full">
-      <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-        <span className="text-red-500 text-2xl font-bold">!</span>
+const GlobalErrorFallback = ({ error, resetErrorBoundary }: FallbackProps) => {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  return (
+    <div className="min-h-screen bg-[#0a0a1a] flex flex-col items-center justify-center p-6 text-center font-sans">
+      <div className="bg-red-500/10 border border-red-500/20 p-8 rounded-2xl max-w-lg w-full">
+        <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+          <span className="text-red-500 text-2xl font-bold">!</span>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-4">System Anomaly Detected</h2>
+        <p className="text-gray-400 mb-6 text-sm">We encountered a temporary disruption in the NeuroLab matrix.</p>
+        <div className="bg-black/50 p-4 rounded-xl mb-6 text-left overflow-x-auto">
+          <p className="text-red-400 font-mono text-xs">{errorMessage}</p>
+        </div>
+        <button 
+          onClick={resetErrorBoundary}
+          className="px-6 py-3 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-red-500/20"
+        >
+          Reboot System
+        </button>
       </div>
-      <h2 className="text-2xl font-bold text-white mb-4">System Anomaly Detected</h2>
-      <p className="text-gray-400 mb-6 text-sm">We encountered a temporary disruption in the NeuroLab matrix.</p>
-      <div className="bg-black/50 p-4 rounded-xl mb-6 text-left overflow-x-auto">
-        <p className="text-red-400 font-mono text-xs">{error.message}</p>
-      </div>
-      <button 
-        onClick={resetErrorBoundary}
-        className="px-6 py-3 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-xl font-medium transition-all shadow-lg shadow-red-500/20"
-      >
-        Reboot System
-      </button>
     </div>
-  </div>
-);
+  );
+};
 
 const RouterComponent = import.meta.env.MODE === 'anna' ? HashRouter : BrowserRouter;
 

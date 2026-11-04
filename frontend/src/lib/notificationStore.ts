@@ -16,9 +16,9 @@ export interface Notification {
 
 function playPopSound() {
   try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
     const osc = ctx.createOscillator();
     const gainNode = ctx.createGain();
     

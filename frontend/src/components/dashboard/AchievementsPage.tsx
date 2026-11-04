@@ -4,6 +4,22 @@ import { Zap, Flame, Atom, Lock, FlaskConical, Target, Brain, Star } from "lucid
 import { UserAvatar } from "./DashboardLayout";
 import { getApiBaseUrl } from "../../lib/api";
 
+interface LeaderboardUser {
+  user_id?: string;
+  rank: number;
+  xp: number;
+  display_name?: string;
+  name?: string;
+  username?: string;
+  avatar_url?: string;
+  badge?: string;
+  level?: number;
+  isCurrentUser?: boolean;
+  isUser?: boolean;
+  streak?: string | number;
+  [key: string]: unknown;
+}
+
 function AchievementsPage() {
   const [activeTab, setActiveTab] = useState<'badges' | 'leaderboard'>('badges');
 
@@ -25,7 +41,7 @@ function AchievementsPage() {
     { title: "Knowledge Seeker", desc: "Ask 500 questions to AI Tutor", tag: "Rare", progress: 127, maxProgress: 500, xp: "350 XP" }
   ];
 
-  const [leaderboardUsers, setLeaderboardUsers] = useState<any[]>([]);
+  const [leaderboardUsers, setLeaderboardUsers] = useState<LeaderboardUser[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -47,8 +63,8 @@ function AchievementsPage() {
         const API_URL = getApiBaseUrl();
         const response = await fetch(`${API_URL}/api/gamification/leaderboard`);
         if (response.ok) {
-          const data = await response.json();
-          const enrichedData = data.map((user: any) => {
+          const data: LeaderboardUser[] = await response.json();
+          const enrichedData = data.map((user: LeaderboardUser) => {
             const level = Math.max(1, Math.floor(user.xp / 1000) + (user.xp > 0 ? 1 : 0));
             let badgeStr = '🔬 Lab Novice';
             if (user.rank === 1) badgeStr = '🏆 Top Scholar';
@@ -423,13 +439,13 @@ function AchievementsPage() {
                       {user.isUser ? (
                         <UserAvatar className="w-full h-full object-cover rounded-full" />
                       ) : (
-                        user.name.charAt(0).toUpperCase()
+                        (user.name || user.username || 'Student').charAt(0).toUpperCase()
                       )}
                     </div>
 
                     <div>
                       <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                        {user.name}
+                        {user.name || user.username || 'Student'}
                         {user.isUser && (
                           <span className="px-1.5 py-0.5 bg-cyan-500 text-black text-[9px] font-black rounded-md uppercase tracking-wider shadow-md shadow-cyan-500/25">
                             YOU

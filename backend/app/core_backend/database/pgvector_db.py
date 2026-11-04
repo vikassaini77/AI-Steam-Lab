@@ -1134,6 +1134,53 @@ class PGVectorManager:
                 )
             return None
 
+    def delete_experiment(self, experiment_id: str, user_id: str) -> bool:
+        """
+        Deletes an experiment record ensuring strict user ownership isolation.
+        Returns True if deleted, False otherwise.
+        """
+        if not experiment_id or not user_id:
+            return False
+        canonical_uid = str(user_id)
+
+        if getattr(self, "is_in_memory_fallback", False) or not getattr(self, "url", None):
+            if hasattr(self, "fallback_experiments"):
+                initial_count = len(self.fallback_experiments)
+                self.fallback_experiments = [
+                    exp for exp in self.fallback_experiments
+                    if not (str(exp.get("id")) == str(experiment_id) and str(exp.get("user_id")) == canonical_uid)
+                ]
+                return len(self.fallback_experiments) < initial_count
+            return False
+
+        def _db_delete_experiment():
+            with get_db_cursor() as cur:
+                cur.execute(
+                    """
+                    DELETE FROM experiments
+                    WHERE id = %s AND user_id = %s;
+                    """,
+                    (str(experiment_id), canonical_uid),
+                )
+                return cur.rowcount > 0
+
+        try:
+            return self._execute(
+                operation_name="delete_experiment",
+                operation_fn=_db_delete_experiment,
+                is_idempotent=True,
+                is_write=True,
+            )
+        except DatabasePersistenceError:
+            if hasattr(self, "fallback_experiments"):
+                initial_count = len(self.fallback_experiments)
+                self.fallback_experiments = [
+                    exp for exp in self.fallback_experiments
+                    if not (str(exp.get("id")) == str(experiment_id) and str(exp.get("user_id")) == canonical_uid)
+                ]
+                return len(self.fallback_experiments) < initial_count
+            return False
+
         def _db_get_experiment_by_id():
             with self._get_conn() as conn:
                 with conn.cursor() as cur:
@@ -1165,6 +1212,53 @@ class PGVectorManager:
                     None,
                 )
             return None
+
+    def delete_experiment(self, experiment_id: str, user_id: str) -> bool:
+        """
+        Deletes an experiment record ensuring strict user ownership isolation.
+        Returns True if deleted, False otherwise.
+        """
+        if not experiment_id or not user_id:
+            return False
+        canonical_uid = str(user_id)
+
+        if getattr(self, "is_in_memory_fallback", False) or not getattr(self, "url", None):
+            if hasattr(self, "fallback_experiments"):
+                initial_count = len(self.fallback_experiments)
+                self.fallback_experiments = [
+                    exp for exp in self.fallback_experiments
+                    if not (str(exp.get("id")) == str(experiment_id) and str(exp.get("user_id")) == canonical_uid)
+                ]
+                return len(self.fallback_experiments) < initial_count
+            return False
+
+        def _db_delete_experiment():
+            with get_db_cursor() as cur:
+                cur.execute(
+                    """
+                    DELETE FROM experiments
+                    WHERE id = %s AND user_id = %s;
+                    """,
+                    (str(experiment_id), canonical_uid),
+                )
+                return cur.rowcount > 0
+
+        try:
+            return self._execute(
+                operation_name="delete_experiment",
+                operation_fn=_db_delete_experiment,
+                is_idempotent=True,
+                is_write=True,
+            )
+        except DatabasePersistenceError:
+            if hasattr(self, "fallback_experiments"):
+                initial_count = len(self.fallback_experiments)
+                self.fallback_experiments = [
+                    exp for exp in self.fallback_experiments
+                    if not (str(exp.get("id")) == str(experiment_id) and str(exp.get("user_id")) == canonical_uid)
+                ]
+                return len(self.fallback_experiments) < initial_count
+            return False
 
     def has_user_memories(self, user_id: str) -> bool:
         """Checks whether the user has any saved tutor memories / inquiry sessions."""
