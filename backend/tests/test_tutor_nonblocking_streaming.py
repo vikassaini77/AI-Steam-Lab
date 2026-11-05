@@ -76,6 +76,11 @@ async def test_concurrent_tutor_requests_no_event_loop_stalling():
 
     tutor = AITutorService(model=mock_model)
 
+    # Isolate embedding generation from external network/redis jitter in unit test
+    async def fast_emb(*args, **kwargs):
+        return [0.05] * 768
+    tutor.generate_embedding = fast_emb
+
     # Event loop latency monitor
     lags = []
     running = True

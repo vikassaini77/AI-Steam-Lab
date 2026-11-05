@@ -85,6 +85,41 @@ class MemoryRepositoryProtocol(Protocol):
     ) -> Tuple[bool, int]:
         ...
 
+    def get_student_profile(
+        self,
+        user_id: str,
+    ) -> Dict[str, Any]:
+        ...
+
+    def update_student_profile(
+        self,
+        user_id: str,
+        profile_update: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        ...
+
+    def record_learning_mistake(
+        self,
+        user_id: str,
+        concept: str,
+        mistake_summary: str,
+    ) -> Dict[str, Any]:
+        ...
+
+    def record_topic_progress(
+        self,
+        user_id: str,
+        topic: str,
+        completed: bool = False,
+    ) -> Dict[str, Any]:
+        ...
+
+    def list_user_sessions(
+        self,
+        user_id: str,
+    ) -> List[Dict[str, Any]]:
+        ...
+
 
 class MemoryRepository:
     """
@@ -270,3 +305,41 @@ class MemoryRepository:
         except Exception as e:
             logger.warning(f"MemoryRepository award_mastery_xp failed ({type(e).__name__}): {e}")
             return False, 0
+
+    def get_student_profile(self, user_id: str) -> Dict[str, Any]:
+        """Retrieves structured student profile with tenant isolation."""
+        if hasattr(self._db, "get_student_profile"):
+            return self._db.get_student_profile(user_id=user_id)
+        return {
+            "user_id": user_id,
+            "topics_studied": [],
+            "topics_completed": [],
+            "weak_concepts": [],
+            "previous_mistakes": [],
+            "learning_progress": {},
+            "relevant_experiment_history": [],
+        }
+
+    def update_student_profile(self, user_id: str, profile_update: Dict[str, Any]) -> Dict[str, Any]:
+        """Updates student learning profile with strict user isolation."""
+        if hasattr(self._db, "update_student_profile"):
+            return self._db.update_student_profile(user_id=user_id, profile_update=profile_update)
+        return profile_update
+
+    def record_learning_mistake(self, user_id: str, concept: str, mistake_summary: str) -> Dict[str, Any]:
+        """Records student conceptual mistake."""
+        if hasattr(self._db, "record_learning_mistake"):
+            return self._db.record_learning_mistake(user_id=user_id, concept=concept, mistake_summary=mistake_summary)
+        return {"user_id": user_id, "concept": concept, "summary": mistake_summary}
+
+    def record_topic_progress(self, user_id: str, topic: str, completed: bool = False) -> Dict[str, Any]:
+        """Records topic progress and graduations."""
+        if hasattr(self._db, "record_topic_progress"):
+            return self._db.record_topic_progress(user_id=user_id, topic=topic, completed=completed)
+        return {"user_id": user_id, "topic": topic, "completed": completed}
+
+    def list_user_sessions(self, user_id: str) -> List[Dict[str, Any]]:
+        """Lists user conversation sessions with strict isolation."""
+        if hasattr(self._db, "list_user_sessions"):
+            return self._db.list_user_sessions(user_id=user_id)
+        return []

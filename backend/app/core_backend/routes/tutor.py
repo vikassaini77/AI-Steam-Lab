@@ -81,6 +81,14 @@ class ExperimentStateContext(BaseModel):
         None,
         description="Observed simulation metrics map",
     )
+    theoretical_values: Optional[Dict[str, Union[float, int, str]]] = Field(
+        None,
+        description="Theoretical benchmark values (e.g. theoretical period, kinetic energy)",
+    )
+    discrepancy: Optional[Union[float, int, str]] = Field(
+        None,
+        description="Observed discrepancy or error between observation and theoretical prediction",
+    )
     time_elapsed: Optional[float] = Field(
         None,
         ge=0.0,
@@ -117,6 +125,16 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = Field(None, max_length=100, description="Client session identifier")
     concept: Optional[str] = Field(None, max_length=100, description="Physics concept being discussed")
     question: Optional[str] = Field(None, max_length=500, description="Active question prompt")
+    mode: Optional[str] = Field(
+        "guided_learning",
+        max_length=50,
+        description="Pedagogical mode: guided_learning, hint, explain, quiz, experiment_analysis, revision",
+    )
+    student_level: Optional[str] = Field(
+        "intermediate",
+        max_length=50,
+        description="Student learning level: beginner, intermediate, advanced",
+    )
 
     model_config = {
         "extra": "forbid",
@@ -182,6 +200,19 @@ class SessionHistoryResponse(BaseModel):
     session_id: str = Field(..., description="Session ID")
     count: int = Field(..., ge=0, description="Total count of returned turns")
     history: List[Dict[str, Any]] = Field(default_factory=list, description="Chronological conversation turns")
+
+
+class StudentProfileResponse(BaseModel):
+    status: str = Field("success", description="Operation status")
+    user_id: str = Field(..., description="Canonical user ID")
+    profile: Dict[str, Any] = Field(..., description="Structured student learning profile")
+
+
+class SessionListResponse(BaseModel):
+    status: str = Field("success", description="Operation status")
+    user_id: str = Field(..., description="Canonical user ID")
+    count: int = Field(..., ge=0, description="Total count of conversation sessions")
+    sessions: List[Dict[str, Any]] = Field(default_factory=list, description="List of user conversation sessions")
 
 
 @router.get("/", response_model=TutorStatusResponse)
@@ -430,4 +461,97 @@ async def get_session_history_endpoint(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database persistence unavailable: Session history could not be retrieved.",
+        )
+
+
+@router.get("/profile", response_model=StudentProfileResponse)
+@limiter.limit("30/minute")
+async def get_student_profile_endpoint(
+    request: Request,
+    current_user: dict = Depends(get_optional_current_user),
+    active_db = Depends(get_db),
+):
+    """
+    Retrieves the authenticated student's structured learning profile.
+    Enforces strict tenant isolation.
+    """
+    canonical_uid = str(current_user["id"])
+    profile = active_db.get_student_profile(user_id=canonical_uid)
+    return {
+        "status": "success",
+        "user_id": canonical_uid,
+        "profile": profile,
+    }
+
+
+@router.put("/profile", response_model=StudentProfileResponse)
+@limiter.limit("20/minute")
+async def update_student_profile_endpoint(
+    request: Request,
+    profile_data: Dict[str, Any],
+    current_user: dict = Depends(get_optional_current_user),
+    active_db = Depends(get_db),
+):
+    """
+    Updates the authenticated student's structured learning profile.
+    Enforces strict tenant isolation.
+    """
+    canonical_uid = str(current_user["id"])
+    updated = active_db.update_student_profile(user_id=canonical_uid, profile_update=profile_data)
+    return {
+        "status": "success",
+        "user_id": canonical_uid,
+        "profile": updated,
+    }
+
+
+@router.get("/sessions", response_model=SessionListResponse)
+@limiter.limit("30/minute")
+async def list_user_sessions_endpoint(
+    request: Request,
+    current_user: dict = Depends(get_optional_current_user),
+    active_db = Depends(get_db),
+):
+    """
+    Lists distinct conversation sessions belonging strictly to the authenticated user.
+    """
+    canonical_uid = str(current_user["id"])
+    sessions = active_db.list_user_sessions(user_id=canonical_uid)
+    return {
+        "status": "success",
+        "user_id": canonical_uid,
+        "count": len(sessions),
+        "sessions": sessions,
+    }
+
+
+@router.delete("/sessions/{session_id}", response_model=DeleteMemoriesResponse)
+@limiter.limit("20/minute")
+async def delete_session_endpoint(
+    request: Request,
+    session_id: str,
+    current_user: dict = Depends(get_optional_current_user),
+    active_db = Depends(get_db),
+):
+    """
+    Deletes an entire conversation session belonging to the authenticated user.
+    """
+    canonical_uid = str(current_user["id"])
+    try:
+        deleted = active_db.delete_user_memories(user_id=canonical_uid, session_id=session_id)
+        return {
+            "status": "success",
+            "message": f"Successfully deleted session '{session_id}' with {deleted} turns.",
+            "deleted_count": deleted,
+        }
+    except TenantIsolationError as tie:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(tie),
+        )
+    except DatabasePersistenceError as pe:
+        logger.error(f"Failed to delete session {session_id} for user {canonical_uid}: {pe}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database persistence unavailable: Session could not be deleted.",
         )

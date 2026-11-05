@@ -16,6 +16,16 @@ from fastapi import Request
 
 from app.ai_agent.ai_client import AIClientProtocol
 from app.ai_agent.learning_evaluation import LearningState, evaluate_learning_interaction
+from app.ai_agent.prompts import (
+    StudentLevel,
+    TutorMode,
+    build_system_instruction,
+    sanitize_student_input,
+)
+from app.ai_agent.response_validation import (
+    redact_sensitive_tokens,
+    validate_and_sanitize_response,
+)
 from app.ai_agent.retrieval_service import RetrievalProtocol
 from app.core_backend.core.observability import record_model_inference_metrics
 from app.core_backend.knowledge_graph import kg_manager
@@ -94,6 +104,8 @@ class TutorOrchestrator:
         last_event_id: Optional[str] = None,
         generate_embedding_fn: Optional[Any] = None,
         experiment_state: Optional[Any] = None,
+        mode: Optional[str] = None,
+        student_level: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Orchestrates full Socratic tutor interaction workflow:
@@ -153,6 +165,8 @@ class TutorOrchestrator:
                 "request_id": request_id,
                 "model": self.ai_client.model_name,
                 "session_id": sess_id,
+                "mode": mode or "guided_learning",
+                "student_level": student_level or "intermediate",
                 "reconnect_last_event_id": last_event_id,
                 "timestamp": time.time(),
                 "status": "started",
@@ -173,8 +187,8 @@ class TutorOrchestrator:
                     "request_id": request_id,
                 })
 
+                loop = asyncio.get_running_loop()
                 if eval_res.is_correct and eval_res.confidence >= 0.80:
-                    loop = asyncio.get_running_loop()
                     awarded, xp = await loop.run_in_executor(
                         self.executor,
                         lambda: self.memory_repository.award_mastery_xp(
@@ -187,12 +201,38 @@ class TutorOrchestrator:
                     eval_res.xp_awarded = xp if awarded else 0
                     eval_res.state = LearningState.MASTERY_CONFIRMED
 
+                    # Update student learning profile with topic completion
+                    try:
+                        await loop.run_in_executor(
+                            self.executor,
+                            lambda: self.memory_repository.record_topic_progress(
+                                user_id=user_id,
+                                topic=concept,
+                                completed=True,
+                            ),
+                        )
+                    except Exception as prof_err:
+                        logger.warning(f"[{request_id}] Failed to record topic progress: {prof_err}")
+
                     if awarded:
                         yield emit(SSEEventName.MASTERY, {
                             "kg_update": f"{concept} Mastered",
                             "xp_awarded": eval_res.xp_awarded,
                             "request_id": request_id,
                         })
+                else:
+                    # Record misconception in structured learning profile
+                    try:
+                        await loop.run_in_executor(
+                            self.executor,
+                            lambda: self.memory_repository.record_learning_mistake(
+                                user_id=user_id,
+                                concept=concept,
+                                mistake_summary=eval_res.feedback,
+                            ),
+                        )
+                    except Exception as prof_err:
+                        logger.warning(f"[{request_id}] Failed to record learning mistake: {prof_err}")
 
                 eval_context_note = (
                     f"\nLearning Evaluation State:\n"
@@ -203,7 +243,7 @@ class TutorOrchestrator:
                     f"Use this evaluation to guide your Socratic response."
                 )
 
-            # Step 2: Context Retrieval use case (graceful degradation with explicit status observability)
+            # Step 2: Context Retrieval & Learning Profile Retrieval
             retrieval_result = None
             try:
                 if generate_embedding_fn is not None:
@@ -246,22 +286,27 @@ class TutorOrchestrator:
             else:
                 past_context = []
 
-            # Step 3: Prompt assembly with Socratic pedagogy & experimental context
-            sys_prompt = (
-                "You are Professor Nova, an inspiring and friendly AI STEM mentor and physics research guide at NeuroLab AI.\n"
-                "Pedagogical Guidelines:\n"
-                "1. Socratic Method: Guide students to discover answers themselves. Ask probing, thoughtful questions that build conceptual understanding rather than simply giving away final answers.\n"
-                "2. Scientific Intuition & Labs: Connect theories directly to hands-on physical observations (e.g. pendulum oscillation, kinematics, energy conservation, collision momentum).\n"
-                "3. Mathematical Rigor: When providing equations, format them with clean LaTeX (e.g. $T = 2\\pi\\sqrt{\\frac{L}{g}}$, $E_k = \\frac{1}{2}mv^2$, $E_p = mgh$).\n"
-                "4. Tone: Encouraging, intellectually engaging, adaptive, and scientifically accurate. Keep explanations structured, concise, and accessible."
-            )
-            if experiment_state:
-                exp_data = experiment_state if isinstance(experiment_state, dict) else (
-                    experiment_state.model_dump() if hasattr(experiment_state, "model_dump") else str(experiment_state)
+            # Retrieve student learning profile for context awareness
+            learning_profile = None
+            try:
+                loop = asyncio.get_running_loop()
+                learning_profile = await loop.run_in_executor(
+                    self.executor,
+                    lambda: self.memory_repository.get_student_profile(user_id=user_id),
                 )
-                sys_prompt += f"\nLive Laboratory Context: {exp_data}"
-            if eval_context_note:
-                sys_prompt += f"\n{eval_context_note}"
+            except Exception as prof_err:
+                logger.warning(f"[{request_id}] Failed to load student profile: {prof_err}")
+
+            # Step 3: Prompt assembly with Socratic pedagogy & experimental context
+            clean_prompt = sanitize_student_input(prompt)
+            sys_prompt = build_system_instruction(
+                mode=mode,
+                student_level=student_level,
+                experiment_state=experiment_state,
+                learning_profile=learning_profile,
+                evaluation_note=eval_context_note,
+                historical_context=past_context,
+            )
 
             if past_context and isinstance(past_context, list) and "[LOW_CONFIDENCE]" in str(past_context[0]):
                 sys_prompt += "\nSystem Note: Low confidence. Use knowledge graph prerequisites."
@@ -272,8 +317,6 @@ class TutorOrchestrator:
                         lambda: kg_manager.get_prerequisites("Newton's 3rd Law"),
                     )
                     sys_prompt += f"\nSuggest prerequisites first: {', '.join(prereqs)}"
-            elif past_context:
-                sys_prompt += f"\nUser historical context: {past_context}"
 
             # Step 4: Stream completion tokens from AI client
             full_text = ""
@@ -289,17 +332,18 @@ class TutorOrchestrator:
 
             try:
                 async for chunk_text in self.ai_client.stream_completion(
-                    prompt=prompt,
+                    prompt=clean_prompt,
                     system_instruction=sys_prompt,
                     timeout_seconds=resolved_timeout,
                     is_cancelled=is_cancelled,
                 ):
+                    safe_chunk = redact_sensitive_tokens(chunk_text)
                     chunk_count += 1
-                    full_text += chunk_text
+                    full_text += safe_chunk
                     yield emit(SSEEventName.TOKEN, {
-                        "token": chunk_text,
-                        "text": chunk_text,
-                        "delta": chunk_text,
+                        "token": safe_chunk,
+                        "text": safe_chunk,
+                        "delta": safe_chunk,
                         "index": chunk_count,
                         "request_id": request_id,
                     })
@@ -308,6 +352,9 @@ class TutorOrchestrator:
                 if request and await request.is_disconnected():
                     logger.info(f"[{request_id}] Client disconnected during stream; skipping terminal events.")
                     return
+
+                # Validate and balance full output text
+                full_text, _ = validate_and_sanitize_response(full_text)
 
                 # Step 5: Terminal Done Event & Observability
                 duration = round(time.perf_counter() - start_time, 3)

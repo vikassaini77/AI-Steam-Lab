@@ -44,6 +44,12 @@ export default function AITutorPanel() {
   const [editInput, setEditInput] = useState('');
   const [kgPopup, setKgPopup] = useState('');
   
+  // Pedagogical modes and student level
+  type TutorModeType = 'guided_learning' | 'hint' | 'explain' | 'quiz' | 'experiment_analysis' | 'revision';
+  type StudentLevelType = 'beginner' | 'intermediate' | 'advanced';
+  const [selectedMode, setSelectedMode] = useState<TutorModeType>('guided_learning');
+  const [selectedLevel, setSelectedLevel] = useState<StudentLevelType>('intermediate');
+
   // Phase 2: Engagement Tracker States
   const [engagementState, setEngagementState] = useState<'FOCUSED' | 'CONFUSED' | 'DISENGAGED' | null>(null);
   const [showNudge, setShowNudge] = useState(false);
@@ -331,7 +337,9 @@ export default function AITutorPanel() {
         body: JSON.stringify({
           prompt: userPrompt,
           history: formattedHistory,
-          experiment_state: experimentState
+          experiment_state: experimentState,
+          mode: selectedMode,
+          student_level: selectedLevel,
         }),
         signal: abortControllerRef.current.signal
       });
@@ -371,6 +379,12 @@ export default function AITutorPanel() {
                 if (data.text) {
                   fullText += data.text;
                   updateMessage(activeChatId, aiMessageId, fullText);
+                }
+                if (data.evaluation) {
+                  const evalRes = data.evaluation;
+                  if (evalRes?.is_correct) {
+                    pushNotification(`Mastery Validated: ${evalRes.concept}`, 'xp');
+                  }
                 }
                 if (data.kg_update) {
                   setKgPopup(data.kg_update);
@@ -715,8 +729,52 @@ export default function AITutorPanel() {
       </AnimatePresence>
 
       {/* Input Area */}
-      <div className="relative w-full p-4 glass border-t border-white/5 z-10 pt-4 pb-6 shrink-0">
-        <div className="max-w-3xl mx-auto w-full relative">
+      <div className="relative w-full p-4 glass border-t border-white/5 z-10 pt-3 pb-6 shrink-0">
+        <div className="max-w-3xl mx-auto w-full relative flex flex-col gap-2">
+          {/* Pedagogical Mode & Student Level Bar */}
+          <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 scrollbar-none text-xs">
+            <div className="flex items-center gap-1.5 flex-nowrap">
+              <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mr-1">Mode:</span>
+              {[
+                { id: 'guided_learning', label: 'Guided' },
+                { id: 'hint', label: 'Hint' },
+                { id: 'explain', label: 'Explain' },
+                { id: 'quiz', label: 'Quiz' },
+                { id: 'experiment_analysis', label: 'Lab Analysis' },
+                { id: 'revision', label: 'Revision' },
+              ].map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => setSelectedMode(m.id as TutorModeType)}
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-all ${
+                    selectedMode === m.id
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_10px_rgba(6,182,212,0.2)]'
+                      : 'bg-white/5 text-gray-400 hover:text-gray-200 hover:bg-white/10 border border-transparent'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-nowrap shrink-0">
+              <span className="text-[10px] text-gray-500 uppercase font-bold tracking-wider mr-1">Level:</span>
+              {(['beginner', 'intermediate', 'advanced'] as const).map(lvl => (
+                <button
+                  key={lvl}
+                  onClick={() => setSelectedLevel(lvl)}
+                  className={`px-2 py-0.5 rounded text-[11px] capitalize transition-all ${
+                    selectedLevel === lvl
+                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 font-semibold'
+                      : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  {lvl}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="bg-[#12121a]/90 backdrop-blur-md rounded-[24px] pl-4 pr-2 py-2 flex items-end shadow-[0_0_15px_rgba(0,255,255,0.05)] border border-white/10">
             <input 
               type="file" 

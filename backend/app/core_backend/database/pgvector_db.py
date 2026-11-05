@@ -2832,6 +2832,128 @@ class PGVectorManager:
                 raise
             return _fallback_daily_usage()
 
+    def get_student_profile(self, user_id: str) -> Dict[str, Any]:
+        """Retrieves structured student profile with tenant isolation."""
+        canonical_uid = _require_valid_user_id(user_id, "get_student_profile")
+        if not hasattr(self, "_fallback_student_profiles"):
+            self._fallback_student_profiles = {}
+        profile = self._fallback_student_profiles.get(canonical_uid)
+        if not profile:
+            profile = {
+                "user_id": canonical_uid,
+                "topics_studied": [],
+                "topics_completed": [],
+                "weak_concepts": [],
+                "previous_mistakes": [],
+                "learning_progress": {},
+                "relevant_experiment_history": [],
+                "last_active_at": time.time(),
+            }
+            self._fallback_student_profiles[canonical_uid] = profile
+        return dict(profile)
+
+    def update_student_profile(self, user_id: str, profile_update: Dict[str, Any]) -> Dict[str, Any]:
+        """Updates student learning profile with strict user isolation."""
+        canonical_uid = _require_valid_user_id(user_id, "update_student_profile")
+        if not hasattr(self, "_fallback_student_profiles"):
+            self._fallback_student_profiles = {}
+        current = self._fallback_student_profiles.get(canonical_uid, {
+            "user_id": canonical_uid,
+            "topics_studied": [],
+            "topics_completed": [],
+            "weak_concepts": [],
+            "previous_mistakes": [],
+            "learning_progress": {},
+            "relevant_experiment_history": [],
+            "last_active_at": time.time(),
+        })
+        for k, v in profile_update.items():
+            if k != "user_id":
+                current[k] = v
+        current["last_active_at"] = time.time()
+        self._fallback_student_profiles[canonical_uid] = current
+        return dict(current)
+
+    def record_learning_mistake(self, user_id: str, concept: str, mistake_summary: str) -> Dict[str, Any]:
+        """Records student conceptual mistake."""
+        canonical_uid = _require_valid_user_id(user_id, "record_learning_mistake")
+        if not hasattr(self, "_fallback_student_profiles"):
+            self._fallback_student_profiles = {}
+        profile = self._fallback_student_profiles.setdefault(canonical_uid, {
+            "user_id": canonical_uid,
+            "topics_studied": [],
+            "topics_completed": [],
+            "weak_concepts": [],
+            "previous_mistakes": [],
+            "learning_progress": {},
+            "relevant_experiment_history": [],
+            "last_active_at": time.time(),
+        })
+        if concept not in profile["topics_studied"]:
+            profile["topics_studied"].append(concept)
+        if concept not in profile["weak_concepts"]:
+            profile["weak_concepts"].append(concept)
+        profile["previous_mistakes"].append({
+            "concept": concept,
+            "summary": mistake_summary,
+            "timestamp": time.time(),
+        })
+        profile["last_active_at"] = time.time()
+        return dict(profile)
+
+    def record_topic_progress(self, user_id: str, topic: str, completed: bool = False) -> Dict[str, Any]:
+        """Records topic progress and graduations."""
+        canonical_uid = _require_valid_user_id(user_id, "record_topic_progress")
+        if not hasattr(self, "_fallback_student_profiles"):
+            self._fallback_student_profiles = {}
+        profile = self._fallback_student_profiles.setdefault(canonical_uid, {
+            "user_id": canonical_uid,
+            "topics_studied": [],
+            "topics_completed": [],
+            "weak_concepts": [],
+            "previous_mistakes": [],
+            "learning_progress": {},
+            "relevant_experiment_history": [],
+            "last_active_at": time.time(),
+        })
+        if topic not in profile["topics_studied"]:
+            profile["topics_studied"].append(topic)
+        if completed:
+            if topic not in profile["topics_completed"]:
+                profile["topics_completed"].append(topic)
+            if topic in profile["weak_concepts"]:
+                profile["weak_concepts"].remove(topic)
+            profile["learning_progress"][topic] = 1.0
+        else:
+            cur = profile["learning_progress"].get(topic, 0.0)
+            profile["learning_progress"][topic] = min(1.0, cur + 0.25)
+        profile["last_active_at"] = time.time()
+        return dict(profile)
+
+    def list_user_sessions(self, user_id: str) -> List[Dict[str, Any]]:
+        """Lists user conversation sessions with strict isolation."""
+        canonical_uid = _require_valid_user_id(user_id, "list_user_sessions")
+        memories = self.list_memories(user_id=canonical_uid, limit=200)
+        sessions_map: Dict[str, Dict[str, Any]] = {}
+        for m in memories:
+            s_id = str(m.get("session_id", "default"))
+            if s_id not in sessions_map:
+                sessions_map[s_id] = {
+                    "session_id": s_id,
+                    "user_id": canonical_uid,
+                    "turn_count": 0,
+                    "last_active": m.get("created_at", 0),
+                    "first_snippet": str(m.get("text", ""))[:80],
+                    "experiment_id": m.get("experiment_id"),
+                }
+            sessions_map[s_id]["turn_count"] += 1
+            if (m.get("created_at") or 0) > sessions_map[s_id]["last_active"]:
+                sessions_map[s_id]["last_active"] = m.get("created_at")
+        session_list = list(sessions_map.values())
+        session_list.sort(key=lambda s: s["last_active"], reverse=True)
+        return session_list
+
+
 
 def check_database_readiness(timeout: Optional[float] = 1.0) -> Dict[str, Any]:
     """
