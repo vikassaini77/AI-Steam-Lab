@@ -288,12 +288,20 @@ class PhysicsEngine:
         else:
             speeds = np.linalg.norm(vel_vectors, axis=1)
 
-        # Instantaneous accelerations (requires at least 3 points)
+        # Vector acceleration calculation: a(t) = [v(t) - v(t-1)] / dt_mid
+        # Differentiates velocity vectors directly so directional changes (e.g. centripetal acceleration)
+        # are correctly captured rather than scalar speed changes.
         accelerations = np.array([])
-        if len(speeds) >= 2:
+        accel_vectors = np.array([])
+        if len(vel_vectors) >= 2:
             dt_acc = 0.5 * (dt_series[:-1] + dt_series[1:])
-            d_speeds = np.diff(speeds)
-            accelerations = d_speeds / dt_acc
+            d_vel_vectors = np.diff(vel_vectors, axis=0)
+            dt_acc_col = dt_acc if d_vel_vectors.ndim == 1 else dt_acc[:, np.newaxis]
+            accel_vectors = d_vel_vectors / dt_acc_col
+            if d_vel_vectors.ndim == 1:
+                accelerations = accel_vectors
+            else:
+                accelerations = np.linalg.norm(accel_vectors, axis=1)
 
         mean_dt = float(np.mean(dt_series))
         std_dt = float(np.std(dt_series))
@@ -316,6 +324,10 @@ class PhysicsEngine:
             },
             "instantaneous_speeds": [round(float(s), 4) for s in speeds],
             "instantaneous_accelerations": [round(float(a), 4) for a in accelerations],
+            "acceleration_vectors": [
+                [round(float(comp), 4) for comp in vec] if hasattr(vec, "__iter__") else round(float(vec), 4)
+                for vec in accel_vectors
+            ] if len(accel_vectors) > 0 else [],
             "units": {
                 "positions": PhysicalUnit.POSITION.value,
                 "timestamps": PhysicalUnit.TIME.value,

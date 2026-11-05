@@ -98,3 +98,4 @@ def test_mfa_unenroll_success():
         data = res.json()
         assert data["status"] == "success"
         assert data["factor_id"] == "factor_test_abc"
+

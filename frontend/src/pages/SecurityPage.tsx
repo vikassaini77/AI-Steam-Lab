@@ -582,9 +582,11 @@ export default function SecurityPage() {
               priority: 'low',
             },
             {
-              ok: false,
-              text: 'Two-Factor Authentication: Planned for an upcoming release. When available, enabling 2FA will further safeguard account credentials.',
-              priority: 'medium',
+              ok: is2FAEnabled,
+              text: is2FAEnabled
+                ? 'Two-Factor Authentication: Active with cryptographic TOTP authenticator protection.'
+                : 'Two-Factor Authentication: Available and recommended. Enable 2FA above to safeguard account credentials.',
+              priority: is2FAEnabled ? 'low' : 'medium',
             },
           ].map((item, i) => (
             <div

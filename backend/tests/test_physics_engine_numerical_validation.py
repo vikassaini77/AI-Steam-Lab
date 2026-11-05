@@ -455,3 +455,36 @@ def test_compare_observed_vs_theoretical_inconsistent_motion(engine):
     assert comp["is_consistent_with_theory"] is False
     assert comp["rmse_meters"] > 1.0
 
+
+def test_analyze_observed_trajectory_vector_acceleration_directional_change(engine):
+    """
+    Verifies that vector acceleration correctly captures centripetal acceleration
+    in 2D uniform circular motion where speed magnitude is constant (d_speed = 0)
+    but velocity direction changes continuously: a = v^2 / R = omega^2 * R.
+    """
+    R = 2.0  # radius in meters
+    omega = 3.0  # angular velocity rad/s
+    # Expected speed = omega * R = 6.0 m/s
+    # Expected centripetal acceleration = omega^2 * R = 18.0 m/s^2
+    n_points = 100
+    timestamps = np.linspace(0.0, 1.0, n_points)  # 100 Hz sampling for smooth differentiation
+    positions_2d = np.column_stack((
+        R * np.cos(omega * timestamps),
+        R * np.sin(omega * timestamps),
+    ))
+
+    res = engine.analyze_observed_trajectory(
+        timestamps=timestamps,
+        positions=positions_2d,
+        filter_noise=False,
+    )
+
+    # Constant speed check (~6.0 m/s)
+    assert math.isclose(res["metrics"]["mean_speed"], 6.0, rel_tol=0.05)
+
+    # Vector acceleration check (~18.0 m/s^2)
+    # A naive speed difference would calculate 0 m/s^2!
+    mean_accel = res["metrics"]["mean_acceleration"]
+    assert math.isclose(mean_accel, 18.0, rel_tol=0.05)
+    assert len(res["acceleration_vectors"]) > 0
+
