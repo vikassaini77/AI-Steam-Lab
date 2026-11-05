@@ -267,3 +267,148 @@ def logout(
         "message": "Successfully logged out and session revoked",
         "session_revoked": True,
     }
+
+
+class MFAEnrollRequest(BaseModel):
+    issuer: Optional[str] = "NeuroLab AI"
+    friendly_name: Optional[str] = "NeuroLab Authenticator"
+
+
+class MFAVerifyRequest(BaseModel):
+    factor_id: str
+    code: str
+
+
+@router.post("/mfa/enroll")
+@limiter.limit("5/minute")
+def mfa_enroll(
+    request: Request,
+    payload: Optional[MFAEnrollRequest] = None,
+    token: str = Depends(get_token_from_header),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Enrolls a new TOTP Multi-Factor Authentication factor for the authenticated user.
+    Returns factor ID, QR code data, secret key, and URI for authenticator app configuration.
+    """
+    issuer_name = payload.issuer if payload and payload.issuer else "NeuroLab AI"
+    friendly_name = payload.friendly_name if payload and payload.friendly_name else "NeuroLab Authenticator"
+    
+    try:
+        supabase = get_supabase_client()
+        if hasattr(supabase, "auth") and hasattr(supabase.auth, "mfa"):
+            res = supabase.auth.mfa.enroll({
+                "factor_type": "totp",
+                "issuer": issuer_name,
+                "friendly_name": friendly_name,
+            })
+            totp_data = getattr(res, "totp", None)
+            return {
+                "status": "success",
+                "id": str(getattr(res, "id", "")),
+                "type": getattr(res, "type", "totp"),
+                "totp": {
+                    "qr_code": getattr(totp_data, "qr_code", None) if totp_data else None,
+                    "secret": getattr(totp_data, "secret", None) if totp_data else None,
+                    "uri": getattr(totp_data, "uri", None) if totp_data else None,
+                },
+            }
+        raise RuntimeError("Supabase client does not expose MFA enrollment")
+    except Exception as e:
+        logger.error(f"MFA enrollment failed for user '{current_user.get('id')}': {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"MFA enrollment failed: {str(e)}",
+        )
+
+
+@router.post("/mfa/verify")
+@limiter.limit("10/minute")
+def mfa_verify(
+    request: Request,
+    payload: MFAVerifyRequest,
+    token: str = Depends(get_token_from_header),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Verifies a TOTP challenge code against the enrolled factor ID.
+    Marks factor as verified upon matching code.
+    """
+    try:
+        supabase = get_supabase_client()
+        if hasattr(supabase, "auth") and hasattr(supabase.auth, "mfa"):
+            res = supabase.auth.mfa.challenge_and_verify({
+                "factor_id": payload.factor_id,
+                "code": payload.code.strip(),
+            })
+            return {
+                "status": "verified",
+                "message": "Two-factor authentication verified successfully.",
+                "factor_id": payload.factor_id,
+            }
+        raise RuntimeError("Supabase client does not expose MFA verification")
+    except Exception as e:
+        logger.error(f"MFA verification failed for user '{current_user.get('id')}': {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"MFA verification failed: {str(e)}",
+        )
+
+
+@router.get("/mfa/factors")
+def mfa_list_factors(
+    current_user: dict = Depends(get_current_user),
+    token: str = Depends(get_token_from_header),
+):
+    """
+    Lists enrolled MFA factors for the authenticated user.
+    """
+    try:
+        supabase = get_supabase_client()
+        if hasattr(supabase, "auth") and hasattr(supabase.auth, "mfa"):
+            res = supabase.auth.mfa.list_factors()
+            factors = []
+            all_factors = getattr(res, "all", []) or []
+            for f in all_factors:
+                factors.append({
+                    "id": str(getattr(f, "id", "")),
+                    "friendly_name": getattr(f, "friendly_name", None),
+                    "factor_type": getattr(f, "factor_type", "totp"),
+                    "status": getattr(f, "status", "unverified"),
+                    "created_at": getattr(f, "created_at", None),
+                })
+            return {
+                "factors": factors,
+                "has_verified_factor": any(f.get("status") == "verified" for f in factors),
+            }
+        return {"factors": [], "has_verified_factor": False}
+    except Exception as e:
+        logger.error(f"MFA list factors failed for user '{current_user.get('id')}': {e}")
+        return {"factors": [], "has_verified_factor": False}
+
+
+@router.delete("/mfa/factors/{factor_id}")
+def mfa_unenroll(
+    factor_id: str,
+    current_user: dict = Depends(get_current_user),
+    token: str = Depends(get_token_from_header),
+):
+    """
+    Un-enrolls an existing MFA factor.
+    """
+    try:
+        supabase = get_supabase_client()
+        if hasattr(supabase, "auth") and hasattr(supabase.auth, "mfa"):
+            supabase.auth.mfa.unenroll({"factor_id": factor_id})
+            return {
+                "status": "success",
+                "message": f"Factor '{factor_id}' successfully unenrolled.",
+                "factor_id": factor_id,
+            }
+        raise RuntimeError("Supabase client does not expose MFA unenrollment")
+    except Exception as e:
+        logger.error(f"MFA unenrollment failed for user '{current_user.get('id')}': {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"MFA unenrollment failed: {str(e)}",
+        )

@@ -4,6 +4,9 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 
 load_dotenv()
+backend_env_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", ".env")
+if os.path.exists(backend_env_path):
+    load_dotenv(backend_env_path)
 
 _client: Optional[Client] = None
 

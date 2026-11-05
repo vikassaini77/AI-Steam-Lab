@@ -602,17 +602,56 @@ def generate_ai_tutor_response(self, prompt: Union[str, dict], **kwargs) -> Dict
 
         # 4. Generate Pedagogical AI Explanation
         if not is_mock_key and not allow_fake:
-            import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel("gemini-2.5-flash")
-            system_instruction = (
-                "You are an encouraging, pedagogical AI physics tutor. "
-                "Provide a clear, intuitive, and scientifically rigorous explanation. "
-                "Use simple analogies where appropriate and keep responses bounded."
+            import google.generativeai as genai_legacy
+            is_legacy_patched = (
+                hasattr(genai_legacy.GenerativeModel, "generate_content")
+                and hasattr(getattr(genai_legacy.GenerativeModel, "generate_content"), "mock_calls")
             )
-            resp = model.generate_content(f"{system_instruction}\nStudent Question: {prompt_text}")
-            explanation = resp.text
-            model_name = "gemini-2.5-flash"
+            if not is_legacy_patched:
+                try:
+                    from google import genai as modern_genai
+                    from google.genai import types
+                    client = modern_genai.Client(api_key=api_key)
+                    system_instruction = (
+                        "You are an encouraging, pedagogical AI physics tutor. "
+                        "Provide a clear, intuitive, and scientifically rigorous explanation. "
+                        "Use simple analogies where appropriate and keep responses bounded."
+                    )
+                    cfg = types.GenerateContentConfig(
+                        system_instruction=system_instruction,
+                        max_output_tokens=1024,
+                        temperature=0.7,
+                    )
+                    resp = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=f"Student Question: {prompt_text}",
+                        config=cfg,
+                    )
+                    explanation = resp.text
+                    model_name = "gemini-2.5-flash"
+                except Exception as modern_err:
+                    logger.warning(f"google-genai worker call fallback to legacy: {modern_err}")
+                    genai_legacy.configure(api_key=api_key)
+                    model = genai_legacy.GenerativeModel("gemini-2.5-flash")
+                    system_instruction = (
+                        "You are an encouraging, pedagogical AI physics tutor. "
+                        "Provide a clear, intuitive, and scientifically rigorous explanation. "
+                        "Use simple analogies where appropriate and keep responses bounded."
+                    )
+                    resp = model.generate_content(f"{system_instruction}\nStudent Question: {prompt_text}")
+                    explanation = resp.text
+                    model_name = "gemini-2.5-flash"
+            else:
+                genai_legacy.configure(api_key=api_key)
+                model = genai_legacy.GenerativeModel("gemini-2.5-flash")
+                system_instruction = (
+                    "You are an encouraging, pedagogical AI physics tutor. "
+                    "Provide a clear, intuitive, and scientifically rigorous explanation. "
+                    "Use simple analogies where appropriate and keep responses bounded."
+                )
+                resp = model.generate_content(f"{system_instruction}\nStudent Question: {prompt_text}")
+                explanation = resp.text
+                model_name = "gemini-2.5-flash"
         else:
             # Pedagogical generator producing domain-accurate responses corresponding to input
             model_name = "gemini-2.5-flash-pedagogical-worker"

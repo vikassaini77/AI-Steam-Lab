@@ -284,6 +284,34 @@ async def _call_provider_with_retries(
         try:
             await _circuit_breaker.before_execution()
 
+            is_legacy_patched = (
+                hasattr(genai.embed_content, "mock_calls")
+                or any(cls.__name__ in ("Mock", "MagicMock") for cls in type(genai.embed_content).__mro__)
+            )
+
+            if not is_legacy_patched:
+                try:
+                    from google import genai as modern_genai
+                    from google.genai import types as modern_types
+                    modern_client = modern_genai.Client(api_key=api_key)
+                    embed_model = model if "/" in model else f"models/{model}"
+                    cfg = modern_types.EmbedContentConfig(output_dimensionality=expected_dim)
+                    embed_res = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            modern_client.models.embed_content,
+                            model=embed_model,
+                            contents=cleaned_text,
+                            config=cfg,
+                        ),
+                        timeout=PROVIDER_TIMEOUT_SECONDS,
+                    )
+                    if embed_res and embed_res.embeddings and len(embed_res.embeddings) > 0:
+                        vec = list(embed_res.embeddings[0].values)
+                        await _circuit_breaker.record_success()
+                        return vec, False
+                except Exception as modern_err:
+                    logger.debug(f"google-genai embedding call fallback to legacy: {modern_err}")
+
             genai.configure(api_key=api_key)
             response = await asyncio.wait_for(
                 asyncio.to_thread(

@@ -79,20 +79,30 @@ class GeminiAIClient:
     ):
         self._executor = executor
         self._custom_model = None if model is _DEFAULT_MODEL else model
+        self._genai_client = None
 
         if model is _DEFAULT_MODEL:
             resolved_key = api_key or os.getenv("GEMINI_API_KEY")
             if resolved_key and resolved_key != "unconfigured":
-                genai.configure(api_key=resolved_key)
-                self._model = genai.GenerativeModel(
-                    "gemini-2.5-flash",
-                    generation_config={
-                        "max_output_tokens": MAX_OUTPUT_TOKENS,
-                        "temperature": 0.7,
-                    },
-                )
-                self._model_name = "gemini-2.5-flash"
-                logger.info("GeminiAIClient initialized with bounded token generation.")
+                # Prefer modern google-genai Client
+                try:
+                    from google import genai as modern_genai
+                    self._genai_client = modern_genai.Client(api_key=resolved_key)
+                    self._model = self._genai_client
+                    self._model_name = "gemini-2.5-flash"
+                    logger.info("GeminiAIClient initialized with modern google-genai Client.")
+                except Exception as modern_init_err:
+                    logger.warning(f"google-genai Client initialization fallback to legacy: {modern_init_err}")
+                    genai.configure(api_key=resolved_key)
+                    self._model = genai.GenerativeModel(
+                        "gemini-2.5-flash",
+                        generation_config={
+                            "max_output_tokens": MAX_OUTPUT_TOKENS,
+                            "temperature": 0.7,
+                        },
+                    )
+                    self._model_name = "gemini-2.5-flash"
+                    logger.info("GeminiAIClient initialized with bounded token generation.")
             else:
                 self._model = None
                 self._model_name = "unconfigured"
@@ -124,6 +134,33 @@ class GeminiAIClient:
         """
         if not self._model:
             raise RuntimeError("AI model is unconfigured: missing GEMINI_API_KEY.")
+
+        if self._genai_client and self._model is self._genai_client:
+            from google.genai import types
+            config = types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                max_output_tokens=MAX_OUTPUT_TOKENS,
+                temperature=0.7,
+            )
+            try:
+                response_stream = await asyncio.wait_for(
+                    self._genai_client.aio.models.generate_content_stream(
+                        model=self._model_name,
+                        contents=prompt,
+                        config=config,
+                    ),
+                    timeout=timeout_seconds,
+                )
+                async for chunk in response_stream:
+                    if await check_cancellation(is_cancelled):
+                        logger.info("Stream cancelled by client disconnection.")
+                        break
+                    text = getattr(chunk, "text", "")
+                    if text:
+                        yield text
+            except (asyncio.TimeoutError, TimeoutError) as to_err:
+                raise TimeoutError(f"Model generation timed out after {timeout_seconds}s") from to_err
+            return
 
         full_prompt = f"{system_instruction}\nUser: {prompt}" if system_instruction else prompt
         generation_config = {

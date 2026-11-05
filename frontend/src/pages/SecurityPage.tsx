@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import {
   ShieldCheck, Smartphone, RefreshCw, Key, LogOut, CheckCircle,
   Terminal, AlertTriangle, Bell, Clock, Eye, ArrowLeft, Shield,
-  Wifi, Activity, TrendingUp
+  Wifi, Activity, TrendingUp, X, Copy, QrCode
 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -95,20 +95,54 @@ export default function SecurityPage() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [deviceInfo, setDeviceInfo] = useState({ name: 'Current Browser Session', icon: Terminal });
 
+  // Live Multi-Factor Authentication (MFA / TOTP) State
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+  const [activeFactorId, setActiveFactorId] = useState<string | null>(null);
+  const [showMFAModal, setShowMFAModal] = useState(false);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaEnrollData, setMfaEnrollData] = useState<{ id: string; qr_code: string; secret: string } | null>(null);
+  const [verifyCode, setVerifyCode] = useState('');
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  const loadMFAStatus = async () => {
+    try {
+      const authWithMfa = supabase.auth as unknown as {
+        mfa?: {
+          listFactors?: () => Promise<{ data?: { all?: Array<{ id: string; status: string; factor_type: string }> } | null }>;
+        };
+      };
+      if (authWithMfa?.mfa?.listFactors) {
+        const res = await authWithMfa.mfa.listFactors();
+        const all = res?.data?.all || [];
+        const verified = all.find((f) => f.status === 'verified' && f.factor_type === 'totp');
+        if (verified) {
+          setIs2FAEnabled(true);
+          setActiveFactorId(verified.id);
+        } else {
+          setIs2FAEnabled(false);
+          setActiveFactorId(null);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load MFA factors:', e);
+    }
+  };
+
   useEffect(() => {
     setDeviceInfo(getBrowserDeviceInfo());
+    loadMFAStatus();
   }, []);
 
-  // Verified security posture: represents genuine, server-backed security capabilities
+  // Verified security posture:
   // 1. Password hashing (BCrypt via Supabase): 20%
   // 2. TLS 1.3 transport encryption: 20%
   // 3. Cryptographic JWT claims verification: 20%
   // 4. API Rate Limiting & brute-force defense: 20%
-  // 5. In-memory token revocation on logout: 20%
-  // Currently 2FA is planned (not implemented yet), so verified base score is 80%.
-  const verifiedScore = 80;
-  const scoreColor = '#06b6d4';
-  const scoreLabel = 'Strong';
+  // 5. Multi-Factor Authentication (2FA TOTP): 20% (when active)
+  const verifiedScore = is2FAEnabled ? 100 : 80;
+  const scoreColor = is2FAEnabled ? '#10b981' : '#06b6d4';
+  const scoreLabel = is2FAEnabled ? 'Excellent' : 'Strong';
 
   const circumference = 2 * Math.PI * 54;
 
@@ -119,6 +153,112 @@ export default function SecurityPage() {
       return () => clearTimeout(t);
     }
   }, [toastMsg]);
+
+  const handleToggle2FA = async () => {
+    if (is2FAEnabled) {
+      if (!window.confirm('Are you sure you want to disable Two-Factor Authentication?')) {
+        return;
+      }
+      try {
+        setMfaLoading(true);
+        const authWithMfa = supabase.auth as unknown as {
+          mfa?: {
+            unenroll?: (p: { factorId: string }) => Promise<unknown>;
+          };
+        };
+        if (activeFactorId && authWithMfa?.mfa?.unenroll) {
+          await authWithMfa.mfa.unenroll({ factorId: activeFactorId });
+        }
+        setIs2FAEnabled(false);
+        setActiveFactorId(null);
+        toast('Two-Factor Authentication disabled.');
+      } catch (err) {
+        console.error('Failed to disable 2FA:', err);
+        toast('Error disabling 2FA. Please try again.');
+      } finally {
+        setMfaLoading(false);
+      }
+    } else {
+      setMfaLoading(true);
+      setVerifyError(null);
+      setVerifyCode('');
+      try {
+        const authWithMfa = supabase.auth as unknown as {
+          mfa?: {
+            enroll?: (p: { factorType: string; issuer?: string }) => Promise<{
+              data?: { id: string; totp?: { qr_code?: string; secret?: string } } | null;
+              error?: { message: string } | null;
+            }>;
+          };
+        };
+        if (authWithMfa?.mfa?.enroll) {
+          const res = await authWithMfa.mfa.enroll({
+            factorType: 'totp',
+            issuer: 'NeuroLab AI',
+          });
+          if (res?.data?.totp?.qr_code && res?.data?.totp?.secret) {
+            setMfaEnrollData({
+              id: res.data.id,
+              qr_code: res.data.totp.qr_code,
+              secret: res.data.totp.secret,
+            });
+            setShowMFAModal(true);
+          } else if (res?.error) {
+            toast(res.error.message || '2FA enrollment failed');
+          }
+        }
+      } catch (e) {
+        console.error('2FA enroll error:', e);
+        toast('Failed to initialize 2FA enrollment.');
+      } finally {
+        setMfaLoading(false);
+      }
+    }
+  };
+
+  const handleVerify2FACode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaEnrollData) return;
+    if (verifyCode.trim().length !== 6) {
+      setVerifyError('Please enter the 6-digit verification code from your authenticator app.');
+      return;
+    }
+    setIsVerifying(true);
+    setVerifyError(null);
+    try {
+      const authWithMfa = supabase.auth as unknown as {
+        mfa?: {
+          challenge?: (p: { factorId: string }) => Promise<{ data?: { id: string } | null; error?: { message: string } | null }>;
+          verify?: (p: { factorId: string; challengeId?: string; code: string }) => Promise<{ data?: unknown; error?: { message: string } | null }>;
+        };
+      };
+      if (!authWithMfa?.mfa?.challenge || !authWithMfa?.mfa?.verify) {
+        throw new Error('MFA service unavailable');
+      }
+
+      const challengeRes = await authWithMfa.mfa.challenge({ factorId: mfaEnrollData.id });
+      const challengeId = challengeRes?.data?.id;
+
+      const verifyRes = await authWithMfa.mfa.verify({
+        factorId: mfaEnrollData.id,
+        challengeId,
+        code: verifyCode.trim(),
+      });
+
+      if (verifyRes?.error) {
+        setVerifyError(verifyRes.error.message || 'Invalid 6-digit code. Please verify the code in your app.');
+      } else {
+        setIs2FAEnabled(true);
+        setActiveFactorId(mfaEnrollData.id);
+        setShowMFAModal(false);
+        toast('Two-Factor Authentication activated successfully!');
+      }
+    } catch (err: unknown) {
+      setVerifyError((err as Error)?.message || 'Verification failed. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
 
   const handleSignOutCurrentSession = async () => {
     try {
@@ -200,7 +340,7 @@ export default function SecurityPage() {
               { label: 'TLS 1.3 Transport Security', ok: true },
               { label: 'JWT Cryptographic Claims Validation', ok: true },
               { label: 'API Rate Limiting & Abuse Shield', ok: true },
-              { label: 'Two-Factor Authentication (2FA)', ok: false, note: 'Coming Soon' },
+              { label: 'Two-Factor Authentication (2FA)', ok: is2FAEnabled, note: is2FAEnabled ? 'Active' : 'Recommended' },
             ].map((item) => (
               <div key={item.label} className="flex items-center justify-between text-xs gap-2">
                 <span className="text-gray-400 truncate">{item.label}</span>
@@ -225,25 +365,37 @@ export default function SecurityPage() {
             <span className="text-xs text-gray-500">Platform Security Controls</span>
           </div>
 
-          {/* 2FA - Coming Soon */}
+          {/* 2FA - Multi-Factor Authentication (TOTP) */}
           <div className="flex items-center justify-between bg-white/[0.03] p-3.5 rounded-xl border border-white/8 gap-4">
             <div className="flex items-start gap-3 flex-1 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Key className="w-4 h-4 text-cyan-400" />
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                is2FAEnabled
+                  ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                  : 'bg-cyan-500/10 border border-cyan-500/20 text-cyan-400'
+              }`}>
+                <Key className="w-4 h-4" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold text-white">Two-Factor Authentication (2FA)</p>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-bold uppercase">
-                    Coming Soon
-                  </span>
+                  <p className="text-sm font-semibold text-white">Two-Factor Authentication (2FA / TOTP)</p>
+                  {is2FAEnabled ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold uppercase">
+                      Active
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-bold uppercase">
+                      Ready to Setup
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">
-                  Multi-factor authentication via TOTP authenticator apps is in development and will be enabled in an upcoming platform release.
+                  {is2FAEnabled
+                    ? 'Protected with time-based one-time password (TOTP). Authenticator verification is required at login.'
+                    : 'Add an extra cryptographic defense layer using Google Authenticator, Authy, or 1Password.'}
                 </p>
               </div>
             </div>
-            <Toggle enabled={false} disabled={true} />
+            <Toggle enabled={is2FAEnabled} disabled={mfaLoading} onToggle={handleToggle2FA} />
           </div>
 
           {/* Security Login Alerts - In Development */}
@@ -504,6 +656,121 @@ export default function SecurityPage() {
           </motion.button>
         </div>
       )}
+
+      {/* 2FA TOTP Enrollment Modal */}
+      <AnimatePresence>
+        {showMFAModal && mfaEnrollData && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowMFAModal(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative w-full max-w-md bg-[#0d0d20] border border-cyan-500/30 rounded-2xl p-6 shadow-2xl shadow-cyan-500/10 space-y-5 z-10"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                    <QrCode className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-white text-sm">Setup Authenticator App</h3>
+                    <p className="text-[11px] text-gray-400">Scan with Google Authenticator, Authy, or 1Password</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowMFAModal(false)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* QR Code */}
+              <div className="flex flex-col items-center justify-center p-4 bg-white/[0.03] border border-white/8 rounded-xl space-y-3">
+                <div className="p-3 bg-white rounded-xl shadow-lg">
+                  <img
+                    src={mfaEnrollData.qr_code}
+                    alt="2FA TOTP QR Code"
+                    className="w-44 h-44 object-contain"
+                  />
+                </div>
+                <div className="w-full text-center space-y-1">
+                  <p className="text-[11px] text-gray-400">Or enter this secret key manually:</p>
+                  <div className="flex items-center justify-center gap-2">
+                    <code className="text-xs bg-black/50 px-2 py-1 rounded text-cyan-300 font-mono tracking-wider select-all">
+                      {mfaEnrollData.secret}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                          navigator.clipboard.writeText(mfaEnrollData.secret);
+                          toast('Secret key copied to clipboard!');
+                        }
+                      }}
+                      className="p-1 text-gray-400 hover:text-cyan-400 transition-colors"
+                      title="Copy Secret"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Verification Form */}
+              <form onSubmit={handleVerify2FACode} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-300 block">
+                    6-Digit Verification Code
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    value={verifyCode}
+                    onChange={(e) => {
+                      setVerifyCode(e.target.value.replace(/\D/g, ''));
+                      setVerifyError(null);
+                    }}
+                    placeholder="123456"
+                    className="w-full px-4 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-center font-mono text-xl tracking-[0.3em] placeholder:text-gray-600 focus:outline-none focus:border-cyan-400 transition-colors"
+                    autoFocus
+                  />
+                  {verifyError && (
+                    <p className="text-xs text-rose-400 font-medium">{verifyError}</p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowMFAModal(false)}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs font-bold text-gray-300 hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isVerifying || verifyCode.length !== 6}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-cyan-500 text-black text-xs font-black shadow-lg shadow-cyan-500/20 hover:bg-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {isVerifying ? 'Verifying...' : 'Verify & Enable'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 

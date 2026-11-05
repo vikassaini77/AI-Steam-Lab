@@ -245,6 +245,83 @@ class MockAuth {
     return { data: {}, error: null };
   }
 
+  mfa = {
+    listFactors: async () => {
+      try {
+        const stored = localStorage.getItem('neurolab_mfa_factors');
+        const factors = stored ? JSON.parse(stored) : [];
+        return { data: { all: factors, totp: factors }, error: null };
+      } catch {
+        return { data: { all: [], totp: [] }, error: null };
+      }
+    },
+    enroll: async (params?: { factorType?: string; issuer?: string; friendlyName?: string }) => {
+      const factorId = 'factor_' + Math.random().toString(36).substr(2, 9);
+      const secret = 'JBSWY3DPEHPK3PXP' + Math.random().toString(36).substr(2, 4).toUpperCase();
+      const issuer = params?.issuer || 'NeuroLab AI';
+      const qrSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none"><rect width="100" height="100" fill="%230d0d20"/><rect x="10" y="10" width="25" height="25" fill="%2306b6d4"/><rect x="15" y="15" width="15" height="15" fill="%230d0d20"/><rect x="18" y="18" width="9" height="9" fill="%2306b6d4"/><rect x="65" y="10" width="25" height="25" fill="%2306b6d4"/><rect x="70" y="15" width="15" height="15" fill="%230d0d20"/><rect x="73" y="18" width="9" height="9" fill="%2306b6d4"/><rect x="10" y="65" width="25" height="25" fill="%2306b6d4"/><rect x="15" y="70" width="15" height="15" fill="%230d0d20"/><rect x="18" y="73" width="9" height="9" fill="%2306b6d4"/><rect x="42" y="42" width="16" height="16" fill="%2306b6d4"/><rect x="45" y="15" width="10" height="10" fill="%2306b6d4"/><rect x="45" y="75" width="10" height="10" fill="%2306b6d4"/><rect x="15" y="45" width="10" height="10" fill="%2306b6d4"/><rect x="75" y="45" width="10" height="10" fill="%2306b6d4"/></svg>`;
+      const totpData = {
+        qr_code: qrSvg,
+        secret: secret,
+        uri: `otpauth://totp/${issuer}:student?secret=${secret}&issuer=${issuer}`,
+      };
+      return {
+        data: {
+          id: factorId,
+          type: 'totp',
+          totp: totpData,
+        },
+        error: null,
+      };
+    },
+    challenge: async () => {
+      return {
+        data: {
+          id: 'challenge_' + Math.random().toString(36).substr(2, 9),
+          expires_at: Math.floor(Date.now() / 1000) + 300,
+        },
+        error: null,
+      };
+    },
+    verify: async (params: { factorId: string; challengeId?: string; code: string }) => {
+      if (!params.code || params.code.trim().length !== 6) {
+        return { data: null, error: new Error('Verification code must be 6 digits') };
+      }
+      try {
+        const stored = localStorage.getItem('neurolab_mfa_factors');
+        const factors = stored ? JSON.parse(stored) : [];
+        const existingIdx = factors.findIndex((f: { id: string }) => f.id === params.factorId);
+        const verifiedFactor = {
+          id: params.factorId,
+          factor_type: 'totp',
+          status: 'verified',
+          friendly_name: 'Authenticator App',
+          updated_at: new Date().toISOString(),
+        };
+        if (existingIdx >= 0) {
+          factors[existingIdx] = verifiedFactor;
+        } else {
+          factors.push(verifiedFactor);
+        }
+        localStorage.setItem('neurolab_mfa_factors', JSON.stringify(factors));
+        return { data: { user: null }, error: null };
+      } catch (e) {
+        return { data: null, error: e as Error };
+      }
+    },
+    unenroll: async (params: { factorId: string }) => {
+      try {
+        const stored = localStorage.getItem('neurolab_mfa_factors');
+        const factors = stored ? JSON.parse(stored) : [];
+        const filtered = factors.filter((f: { id: string }) => f.id !== params.factorId);
+        localStorage.setItem('neurolab_mfa_factors', JSON.stringify(filtered));
+        return { data: { id: params.factorId }, error: null };
+      } catch (e) {
+        return { data: null, error: e as Error };
+      }
+    },
+  };
+
   private getMockUsers(): Record<string, { password: string; user: User }> {
     try {
       const data = localStorage.getItem('neurolab_mock_users');
@@ -279,6 +356,9 @@ export const supabase = new Proxy(realSupabase, {
       return new Proxy(realAuth, {
         get(authTarget, authProp, authReceiver) {
           const original = (authTarget as unknown as Record<string | symbol, unknown>)[authProp];
+          if (authProp === 'mfa') {
+            return original || mockAuthInstance.mfa;
+          }
           if (typeof original !== 'function') {
             return Reflect.get(authTarget, authProp, authReceiver);
           }
