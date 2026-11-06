@@ -9,6 +9,8 @@ class ExperimentType(str, Enum):
     PENDULUM = "pendulum"
     COLLISION = "collision"
     HARMONIC_MOTION = "harmonic_motion"
+    PROJECTILE_MOTION = "projectile_motion"
+    CIRCULAR_MOTION = "circular_motion"
 
 
 SUPPORTED_EXPERIMENT_TYPES = {e.value for e in ExperimentType}
@@ -54,6 +56,10 @@ def normalize_experiment_type(raw_type: Optional[str], raw_name: Optional[str] =
             candidate = "collision"
         elif "harmonic" in name_clean:
             candidate = "harmonic_motion"
+        elif "projectile" in name_clean:
+            candidate = "projectile_motion"
+        elif "circular" in name_clean:
+            candidate = "circular_motion"
 
     alias_map = {
         "free_fall": ExperimentType.FREE_FALL,
@@ -62,6 +68,10 @@ def normalize_experiment_type(raw_type: Optional[str], raw_name: Optional[str] =
         "collision": ExperimentType.COLLISION,
         "harmonic_motion": ExperimentType.HARMONIC_MOTION,
         "harmonicmotion": ExperimentType.HARMONIC_MOTION,
+        "projectile_motion": ExperimentType.PROJECTILE_MOTION,
+        "projectile": ExperimentType.PROJECTILE_MOTION,
+        "circular_motion": ExperimentType.CIRCULAR_MOTION,
+        "circular": ExperimentType.CIRCULAR_MOTION,
     }
 
     if candidate in alias_map:

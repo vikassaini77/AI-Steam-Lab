@@ -12,10 +12,23 @@ function ExperimentsCatalog() {
 
   const experiments = [
     {
+      id: 'pendulum',
+      subject: 'Physics',
+      tier: 'Beginner',
+      title: 'Simple Pendulum Oscillation',
+      desc: 'Measure pendulum oscillation periods, evaluate small-angle approximations, and quantify error against Newtonian dynamics.',
+      time: '20 min',
+      xp: '150 XP',
+      progress: 0,
+      status: 'Start',
+      locked: false
+    },
+    {
+      id: 'projectile_motion',
       subject: 'Physics',
       tier: 'Beginner',
       title: 'Projectile Motion Analysis',
-      desc: 'Track objects in free fall and analyze their trajectory using AI vision.',
+      desc: 'Calculate kinematic ballistic trajectories, verify launch velocities and ranges, and analyze parabolic flight.',
       time: '15 min',
       xp: '100 XP',
       progress: 100,
@@ -23,6 +36,55 @@ function ExperimentsCatalog() {
       locked: false
     },
     {
+      id: 'free_fall',
+      subject: 'Physics',
+      tier: 'Beginner',
+      title: 'Free Fall & Gravity Verification',
+      desc: 'Measure gravitational acceleration g via drop times, analyze quadratic position-time curves, and examine air resistance.',
+      time: '15 min',
+      xp: '120 XP',
+      progress: 40,
+      status: 'Continue',
+      locked: false
+    },
+    {
+      id: 'circular_motion',
+      subject: 'Physics',
+      tier: 'Intermediate',
+      title: 'Uniform Circular Motion',
+      desc: 'Compute centripetal acceleration, angular frequencies, and verify centripetal force requirements across planetary gravities.',
+      time: '25 min',
+      xp: '200 XP',
+      progress: 0,
+      status: 'Start',
+      locked: false
+    },
+    {
+      id: 'harmonic_motion',
+      subject: 'Physics',
+      tier: 'Intermediate',
+      title: 'Simple Harmonic Motion (Spring-Mass)',
+      desc: "Investigate Hooke's law restoring force, natural frequencies, and mechanical energy oscillations between kinetic and elastic.",
+      time: '25 min',
+      xp: '220 XP',
+      progress: 0,
+      status: 'Start',
+      locked: false
+    },
+    {
+      id: 'collision_momentum',
+      subject: 'Physics',
+      tier: 'Advanced',
+      title: 'Collision and Linear Momentum',
+      desc: 'Test 1D elastic and inelastic collisions, verify conservation of momentum, and evaluate coefficient of restitution.',
+      time: '30 min',
+      xp: '300 XP',
+      progress: 0,
+      status: 'Start',
+      locked: false
+    },
+    {
+      id: 'chemical_reaction',
       subject: 'Chemistry',
       tier: 'Intermediate',
       title: 'Chemical Reaction Detection',
@@ -34,28 +96,7 @@ function ExperimentsCatalog() {
       locked: false
     },
     {
-      subject: 'Physics',
-      tier: 'Beginner',
-      title: 'Pendulum Period Measurement',
-      desc: 'Measure pendulum oscillation periods and verify the relationship with length.',
-      time: '20 min',
-      xp: '150 XP',
-      progress: 0,
-      status: 'Start',
-      locked: false
-    },
-    {
-      subject: 'Mathematics',
-      tier: 'Intermediate',
-      title: 'Geometric Shape Recognition',
-      desc: 'Train AI to recognize and calculate properties of geometric shapes.',
-      time: '30 min',
-      xp: '250 XP',
-      progress: 0,
-      status: 'Start',
-      locked: false
-    },
-    {
+      id: 'stress_analysis',
       subject: 'Engineering',
       tier: 'Advanced',
       title: 'Bridge Stress Analysis',
@@ -66,19 +107,24 @@ function ExperimentsCatalog() {
       status: 'Locked',
       locked: true,
       unlockLevel: 25
-    },
-    {
-      subject: 'Physics',
-      tier: 'Advanced',
-      title: 'Wave Interference Patterns',
-      desc: 'Visualize and analyze wave interference using water ripples.',
-      time: '35 min',
-      xp: '350 XP',
-      progress: 0,
-      status: 'Start',
-      locked: false
     }
   ];
+
+  const handleLaunchExperiment = (exp: (typeof experiments)[0]) => {
+    const supportedEngineIds = [
+      'pendulum',
+      'projectile_motion',
+      'free_fall',
+      'circular_motion',
+      'harmonic_motion',
+      'collision_momentum'
+    ];
+    if (supportedEngineIds.includes(exp.id)) {
+      navigate(`/dashboard/experiments/${exp.id}`);
+    } else {
+      navigate('/dashboard/experiments/active');
+    }
+  };
 
   const filtered = experiments.filter((exp) => {
     const matchesFilter = activeFilter === 'All' || exp.subject === activeFilter;
@@ -204,7 +250,7 @@ function ExperimentsCatalog() {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => navigate('/dashboard/experiments/active')}
+                  onClick={() => handleLaunchExperiment(exp)}
                   className="w-full py-3 bg-green-950/20 hover:bg-green-900/30 border border-green-500/30 hover:border-green-400/50 rounded-xl text-center text-xs font-bold text-green-400 transition-all flex items-center justify-center gap-2"
                 >
                   <Check className="w-4 h-4" />
@@ -214,7 +260,7 @@ function ExperimentsCatalog() {
                 <motion.button
                   whileHover={{ scale: 1.02, boxShadow: '0 0 25px rgba(6, 182, 212, 0.3)' }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => navigate('/dashboard/experiments/active')}
+                  onClick={() => handleLaunchExperiment(exp)}
                   className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl text-center text-xs font-bold transition-all flex items-center justify-center gap-2"
                 >
                   <Play className="w-4 h-4 fill-current" />
@@ -224,7 +270,7 @@ function ExperimentsCatalog() {
                 <motion.button
                   whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.1)' }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => navigate('/dashboard/experiments/active')}
+                  onClick={() => handleLaunchExperiment(exp)}
                   className="w-full py-3 bg-white/5 border border-white/10 hover:border-cyan-500/30 text-white rounded-xl text-center text-xs font-bold transition-all flex items-center justify-center gap-2"
                 >
                   <Play className="w-4 h-4 fill-current" />

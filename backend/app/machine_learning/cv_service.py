@@ -6,9 +6,11 @@ import binascii
 import threading
 import asyncio
 from typing import Dict, Any, List, Optional, Tuple
+from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 import cv2
 import numpy as np
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from app.logger import logger
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MiB
@@ -38,14 +40,64 @@ class DimensionLimitExceededError(ValueError):
 
 
 # ==============================================================================
+# Camera Calibration Standards, Units, and Assumptions
+# ==============================================================================
+
+CALIBRATION_UNITS = {
+    "scale": "m/px",
+    "distance": "meters",
+    "position": "meters",
+    "displacement": "meters",
+    "velocity": "m/s",
+    "acceleration": "m/s^2",
+    "time": "seconds",
+}
+
+CALIBRATION_ASSUMPTIONS = [
+    "Planar motion strictly parallel to the camera image sensor plane (constant depth Z).",
+    "Weak-perspective or orthographic geometric projection across the calibrated field of view.",
+    "Negligible optical lens distortion in the active observation zone.",
+    "Constant physical distance between the camera sensor and the motion plane throughout observation.",
+]
+
+CALIBRATION_LIMITATIONS = (
+    "A single scalar scale factor (meters per pixel) cannot compensate for 3D out-of-plane motion, "
+    "perspective foreshortening (objects appearing smaller as distance from lens increases), or wide-angle "
+    "lens radial distortion. True 3D metric tracking requires full pinhole camera intrinsic calibration "
+    "(focal length, optical principal point, lens distortion coefficients) and camera extrinsic pose estimation."
+)
+
+
+class CalibrationInfo(BaseModel):
+    scale_factor_m_per_px: float = Field(..., gt=0.0, description="Meters per pixel scale factor")
+    pixel_distance: Optional[float] = Field(None, description="Measured pixel distance between reference endpoints")
+    reference_distance_meters: Optional[float] = Field(None, description="Known physical reference distance in meters")
+    reference_label: Optional[str] = Field("standard_ruler", description="Description of reference object")
+    is_calibrated: bool = Field(default=True, description="Whether calibration was explicitly established")
+    calibration_status: str = Field(default="calibrated", description="Status: calibrated, uncalibrated_default, out_of_bounds")
+    calibration_model: str = Field(default="coplanar_orthographic_scalar", description="Calibration model type")
+    calibrated_at: Optional[str] = Field(None, description="ISO 8601 calibration timestamp")
+    units: Dict[str, str] = Field(default_factory=lambda: CALIBRATION_UNITS)
+    assumptions: List[str] = Field(default_factory=lambda: CALIBRATION_ASSUMPTIONS)
+    limitations: str = Field(default=CALIBRATION_LIMITATIONS)
+
+
+# ==============================================================================
 # Pydantic Schemas for Detections and Inference Results
 # ==============================================================================
 
 class Detection(BaseModel):
-    class_name: str = Field(..., description="Detected object class label (e.g. 'sports ball', 'bottle', 'person', 'red_object')")
-    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score in [0.0, 1.0]")
     bbox_xyxy: List[float] = Field(..., description="Bounding box coordinates in [x_min, y_min, x_max, y_max] format")
+    class_name: Optional[str] = Field(None, description="Semantic class label when available; None for color segmentation")
+    class_label: Optional[str] = Field(None, description="Semantic class label conforming to detector abstraction")
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Model confidence in [0.0, 1.0], or None for non-probabilistic detectors")
     track_id: Optional[int] = Field(None, description="Persistent tracking ID across frames")
+    center: Optional[Tuple[int, int]] = Field(None, description="Centroid coordinates [cx, cy]")
+    timestamp: Optional[float] = Field(None, description="Observation epoch timestamp in seconds")
+    detector_name: Optional[str] = Field(None, description="Identifier of the executing detector")
+    latency_ms: Optional[float] = Field(0.0, description="Inference latency in milliseconds")
+    status: Optional[str] = Field("detected", description="Detection status: detected, occluded, coasting, recovered")
+    attributes: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Detector-specific auxiliary metrics (solidity, circularity, area)")
 
     @field_validator("bbox_xyxy")
     @classmethod
@@ -59,6 +111,23 @@ class Detection(BaseModel):
         if y_min > y_max:
             raise ValueError(f"Invalid coordinate ordering: y_min ({y_min}) must be <= y_max ({y_max}).")
         return [x_min, y_min, x_max, y_max]
+
+    @model_validator(mode="after")
+    def sync_labels_and_center(self):
+        """Synchronizes label aliases and auto-computes centroid if missing."""
+        if self.class_label is not None and self.class_name is None:
+            self.class_name = self.class_label
+        elif self.class_name is not None and self.class_label is None:
+            self.class_label = self.class_name
+
+        if self.center is None and self.bbox_xyxy and len(self.bbox_xyxy) == 4:
+            cx = int(round((self.bbox_xyxy[0] + self.bbox_xyxy[2]) / 2.0))
+            cy = int(round((self.bbox_xyxy[1] + self.bbox_xyxy[3]) / 2.0))
+            self.center = (cx, cy)
+        return self
+
+
+DetectorOutput = Detection
 
 
 class FrameResult(BaseModel):
@@ -75,6 +144,7 @@ class FrameResult(BaseModel):
     degraded_reason: Optional[str] = Field(None, description="Diagnostic reason if running in degraded mode")
     detection_message: Optional[str] = Field(None, description="Human-readable detection status message")
     inference_latency_ms: float = Field(0.0, description="Inference execution duration in milliseconds")
+    latency_breakdown: Optional[Dict[str, float]] = Field(None, description="Detailed latency breakdown: decode, detection, tracking, total, fps")
     model_version: str = Field(default="v1.0.0", description="Semantic model version")
     configuration_version: str = Field(default="cv_config_v1.0", description="CV configuration version")
     preprocessing_version: str = Field(default="bgr_to_hsv_v1.0", description="Preprocessing version")
@@ -197,10 +267,11 @@ class KinematicsResult(tuple):
 
 class TrajectoryTracker:
     """
-    Tracks object trajectories across frames, assigning persistent IDs and
-    computing vector velocity (vx, vy, v) and vector acceleration (ax, ay, a).
+    Tracks object trajectories across frames, assigning persistent IDs,
+    handling multi-object tracking, temporary occlusion (coasting), and object re-entry.
+    Computes vector velocity (vx, vy, v), vector acceleration (ax, ay, a), and motion direction.
     Applies exponential moving average (EMA) noise filtering on coordinates and velocities
-    to prevent pixel quantization noise from corrupting second-derivative calculations.
+    and a camera sensor jitter deadband.
     Handles irregular frame intervals (dt), dropped frames, and tracker timeouts.
     Supports serialization for multi-backend shared state synchronization.
     """
@@ -210,6 +281,8 @@ class TrajectoryTracker:
         distance_threshold_px: float = 150.0,
         pos_filter_alpha: float = 1.0,
         vel_filter_beta: float = 1.0,
+        max_occlusion_frames: int = 15,
+        deadband_px: float = 1.5,
     ):
         self.next_id: int = 1
         self.tracks: Dict[int, Dict[str, Any]] = {}
@@ -217,6 +290,8 @@ class TrajectoryTracker:
         self.distance_threshold_px: float = distance_threshold_px
         self.pos_filter_alpha: float = pos_filter_alpha
         self.vel_filter_beta: float = vel_filter_beta
+        self.max_occlusion_frames: int = max_occlusion_frames
+        self.deadband_px: float = deadband_px
 
     def reset(self):
         """Resets all tracking history."""
@@ -232,6 +307,8 @@ class TrajectoryTracker:
             "distance_threshold_px": self.distance_threshold_px,
             "pos_filter_alpha": self.pos_filter_alpha,
             "vel_filter_beta": self.vel_filter_beta,
+            "max_occlusion_frames": self.max_occlusion_frames,
+            "deadband_px": self.deadband_px,
             "tracks": {
                 str(tid): {
                     "positions": [list(p) for p in track["positions"]],
@@ -239,7 +316,11 @@ class TrajectoryTracker:
                     "filtered_velocities": [list(v) for v in track.get("filtered_velocities", [])],
                     "velocities": [float(v) for v in track["velocities"]],
                     "accelerations": [list(a) for a in track.get("accelerations", [])],
+                    "acceleration_mags": [float(m) for m in track.get("acceleration_mags", [])],
+                    "direction_angles_deg": [float(d) for d in track.get("direction_angles_deg", [])],
                     "last_seen": float(track["last_seen"]),
+                    "lost_frames": int(track.get("lost_frames", 0)),
+                    "status": str(track.get("status", "tracking")),
                 }
                 for tid, track in self.tracks.items()
             },
@@ -258,6 +339,11 @@ class TrajectoryTracker:
             self.pos_filter_alpha = float(data["pos_filter_alpha"])
         if "vel_filter_beta" in data:
             self.vel_filter_beta = float(data["vel_filter_beta"])
+        if "max_occlusion_frames" in data:
+            self.max_occlusion_frames = int(data["max_occlusion_frames"])
+        if "deadband_px" in data:
+            self.deadband_px = float(data["deadband_px"])
+
         tracks_raw = data.get("tracks", {})
         restored = {}
         if isinstance(tracks_raw, dict):
@@ -269,14 +355,22 @@ class TrajectoryTracker:
                     raw_filt_vel = track.get("filtered_velocities", [])
                     raw_vel = track.get("velocities", [])
                     raw_acc = track.get("accelerations", [])
+                    raw_acc_mags = track.get("acceleration_mags", [])
+                    raw_dirs = track.get("direction_angles_deg", [])
                     last_seen = float(track.get("last_seen", 0.0))
+                    lost_frames = int(track.get("lost_frames", 0))
+                    status = str(track.get("status", "tracking"))
                     restored[tid] = {
                         "positions": [tuple(p) for p in raw_pos],
                         "filtered_positions": [tuple(p) for p in raw_filt_pos] if raw_filt_pos else [tuple(p[:2]) for p in raw_pos],
                         "filtered_velocities": [tuple(v) for v in raw_filt_vel] if raw_filt_vel else [(0.0, float(v)) for v in raw_vel],
                         "velocities": [float(v) for v in raw_vel],
                         "accelerations": [tuple(a) for a in raw_acc] if raw_acc else [],
+                        "acceleration_mags": [float(m) for m in raw_acc_mags] if raw_acc_mags else [],
+                        "direction_angles_deg": [float(d) for d in raw_dirs] if raw_dirs else [],
                         "last_seen": last_seen,
+                        "lost_frames": lost_frames,
+                        "status": status,
                     }
                 except (ValueError, TypeError):
                     continue
@@ -289,6 +383,8 @@ class TrajectoryTracker:
             distance_threshold_px=self.distance_threshold_px,
             pos_filter_alpha=self.pos_filter_alpha,
             vel_filter_beta=self.vel_filter_beta,
+            max_occlusion_frames=self.max_occlusion_frames,
+            deadband_px=self.deadband_px,
         )
         tracker.from_dict(self.to_dict())
         return tracker
@@ -309,29 +405,39 @@ class TrajectoryTracker:
             return 0.005, "uncalibrated_out_of_bounds", False
         return px_to_meters, "calibrated", True
 
-    def update(
+    def update_detections(
         self,
-        centroid: Optional[Tuple[int, int]],
+        detections: List[Detection],
         timestamp_seconds: float,
         px_to_meters: float,
-    ) -> KinematicsResult:
+    ) -> Tuple[KinematicsResult, Dict[str, Any]]:
         """
-        Updates trajectory with a new observation, calculating vector velocities
-        and vector accelerations with exponential smoothing.
-        Returns: KinematicsResult (track_id, velocity_mps, acceleration_mps2) with .details
+        Updates multi-object trajectory tracking across frames:
+        - Matches detections to active and coasting tracks via greedy nearest centroid.
+        - Handles temporary occlusion by maintaining coasting tracks for up to max_occlusion_frames.
+        - Supports object re-entry by matching newly detected objects to recently lost tracks.
+        - Computes timestamp-aware vector velocities, vector accelerations, and motion angles.
+        - Applies EMA noise filtering and camera sensor deadband.
+        - Prunes expired tracks exceeding max_occlusion_frames or max_gap_seconds.
         """
         now = timestamp_seconds
         scale, calib_status, is_calibrated = self.validate_calibration(px_to_meters)
 
-        # 1. Prune expired tracks (dropped frames / object out of view)
+        # 1. Prune expired tracks
         expired_ids = [
             tid for tid, track in self.tracks.items()
             if (now - track["last_seen"]) > self.max_gap_seconds
+            or track.get("lost_frames", 0) > self.max_occlusion_frames
         ]
         for tid in expired_ids:
             del self.tracks[tid]
 
-        if centroid is None:
+        if not detections:
+            # Mark all existing active tracks as coasting/occluded
+            for tid, track in self.tracks.items():
+                track["lost_frames"] = track.get("lost_frames", 0) + 1
+                track["status"] = "coasting"
+
             return KinematicsResult(
                 None, 0.0, 0.0,
                 details={
@@ -343,114 +449,218 @@ class TrajectoryTracker:
                     "acceleration_x_mps2": 0.0,
                     "acceleration_y_mps2": 0.0,
                     "acceleration_mps2": 0.0,
+                    "direction_deg": 0.0,
                     "dt_seconds": None,
                     "calibration_status": "no_target",
                     "is_calibrated": is_calibrated,
+                    "active_tracks_count": len(self.tracks),
+                    "tracking_status": "no_detections",
                 }
+            ), {"tracks": {}, "active_count": len(self.tracks)}
+
+        # 2. Extract detection centroids
+        det_centroids = []
+        for det in detections:
+            if det.center:
+                det_centroids.append((det.center[0], det.center[1]))
+            else:
+                x1, y1, x2, y2 = det.bbox_xyxy
+                det_centroids.append((int(round((x1 + x2) / 2.0)), int(round((y1 + y2) / 2.0))))
+
+        # 3. Match detections with existing tracks (Greedy Nearest Centroid)
+        matched_det_indices = set()
+        matched_track_ids = set()
+
+        distance_pairs = []
+        for det_idx, (cx, cy) in enumerate(det_centroids):
+            for tid, track in self.tracks.items():
+                prev_cx, prev_cy = track["positions"][-1][:2]
+                dist = math.hypot(cx - prev_cx, cy - prev_cy)
+                if dist <= self.distance_threshold_px:
+                    distance_pairs.append((dist, det_idx, tid))
+
+        distance_pairs.sort(key=lambda x: x[0])
+
+        for dist, det_idx, tid in distance_pairs:
+            if det_idx in matched_det_indices or tid in matched_track_ids:
+                continue
+            matched_det_indices.add(det_idx)
+            matched_track_ids.add(tid)
+            detections[det_idx].track_id = tid
+
+            # Update matched track
+            self._update_single_track(
+                tid=tid,
+                centroid=det_centroids[det_idx],
+                now=now,
+                scale=scale,
+                calib_status=calib_status,
+                is_calibrated=is_calibrated,
+                bbox=detections[det_idx].bbox_xyxy,
+                class_label=detections[det_idx].class_label,
             )
+
+        # 4. Initialize new tracks for unmatched detections
+        for det_idx, (cx, cy) in enumerate(det_centroids):
+            if det_idx not in matched_det_indices:
+                new_id = self.next_id
+                self.next_id += 1
+                detections[det_idx].track_id = new_id
+                self.tracks[new_id] = {
+                    "positions": [(cx, cy, now)],
+                    "filtered_positions": [(float(cx), float(cy))],
+                    "filtered_velocities": [(0.0, 0.0)],
+                    "velocities": [0.0],
+                    "accelerations": [(0.0, 0.0)],
+                    "acceleration_mags": [0.0],
+                    "direction_angles_deg": [0.0],
+                    "last_seen": now,
+                    "lost_frames": 0,
+                    "status": "tracking",
+                    "bbox_xyxy": detections[det_idx].bbox_xyxy,
+                    "class_label": detections[det_idx].class_label,
+                    "latest_details": {
+                        "dx_meters": 0.0,
+                        "dy_meters": 0.0,
+                        "velocity_x_mps": 0.0,
+                        "velocity_y_mps": 0.0,
+                        "velocity_mps": 0.0,
+                        "acceleration_x_mps2": 0.0,
+                        "acceleration_y_mps2": 0.0,
+                        "acceleration_mps2": 0.0,
+                        "direction_deg": 0.0,
+                        "dt_seconds": 0.0,
+                        "calibration_status": calib_status,
+                        "is_calibrated": is_calibrated,
+                    }
+                }
+
+        # 5. Handle unmatched existing tracks (coasting / temporary occlusion)
+        for tid, track in self.tracks.items():
+            if tid not in matched_track_ids:
+                track["lost_frames"] = track.get("lost_frames", 0) + 1
+                track["status"] = "coasting"
+
+        # 6. Select primary track result (highest confidence or largest area)
+        primary_det = max(
+            detections,
+            key=lambda d: ((d.confidence if d.confidence is not None else 0.0), d.attributes.get("area", 0.0))
+        )
+        primary_tid = primary_det.track_id
+        primary_track = self.tracks[primary_tid]
+        primary_details = primary_track.get("latest_details", {})
+
+        return KinematicsResult(
+            primary_tid,
+            primary_details.get("velocity_mps", primary_track["velocities"][-1]),
+            primary_details.get("acceleration_mps2", primary_track["acceleration_mags"][-1] if primary_track.get("acceleration_mags") else 0.0),
+            details=primary_details
+        ), {
+            "active_tracks_count": len([t for t in self.tracks.values() if t.get("lost_frames", 0) == 0]),
+            "coasting_tracks_count": len([t for t in self.tracks.values() if t.get("lost_frames", 0) > 0]),
+            "total_tracks": len(self.tracks),
+        }
+
+    def _update_single_track(
+        self,
+        tid: int,
+        centroid: Tuple[int, int],
+        now: float,
+        scale: float,
+        calib_status: str,
+        is_calibrated: bool,
+        bbox: Optional[List[float]] = None,
+        class_label: Optional[str] = None,
+    ) -> None:
+        track = self.tracks[tid]
+        was_coasting = track.get("lost_frames", 0) > 0
+        track["lost_frames"] = 0
+        track["status"] = "re_entered" if was_coasting else "tracking"
+        if bbox:
+            track["bbox_xyxy"] = bbox
+        if class_label:
+            track["class_label"] = class_label
 
         cx, cy = centroid
-        best_id = None
-        min_dist = float("inf")
-
-        # 2. Match with existing track by nearest Euclidean centroid
-        for tid, track in self.tracks.items():
-            prev_cx, prev_cy = track["positions"][-1][:2]
-            dist = math.hypot(cx - prev_cx, cy - prev_cy)
-            if dist < min_dist and dist < self.distance_threshold_px:
-                min_dist = dist
-                best_id = tid
-
-        # Initial track instantiation
-        if best_id is None:
-            best_id = self.next_id
-            self.next_id += 1
-            self.tracks[best_id] = {
-                "positions": [(cx, cy, now)],
-                "filtered_positions": [(float(cx), float(cy))],
-                "filtered_velocities": [(0.0, 0.0)],
-                "velocities": [0.0],
-                "accelerations": [(0.0, 0.0)],
-                "last_seen": now,
-            }
-            return KinematicsResult(
-                best_id, 0.0, 0.0,
-                details={
-                    "dx_meters": 0.0,
-                    "dy_meters": 0.0,
-                    "velocity_x_mps": 0.0,
-                    "velocity_y_mps": 0.0,
-                    "velocity_mps": 0.0,
-                    "acceleration_x_mps2": 0.0,
-                    "acceleration_y_mps2": 0.0,
-                    "acceleration_mps2": 0.0,
-                    "dt_seconds": 0.0,
-                    "calibration_status": calib_status,
-                    "is_calibrated": is_calibrated,
-                }
-            )
-
-        # 3. Update matched track
-        track = self.tracks[best_id]
         prev_cx, prev_cy, prev_t = track["positions"][-1]
         prev_fx, prev_fy = track["filtered_positions"][-1]
         prev_vx, prev_vy = track["filtered_velocities"][-1]
 
         dt = now - prev_t
 
-        # Guard: Clock jitter or duplicate client frame (dt <= 1ms)
+        # Sensor deadband: treat subpixel camera noise as stationary
+        dist_px = math.hypot(cx - prev_cx, cy - prev_cy)
+        is_subpixel_noise = dist_px < self.deadband_px
+
+        # Guard: Clock jitter / duplicate client frame (dt <= 1ms)
         if dt <= 0.001:
             speed = math.hypot(prev_vx, prev_vy)
-            return KinematicsResult(
-                best_id, speed, 0.0,
-                details={
-                    "dx_meters": 0.0,
-                    "dy_meters": 0.0,
-                    "velocity_x_mps": prev_vx,
-                    "velocity_y_mps": prev_vy,
-                    "velocity_mps": speed,
-                    "acceleration_x_mps2": 0.0,
-                    "acceleration_y_mps2": 0.0,
-                    "acceleration_mps2": 0.0,
-                    "dt_seconds": dt,
-                    "calibration_status": calib_status,
-                    "is_calibrated": is_calibrated,
-                }
-            )
+            track["positions"].append((cx, cy, now))
+            track["filtered_positions"].append((prev_fx, prev_fy))
+            track["filtered_velocities"].append((prev_vx, prev_vy))
+            track["velocities"].append(speed)
+            track["accelerations"].append((0.0, 0.0))
+            if "acceleration_mags" not in track:
+                track["acceleration_mags"] = []
+            track["acceleration_mags"].append(0.0)
+            if "direction_angles_deg" not in track:
+                track["direction_angles_deg"] = []
+            track["direction_angles_deg"].append(track["direction_angles_deg"][-1] if track["direction_angles_deg"] else 0.0)
+            track["last_seen"] = now
+            track["latest_details"] = {
+                "dx_meters": 0.0,
+                "dy_meters": 0.0,
+                "velocity_x_mps": prev_vx,
+                "velocity_y_mps": prev_vy,
+                "velocity_mps": speed,
+                "acceleration_x_mps2": 0.0,
+                "acceleration_y_mps2": 0.0,
+                "acceleration_mps2": 0.0,
+                "direction_deg": track.get("direction_angles_deg", [0.0])[-1] if track.get("direction_angles_deg") else 0.0,
+                "dt_seconds": dt,
+                "calibration_status": calib_status,
+                "is_calibrated": is_calibrated,
+            }
+            return
 
-        # Guard: Large gap/camera pause (> 1.5s): re-anchor without generating astronomical velocities
+        # Guard: Camera pause (> 1.5s): re-anchor without generating astronomical velocities
         if dt > 1.5:
             track["positions"].append((cx, cy, now))
             track["filtered_positions"].append((float(cx), float(cy)))
             track["filtered_velocities"].append((0.0, 0.0))
             track["velocities"].append(0.0)
             track["accelerations"].append((0.0, 0.0))
+            if "acceleration_mags" not in track:
+                track["acceleration_mags"] = []
+            track["acceleration_mags"].append(0.0)
+            if "direction_angles_deg" not in track:
+                track["direction_angles_deg"] = []
+            track["direction_angles_deg"].append(0.0)
             track["last_seen"] = now
-            return KinematicsResult(
-                best_id, 0.0, 0.0,
-                details={
-                    "dx_meters": 0.0,
-                    "dy_meters": 0.0,
-                    "velocity_x_mps": 0.0,
-                    "velocity_y_mps": 0.0,
-                    "velocity_mps": 0.0,
-                    "acceleration_x_mps2": 0.0,
-                    "acceleration_y_mps2": 0.0,
-                    "acceleration_mps2": 0.0,
-                    "dt_seconds": dt,
-                    "calibration_status": calib_status,
-                    "is_calibrated": is_calibrated,
-                }
-            )
+            track["latest_details"] = {
+                "dx_meters": 0.0,
+                "dy_meters": 0.0,
+                "velocity_x_mps": 0.0,
+                "velocity_y_mps": 0.0,
+                "velocity_mps": 0.0,
+                "acceleration_x_mps2": 0.0,
+                "acceleration_y_mps2": 0.0,
+                "acceleration_mps2": 0.0,
+                "direction_deg": 0.0,
+                "dt_seconds": dt,
+                "calibration_status": calib_status,
+                "is_calibrated": is_calibrated,
+            }
+            return
 
-        # 4. Position and Velocity Filtering (EMA with first-step initialization)
+        # Position and Velocity Filtering (EMA with first-step initialization)
         is_first_motion_step = len(track["positions"]) == 1
 
         if is_first_motion_step:
             fx = float(cx)
             fy = float(cy)
-            dx_m = (float(cx) - float(prev_cx)) * scale
-            dy_m = (float(cy) - float(prev_cy)) * scale
+            dx_m = 0.0 if is_subpixel_noise else (float(cx) - float(prev_cx)) * scale
+            dy_m = 0.0 if is_subpixel_noise else (float(cy) - float(prev_cy)) * scale
             inst_vx = dx_m / dt
             inst_vy = dy_m / dt
             filt_vx = inst_vx
@@ -459,8 +669,8 @@ class TrajectoryTracker:
             alpha = self.pos_filter_alpha
             fx = alpha * float(cx) + (1.0 - alpha) * prev_fx
             fy = alpha * float(cy) + (1.0 - alpha) * prev_fy
-            dx_m = (fx - prev_fx) * scale
-            dy_m = (fy - prev_fy) * scale
+            dx_m = 0.0 if is_subpixel_noise else (fx - prev_fx) * scale
+            dy_m = 0.0 if is_subpixel_noise else (fy - prev_fy) * scale
             inst_vx = dx_m / dt
             inst_vy = dy_m / dt
             beta = self.vel_filter_beta
@@ -469,17 +679,28 @@ class TrajectoryTracker:
 
         speed = math.hypot(filt_vx, filt_vy)
 
-        # 6. Vector Acceleration (differentiation of velocity vectors)
+        # Vector acceleration (differentiation of velocity vectors)
         ax = (filt_vx - prev_vx) / dt
         ay = (filt_vy - prev_vy) / dt
         accel_mag = math.hypot(ax, ay)
 
-        # Append to track history
+        # Direction of motion (angle in degrees [0, 360))
+        if speed > 0.01:
+            direction_deg = round(math.degrees(math.atan2(filt_vy, filt_vx)) % 360.0, 2)
+        else:
+            direction_deg = track["direction_angles_deg"][-1] if track.get("direction_angles_deg") else 0.0
+
         track["positions"].append((cx, cy, now))
         track["filtered_positions"].append((fx, fy))
         track["filtered_velocities"].append((filt_vx, filt_vy))
         track["velocities"].append(speed)
         track["accelerations"].append((ax, ay))
+        if "acceleration_mags" not in track:
+            track["acceleration_mags"] = []
+        track["acceleration_mags"].append(accel_mag)
+        if "direction_angles_deg" not in track:
+            track["direction_angles_deg"] = []
+        track["direction_angles_deg"].append(direction_deg)
         track["last_seen"] = now
 
         # Keep history bounded (max 50 points)
@@ -489,23 +710,46 @@ class TrajectoryTracker:
             track["filtered_velocities"] = track["filtered_velocities"][-50:]
             track["velocities"] = track["velocities"][-50:]
             track["accelerations"] = track["accelerations"][-50:]
+            track["acceleration_mags"] = track["acceleration_mags"][-50:]
+            track["direction_angles_deg"] = track["direction_angles_deg"][-50:]
 
-        return KinematicsResult(
-            best_id, speed, accel_mag,
-            details={
-                "dx_meters": round(dx_m, 6),
-                "dy_meters": round(dy_m, 6),
-                "velocity_x_mps": round(filt_vx, 4),
-                "velocity_y_mps": round(filt_vy, 4),
-                "velocity_mps": round(speed, 4),
-                "acceleration_x_mps2": round(ax, 4),
-                "acceleration_y_mps2": round(ay, 4),
-                "acceleration_mps2": round(accel_mag, 4),
-                "dt_seconds": round(dt, 4),
-                "calibration_status": calib_status,
-                "is_calibrated": is_calibrated,
-            }
+        track["latest_details"] = {
+            "dx_meters": round(dx_m, 6),
+            "dy_meters": round(dy_m, 6),
+            "velocity_x_mps": round(filt_vx, 4),
+            "velocity_y_mps": round(filt_vy, 4),
+            "velocity_mps": round(speed, 4),
+            "acceleration_x_mps2": round(ax, 4),
+            "acceleration_y_mps2": round(ay, 4),
+            "acceleration_mps2": round(accel_mag, 4),
+            "direction_deg": direction_deg,
+            "dt_seconds": round(dt, 4),
+            "calibration_status": calib_status,
+            "is_calibrated": is_calibrated,
+        }
+
+    def update(
+        self,
+        centroid: Optional[Tuple[int, int]],
+        timestamp_seconds: float,
+        px_to_meters: float,
+    ) -> KinematicsResult:
+        """
+        Updates trajectory with a single observation, for 100% backward compatibility.
+        """
+        if centroid is None:
+            res, _ = self.update_detections([], timestamp_seconds, px_to_meters)
+            return res
+
+        cx, cy = centroid
+        dummy_det = Detection(
+            bbox_xyxy=[float(cx - 5), float(cy - 5), float(cx + 5), float(cy + 5)],
+            center=(cx, cy),
+            timestamp=timestamp_seconds,
+            detector_name="single_centroid",
         )
+        res, _ = self.update_detections([dummy_det], timestamp_seconds, px_to_meters)
+        return res
 
 
 # ==============================================================================
@@ -691,508 +935,73 @@ def apply_nms_boxes(
         return keep
 
 
-class CVTracker:
+# ==============================================================================
+# Common Detector Abstraction and Concrete Detectors
+# ==============================================================================
+
+class BaseDetector(ABC):
+    """
+    Common polymorphic interface for all real-time computer vision detectors.
+    Every detector returns a list of Detection/DetectorOutput objects with consistent structure:
+    - bbox_xyxy: [x_min, y_min, x_max, y_max]
+    - class_label: Optional[str] (None for color segmentation / optical flow)
+    - confidence: Optional[float] (None for color segmentation)
+    - center: Tuple[int, int]
+    - timestamp: float
+    - detector_name: str
+    - latency_ms: float
+    - status: str
+    - attributes: Dict[str, Any]
+    """
+    @property
+    @abstractmethod
+    def detector_name(self) -> str:
+        """Human-readable detector identifier."""
+        pass
+
+    @abstractmethod
+    def detect(self, img: np.ndarray, **kwargs) -> List[Detection]:
+        """Runs detection on a BGR numpy image frame."""
+        pass
+
+    def reset(self) -> None:
+        """Resets detector internal temporal state (if any)."""
+        pass
+
+
+class ColorSegmentationDetector(BaseDetector):
+    """
+    Genuine OpenCV color segmentation using HSV thresholding, morphological
+    noise suppression (opening and closing), and contour geometric filtering.
+    Does NOT describe segmentation as general object recognition, and never
+    invents semantic classes or model confidence scores.
+    """
     def __init__(
         self,
-        yolo_weights_path: Optional[str] = None,
-        trajectory_tracker: Optional[TrajectoryTracker] = None,
-        tracker_key: Optional[str] = None,
-        shared_yolo_model: Optional[Any] = None,
+        min_area: float = 50.0,
+        max_area_ratio: float = 0.92,
+        max_aspect_ratio: float = 18.0,
+        min_solidity: float = 0.15,
     ):
-        self.tracker_key = tracker_key
-        self.trajectory_tracker = trajectory_tracker if trajectory_tracker is not None else TrajectoryTracker()
-        self.model_name = "color_kinematics"
-        self.model_ready = False
+        self.min_area = min_area
+        self.max_area_ratio = max_area_ratio
+        self.max_aspect_ratio = max_aspect_ratio
+        self.min_solidity = min_solidity
 
-        # Optical flow tracking state
-        self.of_prev_gray: Optional[np.ndarray] = None
-        self.of_prev_pts: Optional[np.ndarray] = None
-        self.of_last_pts_count: int = 0
-        self.of_failure_count: int = 0
-        self.of_recovered: bool = False
+    @property
+    def detector_name(self) -> str:
+        return "opencv_hsv_color_segmentation"
 
-        if shared_yolo_model is not None:
-            self.yolo_model = shared_yolo_model
-            self.yolo_status = YOLOWeightsStatus.LOADED.value
-            self.yolo_error = None
-        elif yolo_weights_path:
-            self.yolo_model, self.yolo_status, self.yolo_error = validate_and_load_yolo_weights(yolo_weights_path)
-        else:
-            self.yolo_model, self.yolo_status, self.yolo_error = get_shared_yolo_model_info()
-
-        if self.yolo_model is not None:
-            self.model_name = "yolov8n"
-
-        # Color and optical flow detectors are always ready
-        self.model_ready = True
-
-    def check_readiness(self) -> Dict[str, Any]:
-        """Explicit model-loading and readiness verification."""
-        return {
-            "ready": self.model_ready,
-            "active_model": self.model_name,
-            "yolo_loaded": self.yolo_model is not None,
-            "yolo_status": self.yolo_status,
-            "yolo_error": self.yolo_error,
-            "classes_count": len(self.yolo_model.names) if self.yolo_model else 0,
-            "supported_methods": ["color", "optical_flow", "yolo"],
-        }
-
-    def reset_tracker(self):
-        """Resets trajectory tracking history and optical flow state across frames."""
-        self.trajectory_tracker.reset()
-        self.of_prev_gray = None
-        self.of_prev_pts = None
-        self.of_last_pts_count = 0
-        self.of_failure_count = 0
-        self.of_recovered = False
-
-    def process_frame(
-        self,
-        base64_img: str,
-        tracking_method: str = "color",
-        color_target: str = "red",
-        px_to_meters: float = 0.005,
-        confidence_threshold: float = 0.25,
-        nms_threshold: float = 0.45,
-    ) -> Dict[str, Any]:
-        """Decodes base64 frame and runs real object detection pipeline."""
-        t_start = time.perf_counter()
-        img = decode_frame(base64_img)
-        return self._run_pipeline(
-            img=img,
-            tracking_method=tracking_method,
-            color_target=color_target,
-            px_to_meters=px_to_meters,
-            conf_thresh=confidence_threshold,
-            nms_thresh=nms_threshold,
-            t_start=t_start,
-        )
-
-    def process_binary_frame(
-        self,
-        raw_bytes: bytes,
-        tracking_method: str = "color",
-        color_target: str = "red",
-        px_to_meters: float = 0.005,
-        confidence_threshold: float = 0.25,
-        nms_threshold: float = 0.45,
-    ) -> Dict[str, Any]:
-        """Decodes binary frame directly and runs real object detection pipeline."""
-        t_start = time.perf_counter()
-        img = decode_binary_frame(raw_bytes)
-        return self._run_pipeline(
-            img=img,
-            tracking_method=tracking_method,
-            color_target=color_target,
-            px_to_meters=px_to_meters,
-            conf_thresh=confidence_threshold,
-            nms_thresh=nms_threshold,
-            t_start=t_start,
-        )
-
-    def _run_pipeline(
+    def detect(
         self,
         img: np.ndarray,
-        tracking_method: str,
-        color_target: str,
-        px_to_meters: float,
-        conf_thresh: float,
-        nms_thresh: float,
-        t_start: float,
-    ) -> Dict[str, Any]:
-        height, width = img.shape[:2]
-        timestamp_s = time.time()
-        timestamp_ms = int(timestamp_s * 1000)
-
-        detections: List[Detection] = []
-        method = (tracking_method or "color").lower().strip()
-        inference_status = "completed"
-
-        # 1. Routing by Tracking Method
-        is_degraded = False
-        degraded_reason = None
-        active_model = "unknown"
-        active_detector = "unknown"
-        detection_message = ""
-
-        if method == "yolo":
-            if self.yolo_model is not None:
-                detections = self._detect_yolo(img, conf_thresh, nms_thresh)
-                active_model = "yolov8n"
-                active_detector = "YOLOv8 Neural Network (Ultralytics)"
-                inference_status = "completed"
-                is_degraded = False
-                detection_message = "YOLOv8 target detection active." if detections else "No object detected by YOLO in current frame."
-            else:
-                # YOLO requested but weights missing/corrupted/incompatible
-                detections = self._detect_color(img, color_target, conf_thresh)
-                active_model = f"yolo_fallback_color_{color_target or 'red'}"
-                active_detector = f"OpenCV HSV Blob Fallback ({color_target or 'red'})"
-                inference_status = "degraded"
-                is_degraded = True
-                degraded_reason = f"YOLO weights unavailable ({self.yolo_status}): {self.yolo_error or 'Disabled in memory-constrained environment'}"
-                detection_message = f"YOLO unavailable. Using OpenCV {color_target or 'red'} fallback. {'Target locked.' if detections else 'No target detected.'}"
-        elif method in ("optical_flow", "opticalflow"):
-            detections, recovered = self._track_optical_flow(img, conf_thresh)
-            active_model = "lucas_kanade_optical_flow"
-            active_detector = "Lucas-Kanade Pyramidal Optical Flow"
-            is_degraded = bool(recovered or not detections)
-            inference_status = "completed" if (detections and not recovered) else "degraded"
-            degraded_reason = "Feature points lost; re-seeded Shi-Tomasi corners." if recovered else None
-            detection_message = "Lucas-Kanade optical flow motion tracking active." if detections else "No optical flow features detected. Move target across frame."
-        else:
-            # Color tracking (HSV segmentation + morphology + contour filtering)
-            detections = self._detect_color(img, color_target, conf_thresh)
-            active_model = f"color_{color_target or 'red'}"
-            active_detector = f"OpenCV HSV Blob Tracker ({color_target or 'red'})"
-            inference_status = "completed"
-            is_degraded = False
-            detection_message = f"OpenCV HSV color tracker active ({color_target or 'red'}). Target locked." if detections else f"No {color_target or 'red'} target detected. Adjust lighting or present target."
-
-        # 2. Determine Centroid and Update Trajectory Tracking
-        centroid: Optional[List[int]] = None
-        contours_found = len(detections)
-        track_id = None
-        v = 0.0
-        a = 0.0
-        kinematics_details: Dict[str, Any] = {}
-
-        if detections:
-            # Select highest confidence detection as primary physics tracking target
-            primary = max(detections, key=lambda d: d.confidence)
-            x_min, y_min, x_max, y_max = primary.bbox_xyxy
-            cx = int(round((x_min + x_max) / 2.0))
-            cy = int(round((y_min + y_max) / 2.0))
-            centroid = [cx, cy]
-
-            # Update trajectory
-            kinematics_res = self.trajectory_tracker.update(
-                centroid=(cx, cy),
-                timestamp_seconds=timestamp_s,
-                px_to_meters=px_to_meters,
-            )
-            track_id = kinematics_res.track_id
-            v = kinematics_res.velocity_mps
-            a = kinematics_res.acceleration_mps2
-            primary.track_id = track_id
-            kinematics_details = kinematics_res.details
-        else:
-            # Explicitly NO detection (never return fake center of image)
-            centroid = None
-            kinematics_res = self.trajectory_tracker.update(None, timestamp_s, px_to_meters)
-            kinematics_details = kinematics_res.details
-
-        latency_ms = round((time.perf_counter() - t_start) * 1000, 2)
-
-        physics = {
-            "x_meters": round(centroid[0] * px_to_meters, 4) if centroid else None,
-            "y_meters": round(centroid[1] * px_to_meters, 4) if centroid else None,
-            "dx_meters": kinematics_details.get("dx_meters", 0.0),
-            "dy_meters": kinematics_details.get("dy_meters", 0.0),
-            "velocity_mps": round(v, 4),
-            "velocity_x_mps": kinematics_details.get("velocity_x_mps", 0.0),
-            "velocity_y_mps": kinematics_details.get("velocity_y_mps", 0.0),
-            "acceleration_mps2": round(a, 4),
-            "acceleration_x_mps2": kinematics_details.get("acceleration_x_mps2", 0.0),
-            "acceleration_y_mps2": kinematics_details.get("acceleration_y_mps2", 0.0),
-            "track_id": track_id,
-            "dt_seconds": kinematics_details.get("dt_seconds"),
-            "calibration_status": kinematics_details.get("calibration_status", "calibrated"),
-            "is_calibrated": kinematics_details.get("is_calibrated", True),
-            "is_estimated": True,
-            "units": {
-                "position": "meters",
-                "velocity": "m/s",
-                "acceleration": "m/s^2",
-                "time": "seconds",
-            },
-        }
-
-        # Model provenance metadata
-        is_yolo = (method == "yolo" and self.yolo_model is not None)
-        is_of = method in ("optical_flow", "opticalflow")
-
-        if is_yolo:
-            model_ver = "yolov8n-v8.1.0"
-            preprocess_ver = "letterbox_rgb_norm_v1"
-        elif is_of:
-            model_ver = "lucas_kanade_pyr_v1.0"
-            preprocess_ver = "bgr_to_gray_v1"
-        else:
-            model_ver = "hsv_blob_tracker_v1.0.0"
-            preprocess_ver = "bgr_to_hsv_v1"
-
-        calibration_info = {
-            "px_to_meters": px_to_meters,
-            "unit_system": "SI",
-            "origin": [0.0, 0.0],
-            "units": {
-                "position": "meters (m)",
-                "velocity": "meters/second (m/s)",
-                "acceleration": "meters/second^2 (m/s^2)",
-            },
-        }
-
-        prov_info = {
-            "source": "client_webcam_stream",
-            "raw_footage_stored": False,
-            "retention_policy": "ephemeral_discard",
-            "model_version": model_ver,
-            "configuration_version": "cv_config_v1.0",
-            "preprocessing_version": preprocess_ver,
-            "reproducible": True,
-            "tracking_method": method,
-            "active_detector": active_detector,
-            "is_degraded": is_degraded,
-        }
-
-        if method == "yolo" and self.yolo_model is None:
-            prov_info["yolo_status"] = self.yolo_status
-            prov_info["yolo_error"] = self.yolo_error
-            prov_info["degraded_reason"] = f"YOLO weights unavailable ({self.yolo_status}): {self.yolo_error}"
-        elif is_of:
-            prov_info["optical_flow_recovered"] = getattr(self, "of_recovered", False)
-            prov_info["optical_flow_failures"] = getattr(self, "of_failure_count", 0)
-
-        # Build schema result with full model provenance and privacy flag
-        frame_result = FrameResult(
-            timestamp_ms=timestamp_ms,
-            detections=detections,
-            centroid=centroid,
-            contours_found=contours_found,
-            width=width,
-            height=height,
-            physics=physics,
-            model_name=active_model,
-            active_detector=active_detector,
-            is_degraded=is_degraded,
-            degraded_reason=degraded_reason,
-            detection_message=detection_message,
-            inference_latency_ms=latency_ms,
-            model_version=model_ver,
-            configuration_version="cv_config_v1.0",
-            preprocessing_version=preprocess_ver,
-            calibration=calibration_info,
-            inference_status=inference_status,
-            raw_footage_stored=False,
-            provenance=prov_info,
-        )
-
-        return frame_result.model_dump()
-
-    def _detect_yolo(self, img: np.ndarray, conf_thresh: float, iou_thresh: float) -> List[Detection]:
-        """Runs YOLOv8 model inference with NMS thresholding and bounding box validation."""
-        detections: List[Detection] = []
-        if self.yolo_model is None:
-            return detections
-
-        height, width = img.shape[:2]
-        try:
-            results = self.yolo_model.predict(
-                source=img,
-                conf=conf_thresh,
-                iou=iou_thresh,
-                verbose=False,
-            )
-            if results and len(results) > 0:
-                boxes = results[0].boxes
-                if boxes is not None and len(boxes) > 0:
-                    raw_boxes = []
-                    raw_scores = []
-                    raw_classes = []
-                    for i in range(len(boxes)):
-                        xyxy = boxes.xyxy[i].cpu().numpy().tolist()
-                        conf = float(boxes.conf[i].cpu().numpy())
-                        cls_idx = int(boxes.cls[i].cpu().numpy())
-                        class_name = self.yolo_model.names.get(cls_idx, f"class_{cls_idx}")
-
-                        x1, y1, x2, y2 = [float(c) for c in xyxy]
-                        # Clamp to frame dimensions
-                        x1 = max(0.0, min(float(width), x1))
-                        y1 = max(0.0, min(float(height), y1))
-                        x2 = max(0.0, min(float(width), x2))
-                        y2 = max(0.0, min(float(height), y2))
-
-                        if x2 > x1 and y2 > y1 and conf >= conf_thresh:
-                            raw_boxes.append([x1, y1, x2, y2])
-                            raw_scores.append(conf)
-                            raw_classes.append(class_name)
-
-                    # Verify / apply Non-Maximum Suppression (NMS)
-                    keep_indices = apply_nms_boxes(raw_boxes, raw_scores, iou_threshold=iou_thresh, score_threshold=conf_thresh)
-                    for idx in keep_indices:
-                        detections.append(
-                            Detection(
-                                class_name=raw_classes[idx],
-                                confidence=round(raw_scores[idx], 4),
-                                bbox_xyxy=raw_boxes[idx],
-                            )
-                        )
-        except Exception as err:
-            logger.error(f"YOLO inference error: {err}")
-        return detections
-
-    def _detect_optical_flow_features(self, gray: np.ndarray, mask: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
-        """
-        Extracts strong feature points for Lucas-Kanade tracking using Shi-Tomasi corner detection.
-        """
-        pts = cv2.goodFeaturesToTrack(
-            gray,
-            maxCorners=100,
-            qualityLevel=0.015,
-            minDistance=8,
-            blockSize=7,
-            mask=mask,
-        )
-        if pts is None or len(pts) < 3:
-            # Fallback with higher sensitivity
-            pts = cv2.goodFeaturesToTrack(
-                gray,
-                maxCorners=100,
-                qualityLevel=0.003,
-                minDistance=5,
-                blockSize=7,
-                mask=mask,
-            )
-        return pts
-
-    def _track_optical_flow(self, img: np.ndarray, conf_thresh: float) -> Tuple[List[Detection], bool]:
-        """
-        Executes Lucas–Kanade optical flow feature tracking with automatic failure recovery.
-        Returns: (List[Detection], was_recovered)
-        """
-        height, width = img.shape[:2]
-        curr_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        was_recovered = False
-
-        # 1. Initial Frame or Re-initialization
-        if self.of_prev_gray is None or self.of_prev_pts is None or len(self.of_prev_pts) < 3:
-            pts = self._detect_optical_flow_features(curr_gray)
-            if pts is None or len(pts) < 3:
-                # Featureless frame
-                self.of_prev_gray = curr_gray
-                self.of_prev_pts = None
-                return [], False
-
-            self.of_prev_gray = curr_gray
-            self.of_prev_pts = pts
-            self.of_last_pts_count = len(pts)
-
-            pts_2d = pts.reshape(-1, 2)
-            x_min = max(0.0, float(np.min(pts_2d[:, 0]) - 5))
-            y_min = max(0.0, float(np.min(pts_2d[:, 1]) - 5))
-            x_max = min(float(width), float(np.max(pts_2d[:, 0]) + 5))
-            y_max = min(float(height), float(np.max(pts_2d[:, 1]) + 5))
-
-            conf = round(float(min(1.0, max(0.5, len(pts) / 50.0))), 3)
-            if conf >= conf_thresh:
-                return [
-                    Detection(
-                        class_name="optical_flow_target",
-                        confidence=conf,
-                        bbox_xyxy=[x_min, y_min, x_max, y_max],
-                    )
-                ], False
-            return [], False
-
-        # 2. Pyramidal Lucas–Kanade Optical Flow Tracking
-        lk_params = dict(
-            winSize=(21, 21),
-            maxLevel=3,
-            criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01),
-        )
-
-        try:
-            next_pts, status, err = cv2.calcOpticalFlowPyrLK(
-                self.of_prev_gray,
-                curr_gray,
-                self.of_prev_pts,
-                None,
-                **lk_params,
-            )
-        except Exception as e:
-            logger.warning(f"calcOpticalFlowPyrLK error: {e}")
-            next_pts, status = None, None
-
-        # Filter valid tracked points (status == 1 and bounded tracking error)
-        good_new = []
-        if next_pts is not None and status is not None:
-            valid_mask = (status.ravel() == 1)
-            if err is not None:
-                valid_mask = valid_mask & (err.ravel() < 30.0)
-            candidates = next_pts[valid_mask].reshape(-1, 2)
-            for pt in candidates:
-                px, py = pt
-                if 0 <= px < width and 0 <= py < height:
-                    good_new.append([px, py])
-
-        # 3. Check for Tracking Failure & Trigger Failure Recovery
-        min_surviving_points = 3
-        if len(good_new) < min_surviving_points:
-            # Tracking points lost! Trigger Failure Recovery
-            was_recovered = True
-            self.of_failure_count += 1
-            logger.info("Optical flow tracking lost points. Triggering failure recovery re-detection.")
-
-            # Re-detect features on current frame
-            recovery_pts = self._detect_optical_flow_features(curr_gray)
-            if recovery_pts is not None and len(recovery_pts) >= min_surviving_points:
-                self.of_prev_pts = recovery_pts
-                self.of_prev_gray = curr_gray
-                self.of_last_pts_count = len(recovery_pts)
-                pts_2d = recovery_pts.reshape(-1, 2)
-                x_min = max(0.0, float(np.min(pts_2d[:, 0]) - 5))
-                y_min = max(0.0, float(np.min(pts_2d[:, 1]) - 5))
-                x_max = min(float(width), float(np.max(pts_2d[:, 0]) + 5))
-                y_max = min(float(height), float(np.max(pts_2d[:, 1]) + 5))
-                conf = round(float(min(1.0, max(0.4, len(recovery_pts) / 50.0))), 3)
-                if conf >= conf_thresh:
-                    return [
-                        Detection(
-                            class_name="optical_flow_target",
-                            confidence=conf,
-                            bbox_xyxy=[x_min, y_min, x_max, y_max],
-                        )
-                    ], True
-                return [], True
-            else:
-                # Scene has no features (e.g. blank screen)
-                self.of_prev_pts = None
-                self.of_prev_gray = curr_gray
-                return [], True
-
-        # 4. Successful Optical Flow Step
-        good_new_arr = np.array(good_new, dtype=np.float32)
-        self.of_prev_pts = good_new_arr.reshape(-1, 1, 2)
-        self.of_prev_gray = curr_gray
-
-        # Compute bounding box enclosing active tracked points
-        x_min = max(0.0, float(np.min(good_new_arr[:, 0]) - 6))
-        y_min = max(0.0, float(np.min(good_new_arr[:, 1]) - 6))
-        x_max = min(float(width), float(np.max(good_new_arr[:, 0]) + 6))
-        y_max = min(float(height), float(np.max(good_new_arr[:, 1]) + 6))
-
-        # Confidence based on point survival ratio
-        survival_ratio = len(good_new) / max(self.of_last_pts_count, 1)
-        conf = round(float(min(1.0, max(0.3, survival_ratio))), 3)
-
-        detections = []
-        if conf >= conf_thresh and x_max > x_min and y_max > y_min:
-            detections.append(
-                Detection(
-                    class_name="optical_flow_target",
-                    confidence=conf,
-                    bbox_xyxy=[x_min, y_min, x_max, y_max],
-                )
-            )
-
-        return detections, False
-
-    def _detect_color(self, img: np.ndarray, color_target: str, conf_thresh: float) -> List[Detection]:
-        """
-        Runs genuine HSV segmentation, morphology, and contour filtering.
-        """
+        color_target: str = "red",
+        conf_thresh: float = 0.2,
+        timestamp_s: Optional[float] = None,
+        **kwargs,
+    ) -> List[Detection]:
+        t_start = time.perf_counter()
+        now_s = timestamp_s if timestamp_s is not None else time.time()
         detections: List[Detection] = []
         height, width = img.shape[:2]
         target = (color_target or "red").lower().strip()
@@ -1232,50 +1041,742 @@ class CVTracker:
 
         # 4. Contour Extraction & Filtering
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        min_area = 50.0
-        max_area = 0.92 * (width * height)
+        max_area = self.max_area_ratio * (width * height)
 
         for cnt in contours:
             area = float(cv2.contourArea(cnt))
-            if area < min_area or area > max_area:
+            if area < self.min_area or area > max_area:
                 continue
 
             x, y, w, h = cv2.boundingRect(cnt)
-            # Filter extreme thin slivers (camera scanlines / sensor lines)
             aspect_ratio = max(w / max(h, 1), h / max(w, 1))
-            if aspect_ratio > 18.0:
+            if aspect_ratio > self.max_aspect_ratio:
                 continue
 
             bbox_area = max(1.0, float(w * h))
             solidity = area / bbox_area
-            if solidity < 0.15:
+            if solidity < self.min_solidity:
                 continue
 
-            # Circularity metric
             perimeter = cv2.arcLength(cnt, True)
             circularity = (4.0 * math.pi * area) / (perimeter * perimeter) if perimeter > 0 else 0.0
 
-            # Confidence score combines solidity, compactness, and size prominence
-            base_conf = 0.5 * solidity + 0.3 * min(1.0, circularity) + 0.2 * min(1.0, area / 5000.0)
-            conf = round(float(min(1.0, max(0.1, base_conf))), 3)
+            # Quality heuristic for candidate filtering (not semantic model confidence)
+            quality = 0.5 * solidity + 0.3 * min(1.0, circularity) + 0.2 * min(1.0, area / 5000.0)
+            if quality < conf_thresh:
+                continue
 
-            if conf >= conf_thresh:
-                # Clamp coordinates
-                x1 = max(0.0, float(x))
-                y1 = max(0.0, float(y))
-                x2 = min(float(width), float(x + w))
-                y2 = min(float(height), float(y + h))
-                if x2 > x1 and y2 > y1:
-                    detections.append(
-                        Detection(
-                            class_name=f"{target}_object",
-                            confidence=conf,
-                            bbox_xyxy=[x1, y1, x2, y2],
-                        )
+            x1 = max(0.0, float(x))
+            y1 = max(0.0, float(y))
+            x2 = min(float(width), float(x + w))
+            y2 = min(float(height), float(y + h))
+
+            if x2 > x1 and y2 > y1:
+                cx = int(round((x1 + x2) / 2.0))
+                cy = int(round((y1 + y2) / 2.0))
+                detections.append(
+                    Detection(
+                        bbox_xyxy=[x1, y1, x2, y2],
+                        class_label=None,
+                        class_name=None,
+                        confidence=None,
+                        center=(cx, cy),
+                        timestamp=now_s,
+                        detector_name=self.detector_name,
+                        latency_ms=0.0,
+                        status="detected",
+                        attributes={
+                            "color_target": target,
+                            "area": round(area, 2),
+                            "solidity": round(solidity, 4),
+                            "circularity": round(circularity, 4),
+                            "perimeter": round(perimeter, 2),
+                            "blob_quality": round(quality, 4),
+                        },
                     )
+                )
 
-        detections.sort(key=lambda d: d.confidence, reverse=True)
+        latency_ms = round((time.perf_counter() - t_start) * 1000, 2)
+        for d in detections:
+            d.latency_ms = latency_ms
+
+        detections.sort(key=lambda d: d.attributes.get("area", 0.0), reverse=True)
         return detections
+
+
+class OpticalFlowDetector(BaseDetector):
+    """
+    Lucas–Kanade pyramidal optical flow detector with Shi-Tomasi corner detection,
+    automatic point tracking, point survival ratio measurement, and lost-track recovery.
+    """
+    def __init__(self):
+        self.prev_gray: Optional[np.ndarray] = None
+        self.prev_pts: Optional[np.ndarray] = None
+        self.last_pts_count: int = 0
+        self.failure_count: int = 0
+        self.recovered: bool = False
+
+    @property
+    def detector_name(self) -> str:
+        return "lucas_kanade_optical_flow"
+
+    def reset(self) -> None:
+        self.prev_gray = None
+        self.prev_pts = None
+        self.last_pts_count = 0
+        self.failure_count = 0
+        self.recovered = False
+
+    def detect_features(self, gray: np.ndarray, mask: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
+        pts = cv2.goodFeaturesToTrack(
+            gray,
+            maxCorners=100,
+            qualityLevel=0.015,
+            minDistance=8,
+            blockSize=7,
+            mask=mask,
+        )
+        if pts is None or len(pts) < 3:
+            pts = cv2.goodFeaturesToTrack(
+                gray,
+                maxCorners=100,
+                qualityLevel=0.003,
+                minDistance=5,
+                blockSize=7,
+                mask=mask,
+            )
+        return pts
+
+    def detect(
+        self,
+        img: np.ndarray,
+        conf_thresh: float = 0.25,
+        timestamp_s: Optional[float] = None,
+        **kwargs,
+    ) -> List[Detection]:
+        t_start = time.perf_counter()
+        now_s = timestamp_s if timestamp_s is not None else time.time()
+        height, width = img.shape[:2]
+        curr_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        self.recovered = False
+
+        # Initial frame or lost state: seed features
+        if self.prev_gray is None or self.prev_pts is None or len(self.prev_pts) < 3:
+            pts = self.detect_features(curr_gray)
+            if pts is None or len(pts) < 3:
+                self.prev_gray = curr_gray
+                self.prev_pts = None
+                return []
+
+            self.prev_gray = curr_gray
+            self.prev_pts = pts
+            self.last_pts_count = len(pts)
+
+            pts_2d = pts.reshape(-1, 2)
+            x_min = max(0.0, float(np.min(pts_2d[:, 0]) - 5))
+            y_min = max(0.0, float(np.min(pts_2d[:, 1]) - 5))
+            x_max = min(float(width), float(np.max(pts_2d[:, 0]) + 5))
+            y_max = min(float(height), float(np.max(pts_2d[:, 1]) + 5))
+            cx = int(round((x_min + x_max) / 2.0))
+            cy = int(round((y_min + y_max) / 2.0))
+
+            latency_ms = round((time.perf_counter() - t_start) * 1000, 2)
+            return [
+                Detection(
+                    bbox_xyxy=[x_min, y_min, x_max, y_max],
+                    class_label="optical_flow_target",
+                    class_name="optical_flow_target",
+                    confidence=1.0,
+                    center=(cx, cy),
+                    timestamp=now_s,
+                    detector_name=self.detector_name,
+                    latency_ms=latency_ms,
+                    status="detected",
+                    attributes={"tracked_points": len(pts), "survival_ratio": 1.0, "recovered": False},
+                )
+            ]
+
+        # Pyramidal Lucas-Kanade step
+        lk_params = dict(
+            winSize=(21, 21),
+            maxLevel=3,
+            criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 30, 0.01),
+        )
+
+        try:
+            next_pts, status, err = cv2.calcOpticalFlowPyrLK(
+                self.prev_gray,
+                curr_gray,
+                self.prev_pts,
+                None,
+                **lk_params,
+            )
+        except Exception as e:
+            logger.warning(f"calcOpticalFlowPyrLK error: {e}")
+            next_pts, status = None, None
+
+        good_new = []
+        if next_pts is not None and status is not None:
+            valid_mask = (status.ravel() == 1)
+            if err is not None:
+                valid_mask = valid_mask & (err.ravel() < 30.0)
+            candidates = next_pts[valid_mask].reshape(-1, 2)
+            for pt in candidates:
+                px, py = pt
+                if 0 <= px < width and 0 <= py < height:
+                    good_new.append([px, py])
+
+        min_surviving_points = 3
+        if len(good_new) < min_surviving_points:
+            # Lost track: trigger failure recovery re-detection
+            self.recovered = True
+            self.failure_count += 1
+            recovery_pts = self.detect_features(curr_gray)
+            if recovery_pts is not None and len(recovery_pts) >= min_surviving_points:
+                self.prev_pts = recovery_pts
+                self.prev_gray = curr_gray
+                self.last_pts_count = len(recovery_pts)
+                pts_2d = recovery_pts.reshape(-1, 2)
+                x_min = max(0.0, float(np.min(pts_2d[:, 0]) - 5))
+                y_min = max(0.0, float(np.min(pts_2d[:, 1]) - 5))
+                x_max = min(float(width), float(np.max(pts_2d[:, 0]) + 5))
+                y_max = min(float(height), float(np.max(pts_2d[:, 1]) + 5))
+                cx = int(round((x_min + x_max) / 2.0))
+                cy = int(round((y_min + y_max) / 2.0))
+                latency_ms = round((time.perf_counter() - t_start) * 1000, 2)
+                return [
+                    Detection(
+                        bbox_xyxy=[x_min, y_min, x_max, y_max],
+                        class_label="optical_flow_target",
+                        class_name="optical_flow_target",
+                        confidence=0.5,
+                        center=(cx, cy),
+                        timestamp=now_s,
+                        detector_name=self.detector_name,
+                        latency_ms=latency_ms,
+                        status="recovered",
+                        attributes={"tracked_points": len(recovery_pts), "survival_ratio": 0.5, "recovered": True},
+                    )
+                ]
+            else:
+                self.prev_pts = None
+                self.prev_gray = curr_gray
+                return []
+
+        # Successful step
+        good_new_arr = np.array(good_new, dtype=np.float32)
+        self.prev_pts = good_new_arr.reshape(-1, 1, 2)
+        self.prev_gray = curr_gray
+
+        x_min = max(0.0, float(np.min(good_new_arr[:, 0]) - 6))
+        y_min = max(0.0, float(np.min(good_new_arr[:, 1]) - 6))
+        x_max = min(float(width), float(np.max(good_new_arr[:, 0]) + 6))
+        y_max = min(float(height), float(np.max(good_new_arr[:, 1]) + 6))
+        cx = int(round((x_min + x_max) / 2.0))
+        cy = int(round((y_min + y_max) / 2.0))
+
+        survival_ratio = len(good_new) / max(self.last_pts_count, 1)
+        conf = round(float(min(1.0, max(0.3, survival_ratio))), 3)
+        latency_ms = round((time.perf_counter() - t_start) * 1000, 2)
+
+        if conf >= conf_thresh and x_max > x_min and y_max > y_min:
+            return [
+                Detection(
+                    bbox_xyxy=[x_min, y_min, x_max, y_max],
+                    class_label="optical_flow_target",
+                    class_name="optical_flow_target",
+                    confidence=conf,
+                    center=(cx, cy),
+                    timestamp=now_s,
+                    detector_name=self.detector_name,
+                    latency_ms=latency_ms,
+                    status="detected",
+                    attributes={"tracked_points": len(good_new), "survival_ratio": survival_ratio, "recovered": False},
+                )
+            ]
+        return []
+
+
+class YOLODetector(BaseDetector):
+    """
+    Ultralytics YOLOv8 deep learning detector with model reuse, confidence thresholding,
+    class filtering, Non-Maximum Suppression (NMS), and bounding box clamping.
+    """
+    def __init__(
+        self,
+        model_instance: Optional[Any] = None,
+        allowed_classes: Optional[List[str]] = None,
+        load_default_if_none: bool = True,
+    ):
+        if model_instance is not None:
+            self.model = model_instance
+        elif load_default_if_none:
+            self.model = get_shared_yolo_model()
+        else:
+            self.model = None
+        self.allowed_classes = set(c.lower() for c in allowed_classes) if allowed_classes else None
+
+    @property
+    def detector_name(self) -> str:
+        return "yolov8n_neural_network"
+
+    @property
+    def is_available(self) -> bool:
+        return self.model is not None
+
+    def detect(
+        self,
+        img: np.ndarray,
+        conf_thresh: float = 0.25,
+        nms_thresh: float = 0.45,
+        timestamp_s: Optional[float] = None,
+        **kwargs,
+    ) -> List[Detection]:
+        t_start = time.perf_counter()
+        now_s = timestamp_s if timestamp_s is not None else time.time()
+        detections: List[Detection] = []
+        if self.model is None:
+            return detections
+
+        height, width = img.shape[:2]
+        try:
+            results = self.model.predict(
+                source=img,
+                conf=conf_thresh,
+                iou=nms_thresh,
+                verbose=False,
+            )
+            if results and len(results) > 0:
+                boxes = results[0].boxes
+                if boxes is not None and len(boxes) > 0:
+                    raw_boxes = []
+                    raw_scores = []
+                    raw_classes = []
+                    raw_indices = []
+
+                    for i in range(len(boxes)):
+                        xyxy = boxes.xyxy[i].cpu().numpy().tolist()
+                        conf = float(boxes.conf[i].cpu().numpy())
+                        cls_idx = int(boxes.cls[i].cpu().numpy())
+                        class_name = self.model.names.get(cls_idx, f"class_{cls_idx}")
+
+                        if self.allowed_classes and class_name.lower() not in self.allowed_classes:
+                            continue
+
+                        x1, y1, x2, y2 = [float(c) for c in xyxy]
+                        x1 = max(0.0, min(float(width), x1))
+                        y1 = max(0.0, min(float(height), y1))
+                        x2 = max(0.0, min(float(width), x2))
+                        y2 = max(0.0, min(float(height), y2))
+
+                        if x2 > x1 and y2 > y1 and conf >= conf_thresh:
+                            raw_boxes.append([x1, y1, x2, y2])
+                            raw_scores.append(conf)
+                            raw_classes.append(class_name)
+                            raw_indices.append(cls_idx)
+
+                    keep_indices = apply_nms_boxes(raw_boxes, raw_scores, iou_threshold=nms_thresh, score_threshold=conf_thresh)
+                    for idx in keep_indices:
+                        b = raw_boxes[idx]
+                        cx = int(round((b[0] + b[2]) / 2.0))
+                        cy = int(round((b[1] + b[3]) / 2.0))
+                        detections.append(
+                            Detection(
+                                bbox_xyxy=b,
+                                class_label=raw_classes[idx],
+                                class_name=raw_classes[idx],
+                                confidence=round(raw_scores[idx], 4),
+                                center=(cx, cy),
+                                timestamp=now_s,
+                                detector_name=self.detector_name,
+                                latency_ms=0.0,
+                                status="detected",
+                                attributes={
+                                    "model_version": "yolov8n-v8.1.0",
+                                    "coco_class_id": raw_indices[idx],
+                                },
+                            )
+                        )
+        except Exception as err:
+            logger.error(f"YOLO inference error: {err}")
+
+        latency_ms = round((time.perf_counter() - t_start) * 1000, 2)
+        for d in detections:
+            d.latency_ms = latency_ms
+
+        return detections
+
+
+class CVTracker:
+    def __init__(
+        self,
+        yolo_weights_path: Optional[str] = None,
+        trajectory_tracker: Optional[TrajectoryTracker] = None,
+        tracker_key: Optional[str] = None,
+        shared_yolo_model: Optional[Any] = None,
+    ):
+        self.tracker_key = tracker_key
+        self.trajectory_tracker = trajectory_tracker if trajectory_tracker is not None else TrajectoryTracker()
+        self.model_name = "color_kinematics"
+        self.model_ready = False
+        self.calibration_data: Optional[Dict[str, Any]] = None
+
+        if shared_yolo_model is not None:
+            self.yolo_model = shared_yolo_model
+            self.yolo_status = YOLOWeightsStatus.LOADED.value
+            self.yolo_error = None
+        elif yolo_weights_path:
+            self.yolo_model, self.yolo_status, self.yolo_error = validate_and_load_yolo_weights(yolo_weights_path)
+        else:
+            self.yolo_model, self.yolo_status, self.yolo_error = get_shared_yolo_model_info()
+
+        if self.yolo_model is not None:
+            self.model_name = "yolov8n"
+
+        # Modular concrete detector instances
+        self.color_detector = ColorSegmentationDetector()
+        self.optical_flow_detector = OpticalFlowDetector()
+        self.yolo_detector = YOLODetector(model_instance=self.yolo_model, load_default_if_none=False)
+
+        self.model_ready = True
+
+    # Optical flow tracking state properties for backwards compatibility
+    @property
+    def of_prev_gray(self):
+        return self.optical_flow_detector.prev_gray
+
+    @of_prev_gray.setter
+    def of_prev_gray(self, val):
+        self.optical_flow_detector.prev_gray = val
+
+    @property
+    def of_prev_pts(self):
+        return self.optical_flow_detector.prev_pts
+
+    @of_prev_pts.setter
+    def of_prev_pts(self, val):
+        self.optical_flow_detector.prev_pts = val
+
+    @property
+    def of_last_pts_count(self) -> int:
+        return self.optical_flow_detector.last_pts_count
+
+    @of_last_pts_count.setter
+    def of_last_pts_count(self, val: int):
+        self.optical_flow_detector.last_pts_count = val
+
+    @property
+    def of_failure_count(self) -> int:
+        return self.optical_flow_detector.failure_count
+
+    @of_failure_count.setter
+    def of_failure_count(self, val: int):
+        self.optical_flow_detector.failure_count = val
+
+    @property
+    def of_recovered(self) -> bool:
+        return self.optical_flow_detector.recovered
+
+    @of_recovered.setter
+    def of_recovered(self, val: bool):
+        self.optical_flow_detector.recovered = val
+
+    def set_calibration_data(self, calib: Dict[str, Any]) -> None:
+        """Sets active session camera calibration."""
+        self.calibration_data = calib
+
+    def get_calibration_data(self) -> Optional[Dict[str, Any]]:
+        """Returns active session camera calibration."""
+        return self.calibration_data
+
+    def get_effective_scale(self, client_px_to_meters: float) -> float:
+        """Determines effective scale: calibrated session scale takes precedence over client default."""
+        if self.calibration_data and "scale_factor_m_per_px" in self.calibration_data:
+            return float(self.calibration_data["scale_factor_m_per_px"])
+        return client_px_to_meters if (client_px_to_meters and client_px_to_meters > 0) else 0.005
+
+    def check_readiness(self) -> Dict[str, Any]:
+        """Explicit model-loading and readiness verification."""
+        return {
+            "ready": self.model_ready,
+            "active_model": self.model_name,
+            "yolo_loaded": self.yolo_model is not None,
+            "yolo_status": self.yolo_status,
+            "yolo_error": self.yolo_error,
+            "classes_count": len(self.yolo_model.names) if self.yolo_model else 0,
+            "supported_methods": ["color", "optical_flow", "yolo"],
+        }
+
+    def reset_tracker(self):
+        """Resets trajectory tracking history and optical flow state across frames."""
+        self.trajectory_tracker.reset()
+        self.optical_flow_detector.reset()
+
+    def process_frame(
+        self,
+        base64_img: str,
+        tracking_method: str = "color",
+        color_target: str = "red",
+        px_to_meters: float = 0.005,
+        confidence_threshold: float = 0.25,
+        nms_threshold: float = 0.45,
+    ) -> Dict[str, Any]:
+        """Decodes base64 frame and runs real object detection pipeline."""
+        t_start = time.perf_counter()
+        img = decode_frame(base64_img)
+        t_decode = time.perf_counter() - t_start
+        return self._run_pipeline(
+            img=img,
+            tracking_method=tracking_method,
+            color_target=color_target,
+            px_to_meters=px_to_meters,
+            conf_thresh=confidence_threshold,
+            nms_thresh=nms_threshold,
+            t_start=t_start,
+            t_decode=t_decode,
+        )
+
+    def process_binary_frame(
+        self,
+        raw_bytes: bytes,
+        tracking_method: str = "color",
+        color_target: str = "red",
+        px_to_meters: float = 0.005,
+        confidence_threshold: float = 0.25,
+        nms_threshold: float = 0.45,
+    ) -> Dict[str, Any]:
+        """Decodes binary frame directly and runs real object detection pipeline."""
+        t_start = time.perf_counter()
+        img = decode_binary_frame(raw_bytes)
+        t_decode = time.perf_counter() - t_start
+        return self._run_pipeline(
+            img=img,
+            tracking_method=tracking_method,
+            color_target=color_target,
+            px_to_meters=px_to_meters,
+            conf_thresh=confidence_threshold,
+            nms_thresh=nms_threshold,
+            t_start=t_start,
+            t_decode=t_decode,
+        )
+
+    def _run_pipeline(
+        self,
+        img: np.ndarray,
+        tracking_method: str,
+        color_target: str,
+        px_to_meters: float,
+        conf_thresh: float,
+        nms_thresh: float,
+        t_start: float,
+        t_decode: float = 0.0,
+    ) -> Dict[str, Any]:
+        height, width = img.shape[:2]
+        timestamp_s = time.time()
+        timestamp_ms = int(timestamp_s * 1000)
+
+        detections: List[Detection] = []
+        method = (tracking_method or "color").lower().strip()
+        inference_status = "completed"
+
+        # 1. Routing to appropriate detector
+        is_degraded = False
+        degraded_reason = None
+        active_model = "unknown"
+        active_detector = "unknown"
+        detection_message = ""
+
+        t_det_start = time.perf_counter()
+        if method == "yolo":
+            if self.yolo_detector.is_available:
+                detections = self.yolo_detector.detect(img, conf_thresh=conf_thresh, nms_thresh=nms_thresh, timestamp_s=timestamp_s)
+                active_model = "yolov8n"
+                active_detector = "YOLOv8 Neural Network (Ultralytics)"
+                inference_status = "completed"
+                is_degraded = False
+                detection_message = "YOLOv8 target detection active." if detections else "No object detected by YOLO in current frame."
+            else:
+                detections = self.color_detector.detect(img, color_target=color_target, conf_thresh=conf_thresh, timestamp_s=timestamp_s)
+                active_model = f"yolo_fallback_color_{color_target or 'red'}"
+                active_detector = f"OpenCV HSV Blob Fallback ({color_target or 'red'})"
+                inference_status = "degraded"
+                is_degraded = True
+                degraded_reason = f"YOLO weights unavailable ({self.yolo_status}): {self.yolo_error or 'Disabled in memory-constrained environment'}"
+                detection_message = f"YOLO unavailable. Using OpenCV {color_target or 'red'} fallback. {'Target locked.' if detections else 'No target detected.'}"
+        elif method in ("optical_flow", "opticalflow"):
+            detections = self.optical_flow_detector.detect(img, conf_thresh=conf_thresh, timestamp_s=timestamp_s)
+            self.of_recovered = self.optical_flow_detector.recovered
+            self.of_failure_count = self.optical_flow_detector.failure_count
+            active_model = "lucas_kanade_optical_flow"
+            active_detector = "Lucas-Kanade Pyramidal Optical Flow"
+            is_degraded = bool(self.optical_flow_detector.recovered or not detections)
+            inference_status = "completed" if (detections and not self.optical_flow_detector.recovered) else "degraded"
+            degraded_reason = "Feature points lost; re-seeded Shi-Tomasi corners." if self.optical_flow_detector.recovered else None
+            detection_message = "Lucas-Kanade optical flow motion tracking active." if detections else "No optical flow features detected. Move target across frame."
+        else:
+            detections = self.color_detector.detect(img, color_target=color_target, conf_thresh=conf_thresh, timestamp_s=timestamp_s)
+            active_model = f"color_{color_target or 'red'}"
+            active_detector = f"OpenCV HSV Blob Tracker ({color_target or 'red'})"
+            inference_status = "completed"
+            is_degraded = False
+            detection_message = f"OpenCV HSV color tracker active ({color_target or 'red'}). Target locked." if detections else f"No {color_target or 'red'} target detected. Adjust lighting or present target."
+
+        t_detection = time.perf_counter() - t_det_start
+
+        # 2. Multi-object trajectory and kinematics tracking
+        t_track_start = time.perf_counter()
+        effective_scale = self.get_effective_scale(px_to_meters)
+        primary_kinematics, tracking_summary = self.trajectory_tracker.update_detections(
+            detections=detections,
+            timestamp_seconds=timestamp_s,
+            px_to_meters=effective_scale,
+        )
+        t_tracking = time.perf_counter() - t_track_start
+
+        centroid: Optional[List[int]] = None
+        contours_found = len(detections)
+        track_id = primary_kinematics.track_id
+        v = primary_kinematics.velocity_mps
+        a = primary_kinematics.acceleration_mps2
+        kinematics_details = primary_kinematics.details
+
+        if detections:
+            primary_det = max(
+                detections,
+                key=lambda d: ((d.confidence if d.confidence is not None else 0.0), d.attributes.get("area", 0.0))
+            )
+            centroid = [primary_det.center[0], primary_det.center[1]] if primary_det.center else None
+
+        t_total = time.perf_counter() - t_start
+        t_total_ms = round(t_total * 1000, 2)
+        fps_val = round(1000.0 / max(t_total_ms, 0.1), 1)
+
+        latency_breakdown = {
+            "decode_ms": round(t_decode * 1000, 2),
+            "detection_ms": round(t_detection * 1000, 2),
+            "tracking_ms": round(t_tracking * 1000, 2),
+            "total_ms": t_total_ms,
+            "fps": fps_val,
+        }
+
+        direction_deg = kinematics_details.get("direction_deg", 0.0)
+
+        physics = {
+            "x_meters": round(centroid[0] * effective_scale, 4) if centroid else None,
+            "y_meters": round(centroid[1] * effective_scale, 4) if centroid else None,
+            "dx_meters": kinematics_details.get("dx_meters", 0.0),
+            "dy_meters": kinematics_details.get("dy_meters", 0.0),
+            "velocity_mps": round(v, 4),
+            "velocity_x_mps": kinematics_details.get("velocity_x_mps", 0.0),
+            "velocity_y_mps": kinematics_details.get("velocity_y_mps", 0.0),
+            "acceleration_mps2": round(a, 4),
+            "acceleration_x_mps2": kinematics_details.get("acceleration_x_mps2", 0.0),
+            "acceleration_y_mps2": kinematics_details.get("acceleration_y_mps2", 0.0),
+            "direction_deg": direction_deg,
+            "motion_direction_deg": direction_deg,
+            "track_id": track_id,
+            "dt_seconds": kinematics_details.get("dt_seconds"),
+            "calibration_status": kinematics_details.get("calibration_status", "calibrated"),
+            "is_calibrated": kinematics_details.get("is_calibrated", True),
+            "is_estimated": True,
+            "units": CALIBRATION_UNITS,
+            "tracking_summary": tracking_summary,
+        }
+
+        # Model provenance metadata
+        is_yolo = (method == "yolo" and self.yolo_detector.is_available)
+        is_of = method in ("optical_flow", "opticalflow")
+
+        if is_yolo:
+            model_ver = "yolov8n-v8.1.0"
+            preprocess_ver = "letterbox_rgb_norm_v1"
+        elif is_of:
+            model_ver = "lucas_kanade_pyr_v1.0"
+            preprocess_ver = "bgr_to_gray_v1"
+        else:
+            model_ver = "hsv_blob_tracker_v2.0.0"
+            preprocess_ver = "bgr_to_hsv_v1"
+
+        calibration_info = {
+            "px_to_meters": effective_scale,
+            "scale_factor_m_per_px": effective_scale,
+            "unit_system": "SI",
+            "origin": [0.0, 0.0],
+            "units": CALIBRATION_UNITS,
+            "calibration_model": "coplanar_orthographic_scalar",
+            "assumptions": CALIBRATION_ASSUMPTIONS,
+            "limitations": CALIBRATION_LIMITATIONS,
+            "is_custom_calibrated": bool(self.calibration_data is not None),
+        }
+
+        prov_info = {
+            "source": "client_webcam_stream",
+            "raw_footage_stored": False,
+            "retention_policy": "ephemeral_discard",
+            "model_version": model_ver,
+            "configuration_version": "cv_config_v2.0",
+            "preprocessing_version": preprocess_ver,
+            "reproducible": True,
+            "tracking_method": method,
+            "active_detector": active_detector,
+            "is_degraded": is_degraded,
+            "latency_breakdown": latency_breakdown,
+        }
+
+        if method == "yolo" and not self.yolo_detector.is_available:
+            prov_info["yolo_status"] = self.yolo_status
+            prov_info["yolo_error"] = self.yolo_error
+            prov_info["degraded_reason"] = f"YOLO weights unavailable ({self.yolo_status}): {self.yolo_error}"
+        elif is_of:
+            prov_info["optical_flow_recovered"] = getattr(self.optical_flow_detector, "recovered", False)
+            prov_info["optical_flow_failures"] = getattr(self.optical_flow_detector, "failure_count", 0)
+
+        # Build schema result with full model provenance and latency breakdown
+        frame_result = FrameResult(
+            timestamp_ms=timestamp_ms,
+            detections=detections,
+            centroid=centroid,
+            contours_found=contours_found,
+            width=width,
+            height=height,
+            physics=physics,
+            model_name=active_model,
+            active_detector=active_detector,
+            is_degraded=is_degraded,
+            degraded_reason=degraded_reason,
+            detection_message=detection_message,
+            inference_latency_ms=t_total_ms,
+            latency_breakdown=latency_breakdown,
+            model_version=model_ver,
+            configuration_version="cv_config_v2.0",
+            preprocessing_version=preprocess_ver,
+            calibration=calibration_info,
+            inference_status=inference_status,
+            raw_footage_stored=False,
+            provenance=prov_info,
+        )
+
+        return frame_result.model_dump()
+
+    # Delegators for backwards compatibility with test fixtures
+    def _detect_yolo(self, img: np.ndarray, conf_thresh: float, iou_thresh: float) -> List[Detection]:
+        """Runs YOLOv8 model inference with NMS thresholding."""
+        return self.yolo_detector.detect(img, conf_thresh=conf_thresh, nms_thresh=iou_thresh)
+
+    def _track_optical_flow(self, img: np.ndarray, conf_thresh: float) -> Tuple[List[Detection], bool]:
+        """Executes Lucas–Kanade optical flow feature tracking."""
+        dets = self.optical_flow_detector.detect(img, conf_thresh=conf_thresh)
+        self.of_recovered = self.optical_flow_detector.recovered
+        self.of_failure_count = self.optical_flow_detector.failure_count
+        return dets, self.optical_flow_detector.recovered
+
+    def _detect_color(self, img: np.ndarray, color_target: str, conf_thresh: float) -> List[Detection]:
+        """Runs genuine HSV segmentation, morphology, and contour filtering."""
+        return self.color_detector.detect(img, color_target=color_target, conf_thresh=conf_thresh)
+
+    def _detect_optical_flow_features(self, gray: np.ndarray, mask: Optional[np.ndarray] = None) -> Optional[np.ndarray]:
+        """Extracts strong feature points for Lucas-Kanade tracking using Shi-Tomasi corner detection."""
+        return self.optical_flow_detector.detect_features(gray, mask=mask)
 
 
 # ==============================================================================
@@ -1296,6 +1797,8 @@ class CVTrackerSessionManager:
     - User, session, and camera isolation: User A's tracks cannot influence User B,
       and separate cameras (e.g. overhead vs side) maintain isolated trajectories.
     - Isolated reset: Resetting one camera or session does not reset or impact other users/sessions/cameras.
+    - Session camera calibration: Associates verified metric scale factors, reference lengths,
+      and perspective assumptions with specific camera sessions.
     - Multi-backend state synchronization: Persists and hydrates trajectory state
       via Redis shared cache (when available) with reliable cluster shared store fallback.
     - Thread-safe concurrency: Per-tracker async locks preventing concurrent frame races.
@@ -1304,6 +1807,7 @@ class CVTrackerSessionManager:
     def __init__(self, ttl_seconds: int = 900):
         self.ttl_seconds = ttl_seconds
         self._local_trackers: Dict[str, Dict[str, Any]] = {}
+        self._session_calibrations: Dict[str, Dict[str, Any]] = {}
         self._local_lock = threading.Lock()
         self._session_async_locks: Dict[str, asyncio.Lock] = {}
         # Multi-level index: user_id -> {session_id -> set of camera_ids}
@@ -1340,6 +1844,33 @@ class CVTrackerSessionManager:
                 self._session_async_locks[tracker_key] = asyncio.Lock()
             return self._session_async_locks[tracker_key]
 
+    def set_calibration(
+        self,
+        user_id: str,
+        session_id: Optional[str],
+        camera_id: Optional[str],
+        calibration_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Sets and persists session camera calibration for user/session/camera."""
+        tracker_key = self.make_tracker_key(user_id, session_id, camera_id)
+        with self._local_lock:
+            self._session_calibrations[tracker_key] = calibration_data
+            if tracker_key in self._local_trackers:
+                self._local_trackers[tracker_key]["tracker"].set_calibration_data(calibration_data)
+        logger.info(f"Persisted camera calibration for {tracker_key}: scale={calibration_data.get('scale_factor_m_per_px')} m/px")
+        return calibration_data
+
+    def get_calibration(
+        self,
+        user_id: str,
+        session_id: Optional[str],
+        camera_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        """Retrieves active session camera calibration if present."""
+        tracker_key = self.make_tracker_key(user_id, session_id, camera_id)
+        with self._local_lock:
+            return self._session_calibrations.get(tracker_key)
+
     async def get_tracker(
         self,
         user_id: str,
@@ -1349,6 +1880,7 @@ class CVTrackerSessionManager:
         """
         Retrieves or initializes the independent CVTracker instance for the given user, session, and camera.
         If shared state exists in cluster store or Redis, restores trajectory history across instances.
+        Hydrates session camera calibration if previously calibrated.
         """
         tracker_key = self.make_tracker_key(user_id, session_id, camera_id)
         uid, sess, cam = self.parse_tracker_key(tracker_key)
@@ -1362,9 +1894,6 @@ class CVTrackerSessionManager:
             if sess not in self._user_session_cameras[uid]:
                 self._user_session_cameras[uid][sess] = set()
             self._user_session_cameras[uid][sess].add(cam)
-            if uid not in self._user_sessions:
-                self._user_sessions[uid] = set()
-            self._user_sessions[uid].add(sess)
             if uid not in self._user_sessions:
                 self._user_sessions[uid] = set()
             self._user_sessions[uid].add(sess)
@@ -1387,6 +1916,9 @@ class CVTrackerSessionManager:
                     "session_id": sess,
                     "camera_id": cam,
                 }
+
+            if tracker_key in self._session_calibrations:
+                tracker.set_calibration_data(self._session_calibrations[tracker_key])
 
         # Multi-instance shared state retrieval for new session instance
         if is_new:
@@ -1440,19 +1972,22 @@ class CVTrackerSessionManager:
             if uid not in self._user_sessions:
                 self._user_sessions[uid] = set()
             self._user_sessions[uid].add(sess)
-            if uid not in self._user_sessions:
-                self._user_sessions[uid] = set()
-            self._user_sessions[uid].add(sess)
 
             if tracker_key in self._local_trackers:
                 entry = self._local_trackers[tracker_key]
                 entry["last_accessed"] = now
-                return entry["tracker"]
+                tr = entry["tracker"]
+                if tracker_key in self._session_calibrations:
+                    tr.set_calibration_data(self._session_calibrations[tracker_key])
+                return tr
 
             tracker = CVTracker(
                 tracker_key=tracker_key,
                 shared_yolo_model=get_shared_yolo_model(),
             )
+            if tracker_key in self._session_calibrations:
+                tracker.set_calibration_data(self._session_calibrations[tracker_key])
+
             self._local_trackers[tracker_key] = {
                 "tracker": tracker,
                 "created_at": now,
@@ -1568,6 +2103,7 @@ class CVTrackerSessionManager:
         # Clear local tracker instances and update index
         with self._local_lock:
             for k in keys_to_reset:
+                self._session_calibrations.pop(k, None)
                 if k in self._local_trackers:
                     self._local_trackers[k]["tracker"].reset_tracker()
                     del self._local_trackers[k]
@@ -1580,6 +2116,9 @@ class CVTrackerSessionManager:
                         if uid in self._user_sessions:
                             self._user_sessions[uid].discard(s)
             if all_sessions:
+                for k in list(self._session_calibrations.keys()):
+                    if k.startswith(f"{uid}:"):
+                        self._session_calibrations.pop(k, None)
                 self._user_session_cameras.pop(uid, None)
                 self._user_sessions.pop(uid, None)
 
@@ -1633,6 +2172,7 @@ class CVTrackerSessionManager:
                     keys_to_reset.add(self.make_tracker_key(uid, sess, cam))
 
             for k in keys_to_reset:
+                self._session_calibrations.pop(k, None)
                 cache_key = f"cv_track:{k}"
                 with _cv_cluster_shared_lock:
                     _cv_cluster_shared_store.pop(cache_key, None)
@@ -1648,6 +2188,9 @@ class CVTrackerSessionManager:
                         if uid in self._user_sessions:
                             self._user_sessions[uid].discard(s)
             if all_sessions:
+                for k in list(self._session_calibrations.keys()):
+                    if k.startswith(f"{uid}:"):
+                        self._session_calibrations.pop(k, None)
                 self._user_session_cameras.pop(uid, None)
                 self._user_sessions.pop(uid, None)
 
@@ -1664,6 +2207,7 @@ class CVTrackerSessionManager:
         with self._local_lock:
             for k, v in list(self._local_trackers.items()):
                 if v.get("last_accessed", 0) < cutoff:
+                    self._session_calibrations.pop(k, None)
                     v["tracker"].reset_tracker()
                     del self._local_trackers[k]
                     self._session_async_locks.pop(k, None)
@@ -1705,6 +2249,7 @@ class CVTrackerSessionManager:
             for v in self._local_trackers.values():
                 v["tracker"].reset_tracker()
             self._local_trackers.clear()
+            self._session_calibrations.clear()
             self._session_async_locks.clear()
             self._user_session_cameras.clear()
             self._user_sessions.clear()

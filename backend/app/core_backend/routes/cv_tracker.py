@@ -1,4 +1,5 @@
 import time
+import math
 import asyncio
 from datetime import datetime, timezone
 from enum import Enum
@@ -205,6 +206,51 @@ class CleanupSessionsResponse(BaseModel):
     ttl_seconds: int = Field(..., description="TTL configuration in seconds")
 
 
+class CalibrateRequest(BaseModel):
+    reference_distance_meters: float = Field(..., gt=0.0, description="Known physical reference distance in meters (e.g. 0.3 for a 30cm ruler)")
+    pixel_distance: Optional[float] = Field(None, gt=0.0, description="Measured reference distance in pixels")
+    reference_points: Optional[List[List[float]]] = Field(None, description="Optional endpoints [[x1, y1], [x2, y2]] defining reference distance")
+    reference_label: Optional[str] = Field("standard_reference", max_length=100, description="Description of reference object")
+    session_id: Optional[str] = Field(None, max_length=100, description="Session ID to calibrate")
+    camera_id: Optional[str] = Field("cam0", max_length=100, description="Camera feed identifier")
+
+    model_config = {
+        "extra": "forbid",
+    }
+
+    @model_validator(mode="after")
+    def validate_distances(self):
+        if self.pixel_distance is None and not self.reference_points:
+            raise ValueError("Must provide either 'pixel_distance' (float > 0) or 'reference_points' ([[x1, y1], [x2, y2]]).")
+        if self.reference_points:
+            if len(self.reference_points) != 2 or len(self.reference_points[0]) != 2 or len(self.reference_points[1]) != 2:
+                raise ValueError("reference_points must be a list of two 2D points [[x1, y1], [x2, y2]].")
+            p1, p2 = self.reference_points
+            calc_px = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+            if calc_px < 1.0:
+                raise ValueError(f"Reference endpoints are too close ({calc_px:.2f}px). Distance must be >= 1.0 pixel.")
+            self.pixel_distance = calc_px
+        return self
+
+
+class CalibrationResponse(BaseModel):
+    status: str = Field("success", description="Status of calibration operation")
+    user_id: str = Field(..., description="Authenticated user ID")
+    session_id: str = Field(..., description="Calibrated session identifier")
+    camera_id: str = Field(..., description="Calibrated camera identifier")
+    scale_factor_m_per_px: float = Field(..., description="Computed metric scale factor (meters per pixel)")
+    pixel_distance: float = Field(..., description="Reference distance in pixels")
+    reference_distance_meters: float = Field(..., description="Physical reference distance in meters")
+    reference_label: str = Field(..., description="Reference object description")
+    units: Dict[str, str] = Field(..., description="Measurement units mapping")
+    calibration_model: str = Field("coplanar_orthographic_scalar", description="Geometric calibration model")
+    calibrated_at: str = Field(..., description="ISO 8601 calibration timestamp")
+    assumptions: List[str] = Field(..., description="Planar coplanar optical assumptions")
+    limitations: str = Field(..., description="Perspective and 3D out-of-plane limitations")
+
+    model_config = {"extra": "allow"}
+
+
 class PhysicsTrackingMetrics(BaseModel):
     x_meters: Optional[float] = Field(None, description="Displacement along x axis in meters")
     y_meters: Optional[float] = Field(None, description="Displacement along y axis in meters")
@@ -216,6 +262,8 @@ class PhysicsTrackingMetrics(BaseModel):
     acceleration_mps2: Optional[float] = Field(0.0, description="Estimated acceleration magnitude in m/s^2")
     acceleration_x_mps2: Optional[float] = Field(0.0, description="Estimated acceleration along x axis in m/s^2")
     acceleration_y_mps2: Optional[float] = Field(0.0, description="Estimated acceleration along y axis in m/s^2")
+    direction_deg: Optional[float] = Field(0.0, description="Estimated direction angle in degrees [0, 360)")
+    motion_direction_deg: Optional[float] = Field(0.0, description="Estimated direction angle in degrees [0, 360)")
     track_id: Optional[int] = Field(None, description="Persistent tracking ID")
     dt_seconds: Optional[float] = Field(None, description="Frame interval in seconds")
     calibration_status: Optional[str] = Field("calibrated", description="Status of pixel-to-meter calibration")
@@ -240,6 +288,7 @@ class FrameProcessResponse(BaseModel):
     degraded_reason: Optional[str] = Field(None, description="Reason if running in degraded mode")
     detection_message: Optional[str] = Field(None, description="Human-readable detection status message")
     inference_latency_ms: float = Field(..., description="Inference execution duration in milliseconds")
+    latency_breakdown: Optional[Dict[str, float]] = Field(None, description="Detailed latency breakdown: decode, detection, tracking, total, fps")
     user_id: Optional[str] = Field(None, description="Authenticated user ID who submitted the frame")
     session_id: Optional[str] = Field(None, description="Session ID for the isolated tracker instance")
     camera_id: Optional[str] = Field(default="cam0", description="Camera ID for the isolated tracker instance")
@@ -360,6 +409,132 @@ async def cleanup_cv_sessions(
     return {
         "status": "success",
         **stats,
+    }
+
+
+@router.post("/calibrate", response_model=CalibrationResponse)
+async def calibrate_camera(
+    request: Request,
+    payload: CalibrateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Calibrates camera scale for user, session, and camera:
+    Computes scale = reference_distance_meters / pixel_distance.
+    Validates physical optical bounds (1e-6 <= scale <= 1.0 m/px).
+    Persists calibration to session manager and active tracker instance.
+    Documents planar coplanar assumptions and perspective limitations.
+    """
+    canonical_uid = str(current_user["id"])
+    resolved_session = (
+        payload.session_id
+        or request.headers.get("X-Session-ID")
+        or request.query_params.get("session_id")
+        or "default"
+    )
+    resolved_camera = (
+        payload.camera_id
+        or request.headers.get("X-Camera-ID")
+        or request.query_params.get("camera_id")
+        or "cam0"
+    )
+
+    px_dist = float(payload.pixel_distance)
+    ref_dist = float(payload.reference_distance_meters)
+    if px_dist <= 0 or ref_dist <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid calibration values: pixel distance and reference distance must be greater than zero.",
+        )
+
+    scale = ref_dist / px_dist
+    if scale < 1e-6 or scale > 1.0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Computed calibration scale ({scale:.6f} m/px) is outside valid physical optical bounds [1e-6, 1.0 m/px]. Verify reference measurements.",
+        )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    from app.machine_learning.cv_service import CALIBRATION_UNITS, CALIBRATION_ASSUMPTIONS, CALIBRATION_LIMITATIONS
+
+    calib_record = {
+        "scale_factor_m_per_px": round(scale, 8),
+        "pixel_distance": round(px_dist, 2),
+        "reference_distance_meters": ref_dist,
+        "reference_label": payload.reference_label or "standard_reference",
+        "units": CALIBRATION_UNITS,
+        "calibration_model": "coplanar_orthographic_scalar",
+        "calibrated_at": now_iso,
+        "assumptions": CALIBRATION_ASSUMPTIONS,
+        "limitations": CALIBRATION_LIMITATIONS,
+    }
+
+    cv_tracker_manager.set_calibration(
+        user_id=canonical_uid,
+        session_id=resolved_session,
+        camera_id=resolved_camera,
+        calibration_data=calib_record,
+    )
+
+    return {
+        "status": "success",
+        "user_id": canonical_uid,
+        "session_id": resolved_session,
+        "camera_id": resolved_camera,
+        **calib_record,
+    }
+
+
+@router.get("/calibration", response_model=CalibrationResponse)
+async def get_camera_calibration(
+    request: Request,
+    session_id: Optional[str] = Query(default=None),
+    camera_id: Optional[str] = Query(default=None),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Retrieves active camera calibration and perspective parameters for the user session and camera.
+    """
+    canonical_uid = str(current_user["id"])
+    resolved_session = (
+        session_id
+        or request.headers.get("X-Session-ID")
+        or request.query_params.get("session_id")
+        or "default"
+    )
+    resolved_camera = (
+        camera_id
+        or request.headers.get("X-Camera-ID")
+        or request.query_params.get("camera_id")
+        or "cam0"
+    )
+
+    calib = cv_tracker_manager.get_calibration(
+        user_id=canonical_uid,
+        session_id=resolved_session,
+        camera_id=resolved_camera,
+    )
+
+    if not calib:
+        from app.machine_learning.cv_service import CALIBRATION_UNITS, CALIBRATION_ASSUMPTIONS, CALIBRATION_LIMITATIONS
+        calib = {
+            "scale_factor_m_per_px": 0.005,
+            "pixel_distance": 100.0,
+            "reference_distance_meters": 0.5,
+            "reference_label": "default_uncalibrated",
+            "units": CALIBRATION_UNITS,
+            "calibration_model": "coplanar_orthographic_scalar",
+            "calibrated_at": datetime.now(timezone.utc).isoformat(),
+            "assumptions": CALIBRATION_ASSUMPTIONS,
+            "limitations": CALIBRATION_LIMITATIONS,
+        }
+
+    return {
+        "status": "success",
+        "user_id": canonical_uid,
+        "session_id": resolved_session,
+        "camera_id": resolved_camera,
+        **calib,
     }
 
 
@@ -572,7 +747,10 @@ async def process_frame_binary(
 async def cv_websocket_stream(websocket: WebSocket):
     """
     Bidirectional WebSocket streaming route for real-time video/webcam kinematics tracking.
-    Enables low-latency frame streaming without HTTP connection overhead.
+    Features:
+    - Bounded frame queue (maxsize=1) with stale frame dropping: guarantees real-time responsiveness
+      and eliminates frame lag accumulation if client produces frames faster than server can process.
+    - Low-latency inference without HTTP connection overhead.
     """
     await websocket.accept()
     session_id = websocket.query_params.get("session_id", "ws_stream")
@@ -580,41 +758,73 @@ async def cv_websocket_stream(websocket: WebSocket):
     user_id = "ws_student"
     tracker_key = cv_tracker_manager.make_tracker_key(user_id, session_id, camera_id)
 
+    frame_queue: asyncio.Queue = asyncio.Queue(maxsize=1)
+    stop_event = asyncio.Event()
+
+    async def sender_worker():
+        try:
+            while not stop_event.is_set():
+                data = await frame_queue.get()
+                try:
+                    encoded_img = data.get("image") or data.get("frame")
+                    if not encoded_img:
+                        await websocket.send_json({"error": "No image data provided"})
+                        continue
+
+                    tracking_method = data.get("tracking_method", "color")
+                    color_target = data.get("color_target", "red")
+                    px_to_meters = float(data.get("px_to_meters", 0.005))
+                    conf_thresh = float(data.get("confidence_threshold", 0.25))
+                    nms_thresh = float(data.get("nms_threshold", 0.45))
+
+                    session_lock = cv_tracker_manager.get_session_lock(tracker_key)
+                    async with session_lock:
+                        tracker = await cv_tracker_manager.get_tracker(user_id, session_id, camera_id)
+                        results = await asyncio.to_thread(
+                            tracker.process_frame,
+                            base64_img=encoded_img,
+                            tracking_method=tracking_method,
+                            color_target=color_target,
+                            px_to_meters=px_to_meters,
+                            confidence_threshold=conf_thresh,
+                            nms_threshold=nms_thresh,
+                        )
+                        await cv_tracker_manager.save_tracker_state(user_id, session_id, tracker, camera_id)
+
+                    results["session_id"] = session_id
+                    results["camera_id"] = camera_id
+                    await websocket.send_json(results)
+                finally:
+                    frame_queue.task_done()
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.warning(f"CV WebSocket worker error (session: {session_id}): {e}")
+
+    worker_task = asyncio.create_task(sender_worker())
+
     try:
         while True:
             data = await websocket.receive_json()
-            encoded_img = data.get("image") or data.get("frame")
-            if not encoded_img:
-                await websocket.send_json({"error": "No image data provided"})
-                continue
-
-            tracking_method = data.get("tracking_method", "color")
-            color_target = data.get("color_target", "red")
-            px_to_meters = float(data.get("px_to_meters", 0.005))
-            conf_thresh = float(data.get("confidence_threshold", 0.25))
-            nms_thresh = float(data.get("nms_threshold", 0.45))
-
-            session_lock = cv_tracker_manager.get_session_lock(tracker_key)
-            async with session_lock:
-                tracker = await cv_tracker_manager.get_tracker(user_id, session_id, camera_id)
-                results = await asyncio.to_thread(
-                    tracker.process_frame,
-                    base64_img=encoded_img,
-                    tracking_method=tracking_method,
-                    color_target=color_target,
-                    px_to_meters=px_to_meters,
-                    confidence_threshold=conf_thresh,
-                    nms_threshold=nms_thresh,
-                )
-                await cv_tracker_manager.save_tracker_state(user_id, session_id, tracker, camera_id)
-
-            results["session_id"] = session_id
-            results["camera_id"] = camera_id
-            await websocket.send_json(results)
+            # Bounded queue: drop stale backlog frame if previous frame is still processing
+            if frame_queue.full():
+                try:
+                    frame_queue.get_nowait()
+                    frame_queue.task_done()
+                except (asyncio.QueueEmpty, ValueError):
+                    pass
+            await frame_queue.put(data)
     except WebSocketDisconnect:
         logger.info(f"CV WebSocket client disconnected gracefully (session: {session_id})")
     except Exception as e:
         logger.warning(f"CV WebSocket error (session: {session_id}): {e}")
+    finally:
+        stop_event.set()
+        worker_task.cancel()
+        try:
+            await worker_task
+        except asyncio.CancelledError:
+            pass
         try:
             await websocket.close()
         except Exception:

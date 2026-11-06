@@ -22,6 +22,7 @@ interface Experiment {
   id: string;
   name: string;
   date: string;
+  experimentType?: string;
   metrics: {
     subject?: string;
     tier?: string;
@@ -108,6 +109,7 @@ export default function LabHistory() {
             id: item.id || `exp_${Math.random().toString(36).substr(2, 9)}`,
             name: item.name || typeName,
             date: dateStr,
+            experimentType: (item.experiment_type || item.type || 'pendulum').toLowerCase().trim(),
             metrics: {
               subject: 'Physics',
               tier: item.provenance?.computation_version || 'Production',
@@ -482,10 +484,18 @@ export default function LabHistory() {
                   </div>
 
                   {/* Right Block: Action Buttons & Expand Toggle */}
-                  <div className="lg:col-span-3 flex flex-col justify-center gap-3">
+                  <div className="lg:col-span-3 flex flex-col justify-center gap-2">
+                    <button
+                      onClick={() => navigate(`/dashboard/experiments/${exp.experimentType || 'pendulum'}`)}
+                      className="w-full py-2 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 hover:border-cyan-400 text-cyan-300 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Activity className="w-4 h-4 text-cyan-400" />
+                      Open in Workspace
+                    </button>
+
                     <button
                       onClick={() => handleDownloadPDF(exp)}
-                      className="w-full py-2.5 bg-white/5 border border-white/10 hover:border-cyan-500/40 hover:bg-cyan-500/5 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
+                      className="w-full py-2 bg-white/5 border border-white/10 hover:border-cyan-500/40 hover:bg-cyan-500/5 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
                     >
                       <Download className="w-4 h-4 text-cyan-400" />
                       Download Lab PDF
@@ -494,7 +504,7 @@ export default function LabHistory() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => toggleExpand(exp.id)}
-                        className="flex-1 py-2.5 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-400 text-cyan-400 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
+                        className="flex-1 py-2 bg-cyan-500/10 border border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-400 text-cyan-400 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
                       >
                         <Brain className="w-4 h-4" />
                         {isExpanded ? 'Hide Study Center' : 'Study Roundtable'}
@@ -503,7 +513,7 @@ export default function LabHistory() {
 
                       <button
                         onClick={() => handleDelete(exp.id)}
-                        className="px-3 py-2.5 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 hover:border-red-400 rounded-xl text-red-400 transition-all flex items-center justify-center"
+                        className="px-3 py-2 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 hover:border-red-400 rounded-xl text-red-400 transition-all flex items-center justify-center"
                         title="Delete Run"
                       >
                         <Trash2 className="w-4 h-4" />

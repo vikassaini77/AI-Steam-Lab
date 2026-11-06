@@ -114,9 +114,11 @@ class TestColorTracking:
 
         assert len(detections) >= 1, f"Failed to detect {color_name} object"
         det = detections[0]
-        assert det.class_name == f"{color_name}_object"
-        assert 0.0 <= det.confidence <= 1.0
-        assert det.confidence > 0.5
+        # Phase 3: color segmentation must never invent semantic classes or model confidence
+        assert det.class_name is None, "Color segmentation must not return invented semantic class"
+        assert det.confidence is None, "Color segmentation must not return invented model confidence"
+        assert det.attributes.get("color_target") == color_name
+        assert det.attributes.get("solidity") is not None
 
         # Centroid check
         x1, y1, x2, y2 = det.bbox_xyxy
@@ -132,13 +134,17 @@ class TestColorTracking:
         img_low = create_solid_color_circle_frame((0, 0, 255), cx=200, cy=200, radius=30)
         dets_low = tracker._detect_color(img_low, color_target="red", conf_thresh=0.2)
         assert len(dets_low) == 1
-        assert dets_low[0].class_name == "red_object"
+        assert dets_low[0].class_name is None
+        assert dets_low[0].confidence is None
+        assert dets_low[0].attributes.get("color_target") == "red"
 
         # Upper red: BGR (50, 0, 200) -> Hue ~ 172
         img_high = create_solid_color_circle_frame((50, 0, 200), cx=400, cy=200, radius=30)
         dets_high = tracker._detect_color(img_high, color_target="red", conf_thresh=0.2)
         assert len(dets_high) == 1
-        assert dets_high[0].class_name == "red_object"
+        assert dets_high[0].class_name is None
+        assert dets_high[0].confidence is None
+        assert dets_high[0].attributes.get("color_target") == "red"
 
     def test_morphology_opening_removes_noise_specks(self):
         """Morphological opening (erode followed by dilate) removes tiny speckle noise."""
@@ -167,8 +173,10 @@ class TestColorTracking:
 
         detections = tracker._detect_color(img, color_target="red", conf_thresh=0.2)
         assert len(detections) == 1
-        # The closing fills the internal hole, preserving high confidence (> 0.6)
-        assert detections[0].confidence > 0.6
+        # The closing fills the internal hole, preserving high solidity and quality without invented model confidence
+        assert detections[0].confidence is None
+        assert detections[0].attributes["solidity"] > 0.75
+        assert detections[0].attributes["blob_quality"] > 0.6
 
     def test_contour_filter_min_area(self):
         """Objects with area < 50 pixels are discarded by contour filtering."""
@@ -480,7 +488,8 @@ class TestCVRouteIntegration:
         assert data["inference_status"] == "completed"
         assert data["model_name"] == "color_red"
         assert len(data["detections"]) == 1
-        assert data["detections"][0]["class_name"] == "red_object"
+        assert data["detections"][0]["class_name"] is None
+        assert data["detections"][0]["attributes"]["color_target"] == "red"
         assert data["centroid"] is not None
         assert data["physics"]["x_meters"] is not None
         assert data["provenance"]["tracking_method"] == "color"

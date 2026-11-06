@@ -37,8 +37,135 @@ from app.core_backend.core.dependencies import (
 from app.core_backend.core.limiter import limiter
 from app.machine_learning.physics_engine import PhysicsEngine
 from app.logger import logger
+from app.experiments.registry import experiment_registry
 
 router = APIRouter()
+
+
+class ExperimentCalculateRequest(BaseModel):
+    parameters: Dict[str, Any] = Field(default_factory=dict, description="Input simulation parameters")
+
+
+class ExperimentMeasureRequest(BaseModel):
+    parameters: Dict[str, Any] = Field(default_factory=dict, description="Input parameters")
+    observations: List[Dict[str, Any]] = Field(default_factory=list, description="Raw physical observations or frames")
+    calibration: Optional[Dict[str, Any]] = Field(None, description="Camera or scale calibration parameters")
+    measurement_mode: Optional[str] = Field("manual", description="'manual' or 'cv_derived'")
+
+
+class ExperimentExplainRequest(BaseModel):
+    parameters: Dict[str, Any] = Field(..., description="Experiment parameters used")
+    results: Dict[str, Any] = Field(..., description="Observed and theoretical results")
+    student_question: Optional[str] = Field(None, description="Optional question from student")
+
+
+@router.get("/metadata")
+def list_experiments_metadata():
+    """Returns curriculum metadata, materials, and learning objectives for all experiments."""
+    return {"experiments": experiment_registry.list_all()}
+
+
+@router.get("/metadata/{exp_id}")
+def get_experiment_metadata(exp_id: str):
+    """Returns detailed metadata, governing equations, instructions, and assumptions for an experiment."""
+    exp = experiment_registry.get(exp_id)
+    if not exp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Experiment '{exp_id}' not found. Supported experiments: {', '.join(experiment_registry.supported_ids())}",
+        )
+    return {"metadata": exp.metadata.model_dump()}
+
+
+@router.post("/calculate/{exp_id}")
+def calculate_theoretical_experiment(exp_id: str, payload: ExperimentCalculateRequest):
+    """
+    Computes authoritative theoretical physics results, small-angle metrics,
+    and theoretical time-series curves for an experiment.
+    """
+    exp = experiment_registry.get(exp_id)
+    if not exp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Experiment '{exp_id}' not found. Supported experiments: {', '.join(experiment_registry.supported_ids())}",
+        )
+    try:
+        res = exp.calculate_theoretical(payload.parameters)
+        return res.model_dump()
+    except ValidationError as ve:
+        errors = ve.errors()
+        first_err = errors[0]["msg"] if errors else "Invalid parameters"
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Parameter validation failed: {first_err}",
+        )
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(ve),
+        )
+
+
+@router.post("/measure/{exp_id}")
+def process_experiment_measurements(exp_id: str, payload: ExperimentMeasureRequest):
+    """
+    Processes manual stopwatch observations or CV-derived frame coordinates,
+    extracts oscillation cycles, computes standard error and percentage error,
+    and returns comparison against theoretical curves.
+    """
+    exp = experiment_registry.get(exp_id)
+    if not exp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Experiment '{exp_id}' not found. Supported experiments: {', '.join(experiment_registry.supported_ids())}",
+        )
+    try:
+        res = exp.process_measurements(
+            parameters=payload.parameters,
+            raw_observations=payload.observations,
+            calibration=payload.calibration,
+        )
+        return res.model_dump()
+    except ValidationError as ve:
+        errors = ve.errors()
+        first_err = errors[0]["msg"] if errors else "Invalid parameters"
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Measurement processing validation failed: {first_err}",
+        )
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(ve),
+        )
+
+
+@router.post("/explain/{exp_id}")
+def explain_experiment_results(exp_id: str, payload: ExperimentExplainRequest):
+    """
+    Generates contextual AI tutor explanations analyzing discrepancies,
+    parameter sensitivity, and physical conclusions without fabricated numbers.
+    """
+    exp = experiment_registry.get(exp_id)
+    if not exp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Experiment '{exp_id}' not found. Supported experiments: {', '.join(experiment_registry.supported_ids())}",
+        )
+    try:
+        explanation = exp.explain_results(
+            parameters=payload.parameters,
+            results=payload.results,
+            student_question=payload.student_question,
+        )
+        return explanation
+    except Exception as e:
+        logger.error(f"Error generating experiment explanation: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate experiment explanation: {str(e)}",
+        )
+
 
 
 def __getattr__(name: str):
@@ -203,6 +330,18 @@ def analyze_experiment(exp_type: str, data: Dict[str, Any]):
                 "phase": schema.phase,
             }
             validated_inputs = schema.model_dump()
+
+        elif exp_type_enum == ExperimentType.PROJECTILE_MOTION:
+            exp_obj = experiment_registry.get("projectile_motion")
+            theo_res = exp_obj.calculate_theoretical(data)
+            computed = theo_res.computed_metrics
+            validated_inputs = theo_res.parameters
+
+        elif exp_type_enum == ExperimentType.CIRCULAR_MOTION:
+            exp_obj = experiment_registry.get("circular_motion")
+            theo_res = exp_obj.calculate_theoretical(data)
+            computed = theo_res.computed_metrics
+            validated_inputs = theo_res.parameters
 
     except ValidationError as e:
         errors = e.errors()
@@ -393,6 +532,18 @@ def save_experiment(
                 "angular_frequency": schema.angular_frequency,
             }
             validated_inputs = schema.model_dump()
+
+        elif exp_type_enum == ExperimentType.PROJECTILE_MOTION:
+            exp_obj = experiment_registry.get("projectile_motion")
+            theo_res = exp_obj.calculate_theoretical(raw_params)
+            server_results = theo_res.computed_metrics
+            validated_inputs = theo_res.parameters
+
+        elif exp_type_enum == ExperimentType.CIRCULAR_MOTION:
+            exp_obj = experiment_registry.get("circular_motion")
+            theo_res = exp_obj.calculate_theoretical(raw_params)
+            server_results = theo_res.computed_metrics
+            validated_inputs = theo_res.parameters
 
     except ValidationError as e:
         errors = e.errors()
