@@ -60,9 +60,15 @@ def get_user_or_ip_identifier(request: Request) -> str:
 
 # Configure SlowAPI limiter with Redis if available, else memory fallback
 def create_limiter() -> Limiter:
+    if os.getenv("TESTING") == "true" or os.getenv("ENVIRONMENT") == "test":
+        return Limiter(key_func=get_user_or_ip_identifier, storage_uri="memory://")
+
     redis_url = os.getenv("REDIS_URL")
     if redis_url and (redis_url.startswith("redis://") or redis_url.startswith("rediss://")):
         try:
+            import redis
+            test_conn = redis.from_url(redis_url, socket_connect_timeout=0.2, socket_timeout=0.2)
+            test_conn.ping()
             return Limiter(
                 key_func=get_user_or_ip_identifier,
                 storage_uri=redis_url,
@@ -71,7 +77,7 @@ def create_limiter() -> Limiter:
         except Exception as e:
             logger.warning(f"Distributed Redis rate limiter failed to initialize: {e}. Falling back to in-memory.")
 
-    return Limiter(key_func=get_user_or_ip_identifier)
+    return Limiter(key_func=get_user_or_ip_identifier, storage_uri="memory://")
 
 
 limiter = create_limiter()

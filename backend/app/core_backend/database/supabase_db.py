@@ -15,7 +15,7 @@ from app.core_backend.database.pgvector_db import (
     _require_valid_user_id,
 )
 
-db_lock = threading.Lock()
+db_lock = threading.RLock()
 
 
 class DatabaseManager:
