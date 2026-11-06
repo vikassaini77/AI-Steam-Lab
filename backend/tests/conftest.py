@@ -46,7 +46,21 @@ def reset_global_observability_alerts():
         reset_embedding_circuit_breaker()
     except Exception:
         pass
+    try:
+        import sys
+        mod = sys.modules.get("app.core_backend.routes.experiments")
+        if mod and hasattr(mod, "db"):
+            delattr(mod, "db")
+    except Exception:
+        pass
     yield
+    try:
+        import sys
+        mod = sys.modules.get("app.core_backend.routes.experiments")
+        if mod and hasattr(mod, "db"):
+            delattr(mod, "db")
+    except Exception:
+        pass
     try:
         from app.core_backend.core.observability import alert_manager
         alert_manager.clear()

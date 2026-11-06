@@ -34,6 +34,10 @@ def setup_auth_override():
     yield
     app.dependency_overrides.clear()
     reset_shared_dependencies()
+    try:
+        delattr(exp_module, "db")
+    except Exception:
+        pass
 
 
 # ==============================================================================

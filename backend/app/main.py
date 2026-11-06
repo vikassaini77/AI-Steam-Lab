@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response, Depends, APIRouter, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import os
@@ -142,17 +143,18 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     """Standardized validation error response preserving detail contract and adding Request-ID."""
     req_id = getattr(request.state, "request_id", None)
+    encoded_errors = jsonable_encoder(exc.errors())
     logger.warning(
         "request_validation_failed",
         path=request.url.path,
-        errors=exc.errors(),
+        errors=encoded_errors,
         request_id=req_id,
     )
     headers = {"X-Request-ID": req_id} if req_id else {}
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
-            "detail": exc.errors(),
+            "detail": encoded_errors,
             "status": "error",
             "message": "Validation failed for request parameters or payload.",
             "request_id": req_id,

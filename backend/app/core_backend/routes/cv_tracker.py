@@ -662,7 +662,7 @@ async def process_frame_binary(
     request: Request,
     session_id: Optional[str] = Query(default=None),
     camera_id: Optional[str] = Query(default=None),
-    current_user: dict = Depends(get_optional_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Direct binary image upload endpoint with user, session, and camera tracking isolation.
