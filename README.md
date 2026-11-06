@@ -38,18 +38,34 @@
 ## 📑 Table of Contents
 
 1. [Implementation Status Matrix](#-1-implementation-status-matrix)
-2. [System Architecture](#-2-system-architecture)
-3. [Technology Stack](#-3-technology-stack)
-4. [Endpoint Authentication & Authorization Matrix](#-4-endpoint-authentication--authorization-matrix)
-5. [Core Subsystems & Technical Details](#-5-core-subsystems--technical-details)
-6. [Performance Benchmarks](#-6-performance-benchmarks)
-7. [Enterprise Security Architecture](#-7-enterprise-security-architecture)
-8. [Observability & Monitoring](#-8-observability--monitoring)
-9. [Tested Local Setup & Deployment Guide](#-9-tested-local-setup--deployment-guide)
-10. [Feature Verification & Test Mapping](#-10-feature-verification--test-mapping)
-11. [CI/CD & Code Quality Gateways](#-11-cicd--code-quality-gateways)
-12. [Troubleshooting & FAQ](#-12-troubleshooting--faq)
-13. [License & Acknowledgements](#-13-license--acknowledgements)
+2. [Production Documentation Index](#-2-production-documentation-index)
+3. [System Architecture](#-3-system-architecture)
+4. [Technology Stack](#-4-technology-stack)
+5. [Endpoint Authentication & Authorization Matrix](#-5-endpoint-authentication--authorization-matrix)
+6. [Core Subsystems & Technical Details](#-6-core-subsystems--technical-details)
+7. [Performance Benchmarks](#-7-performance-benchmarks)
+8. [Enterprise Security Architecture](#-8-enterprise-security-architecture)
+9. [Observability & Monitoring](#-9-observability--monitoring)
+10. [Tested Local Setup & Deployment Guide](#-10-tested-local-setup--deployment-guide)
+11. [Feature Verification & Test Mapping](#-11-feature-verification--test-mapping)
+12. [CI/CD & Code Quality Gateways](#-12-cicd--code-quality-gateways)
+13. [Troubleshooting & FAQ](#-13-troubleshooting--faq)
+14. [License & Acknowledgements](#-14-license--acknowledgements)
+
+---
+
+## 📚 2. Production Documentation Index
+
+Comprehensive, modular documentation for production operations and system components:
+
+- 🏛️ **[Production Architecture Specification](docs/ARCHITECTURE.md)**: Deep dive into the modular monolith design, layer boundaries, data flow, and failure recovery.
+- 🚀 **[Production Deployment Guide](docs/DEPLOYMENT.md)**: Render blueprint setup, Docker Compose deployment, bare-metal Linux units, and zero-downtime rollouts.
+- ⚙️ **[Environment Variable Reference](docs/ENVIRONMENT_VARIABLES.md)**: Exhaustive variable dictionary, validation policies, and secret management.
+- 📡 **[API Specification & Contracts](docs/API_DOCUMENTATION.md)**: REST endpoints, Server-Sent Events (SSE) streaming protocols, and WebSocket tracking feeds.
+- 👁️ **[Computer Vision Setup & Kinematics Guide](docs/CV_SETUP_GUIDE.md)**: Supported detection modes (HSV, Optical Flow, YOLOv8), webcam setup, calibration, and 512MB RAM recommendations.
+- 🔬 **[Scientific Experiment Engine Documentation](docs/EXPERIMENT_DOCUMENTATION.md)**: Analytical models, validation boundaries, and error analysis for all 6 core experiments.
+- 🧪 **[Quality Assurance & Testing Guide](docs/TESTING_GUIDE.md)**: Test suite taxonomy, commands, and verification benchmarks across 600+ tests.
+- 📋 **[Production Release Checklist & Rollback](docs/RELEASE_CHECKLIST.md)**: Readiness gates, incident runbooks, and rollback procedures.
 
 ---
 
