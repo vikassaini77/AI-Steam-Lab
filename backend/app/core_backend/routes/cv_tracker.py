@@ -163,6 +163,15 @@ class CVReadinessResponse(BaseModel):
     yolo_error: Optional[str] = Field(default=None, description="Diagnostic error if weights failed to load")
     classes_count: int = Field(..., ge=0, description="Detectable classes count")
     supported_methods: List[str] = Field(..., description="List of supported tracking methods")
+    active_detector: Optional[str] = Field(default=None, description="Class name of active detector")
+    model_version: Optional[str] = Field(default=None, description="Model semantic version")
+    model_path: Optional[str] = Field(default=None, description="Path to model weights or built-in")
+    device: Optional[str] = Field(default="cpu", description="Hardware acceleration device: cuda or cpu")
+    memory_usage_mb: Optional[float] = Field(default=0.0, description="Process memory consumption in MB")
+    inference_errors: Optional[int] = Field(default=0, description="Count of inference errors recorded")
+    model_metadata: Optional[Dict[str, Any]] = Field(default=None, description="Detailed model lifecycle metadata")
+
+    model_config = {"extra": "allow"}
 
 
 class ResetTrackerRequest(BaseModel):

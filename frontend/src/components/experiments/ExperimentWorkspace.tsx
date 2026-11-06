@@ -75,6 +75,7 @@ interface ErrorAnalysis {
 
 interface TheoreticalData {
   primary_theoretical_value?: number;
+  theoretical_series?: TimeSeriesPoint[];
   time_series?: TimeSeriesPoint[];
   [key: string]: unknown;
 }
@@ -82,6 +83,11 @@ interface TheoreticalData {
 interface TutorExplanation {
   explanation?: string;
   phenomenon_demonstrated?: string;
+  what_it_demonstrates?: string;
+  why_observed_differs_from_theory?: string;
+  parameter_sensitivity?: string;
+  graph_interpretation?: string;
+  student_question_answer?: string;
   discrepancy_reasons?: string[];
   sources_of_error?: string[];
   next_investigations?: string[];

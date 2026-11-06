@@ -57,6 +57,7 @@ celery_app.conf.update(
     task_routes={
         "app.worker.process_heavy_cv_frame": {"queue": "cv_tasks"},
         "app.worker.generate_ai_tutor_response": {"queue": "ai_tasks"},
+        "app.worker.compile_experiment_report": {"queue": "default"},
         "app.worker.check_worker_db_connectivity": {"queue": "default"},
     },
 )
@@ -150,6 +151,18 @@ class AITaskPayload(BaseModel):
         if not self.prompt or not self.prompt.strip():
             raise ValueError("Prompt must be a non-empty string.")
         return self
+
+
+class ReportTaskPayload(BaseModel):
+    experiment_name: str = Field(..., max_length=200, description="Name or title of experiment")
+    student_name: Optional[str] = Field("NeuroLab Scholar", max_length=100)
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+    ai_summary: Optional[str] = Field("")
+    format: Optional[str] = Field("pdf", max_length=10)
+    user_id: Optional[str] = Field("default_user", max_length=128)
+    idempotency_key: Optional[str] = Field(None, max_length=128)
+
+    model_config = {"extra": "allow"}
 
 
 # ==============================================================================
@@ -730,6 +743,75 @@ def generate_ai_tutor_response(self, prompt: Union[str, dict], **kwargs) -> Dict
         record_task_result(task_id, state="RETRY", error=str(transient_err))
         if hasattr(self, "retry"):
             raise self.retry(exc=transient_err, countdown=countdown, max_retries=3)
+        raise
+
+
+@celery_app.task(
+    bind=True,
+    max_retries=2,
+    time_limit=30,
+    soft_time_limit=25,
+    name="app.worker.compile_experiment_report",
+)
+def compile_experiment_report(self, report_data: dict) -> Dict[str, Any]:
+    """
+    Offloads heavy scientific PDF/HTML report compilation.
+    - Idempotent via idempotency_key.
+    - Explicit states (STARTED, PROCESSING, SUCCESS, FAILURE).
+    - Returns filename and downloadable URL.
+    """
+    task_id = getattr(self.request, "id", None) or f"rep_{uuid.uuid4().hex[:12]}"
+    try:
+        if not isinstance(report_data, dict):
+            raise ValueError("report_data must be a dictionary")
+        payload = ReportTaskPayload(**report_data)
+    except (ValidationError, ValueError) as val_err:
+        err_msg = f"Report task payload validation failed: {val_err}"
+        logger.warning(f"[{task_id}] {err_msg}")
+        record_task_result(task_id, state="FAILURE", error=err_msg)
+        raise ValueError(err_msg)
+
+    if payload.idempotency_key:
+        cached_res = get_task_idempotency(payload.idempotency_key)
+        if cached_res:
+            return cached_res
+
+    update_task_state(self, state="STARTED", meta={"step": "compiling_report", "task_id": task_id, "progress": 20}, task_id=task_id, user_id=payload.user_id)
+
+    try:
+        from app.core_backend.core.report_generator import build_lab_report
+        filename, download_url, fmt = build_lab_report(
+            experiment_name=payload.experiment_name,
+            student_name=payload.student_name or "NeuroLab Scholar",
+            metrics=payload.metrics,
+            ai_summary=payload.ai_summary or "",
+            preferred_format=payload.format or "pdf",
+        )
+        result_payload = {
+            "status": "compiled",
+            "task_id": task_id,
+            "filename": filename,
+            "download_url": download_url,
+            "format": fmt,
+            "experiment_name": payload.experiment_name,
+            "timestamp": int(time.time()),
+        }
+        if payload.idempotency_key:
+            set_task_idempotency(payload.idempotency_key, result_payload, ttl_seconds=3600)
+
+        record_task_result(task_id, state="SUCCESS", result=result_payload, user_id=payload.user_id)
+        logger.info(f"[{task_id}] Experiment report compiled successfully: {filename}")
+        return result_payload
+
+    except SoftTimeLimitExceeded as timeout_err:
+        err_msg = f"Report compilation exceeded soft time limit (25s): {timeout_err}"
+        logger.warning(f"[{task_id}] {err_msg}")
+        record_task_result(task_id, state="FAILURE", error=err_msg)
+        raise
+
+    except Exception as e:
+        logger.error(f"[{task_id}] Error compiling report: {e}")
+        record_task_result(task_id, state="FAILURE", error=str(e))
         raise
 
 

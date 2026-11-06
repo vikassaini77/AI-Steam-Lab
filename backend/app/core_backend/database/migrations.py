@@ -9,7 +9,7 @@ from typing import List, Tuple, Optional, Dict, Any
 import psycopg2
 from app.logger import logger
 
-REQUIRED_SCHEMA_VERSION = 5
+REQUIRED_SCHEMA_VERSION = 6
 
 MIGRATION_V1_SQL = """
 -- 1. Enable pgvector extension where supported
@@ -179,6 +179,26 @@ CREATE INDEX IF NOT EXISTS idx_user_achievements_achievement_id ON user_achievem
 CREATE INDEX IF NOT EXISTS idx_user_achievements_awarded_at ON user_achievements(awarded_at);
 """
 
+MIGRATION_V6_SQL = """
+-- Dedicated generated reports table for student download tracking and audit
+CREATE TABLE IF NOT EXISTS generated_reports (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    experiment_name TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    download_url TEXT NOT NULL,
+    format TEXT DEFAULT 'pdf',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_generated_reports_user_id ON generated_reports(user_id);
+CREATE INDEX IF NOT EXISTS idx_generated_reports_created_at ON generated_reports(created_at);
+
+-- Composite performance indexes for experiment history queries
+CREATE INDEX IF NOT EXISTS idx_experiments_user_type ON experiments(user_id, experiment_type);
+CREATE INDEX IF NOT EXISTS idx_experiments_created_at ON experiments(created_at);
+"""
+
 # Ordered registry of versioned migrations
 MIGRATIONS: List[Tuple[int, str, str]] = [
     (1, "001_initial_schema", MIGRATION_V1_SQL),
@@ -186,10 +206,12 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
     (3, "003_hybrid_search_indexes", MIGRATION_V3_SQL),
     (4, "004_auditable_xp_ledger", MIGRATION_V4_SQL),
     (5, "005_user_achievements_and_badges", MIGRATION_V5_SQL),
+    (6, "006_reports_and_performance_indexes", MIGRATION_V6_SQL),
 ]
 
 # Rollback SQL definitions for each migration version
 MIGRATION_ROLLBACK_SQL: Dict[int, str] = {
+    6: "DROP TABLE IF EXISTS generated_reports CASCADE; DROP INDEX IF EXISTS idx_experiments_user_type; DROP INDEX IF EXISTS idx_experiments_created_at;",
     5: "DROP TABLE IF EXISTS user_achievements CASCADE;",
     4: "DROP TABLE IF EXISTS xp_ledger CASCADE;",
     3: "DROP INDEX IF EXISTS idx_memories_embedding_cosine; DROP INDEX IF EXISTS idx_memories_fts;",

@@ -17,10 +17,12 @@ from app.worker import (
     get_celery_task_status,
     process_heavy_cv_frame,
     generate_ai_tutor_response,
+    compile_experiment_report,
     record_task_owner,
     TaskOwnershipError,
     CVTaskPayload,
     AITaskPayload,
+    ReportTaskPayload,
     TaskBrokerUnavailableError,
 )
 from app.logger import logger
@@ -152,6 +154,48 @@ def dispatch_tutor_generate_task(
 
     # If executed synchronously inline
     task_id = task_res.get("task_id", "sync_ai")
+    record_task_owner(task_id, canonical_uid)
+    return {
+        "task_id": task_id,
+        "status": "completed",
+        "state": "SUCCESS",
+        "result": task_res,
+    }
+
+
+@router.post("/reports/generate-async", response_model=TaskDispatchResponse)
+@limiter.limit("30/minute")
+def dispatch_report_generation_task(
+    request: Request,
+    payload: ReportTaskPayload,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Dispatches a heavy PDF/HTML lab report generation task to Celery worker queue.
+    Server-derives authenticated user_id from token, ensuring ownership tracking.
+    """
+    canonical_uid = str(current_user["id"])
+    payload_dict = payload.model_dump()
+    payload_dict["user_id"] = canonical_uid
+
+    try:
+        task_res = dispatch_async_task(compile_experiment_report, payload_dict)
+    except TaskBrokerUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+
+    if hasattr(task_res, "id"):
+        record_task_owner(task_res.id, canonical_uid)
+        return {
+            "task_id": task_res.id,
+            "status": "queued",
+            "state": "PENDING",
+            "result": None,
+        }
+
+    task_id = task_res.get("task_id", "sync_report")
     record_task_owner(task_id, canonical_uid)
     return {
         "task_id": task_id,

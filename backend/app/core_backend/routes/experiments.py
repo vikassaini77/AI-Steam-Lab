@@ -4,7 +4,9 @@ import time
 import uuid
 from typing import Optional, Dict, Any, Union, List
 from fastapi import APIRouter, Request, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, ValidationError
+from app.core_backend.core.report_generator import build_lab_report, REPORTS_DIR, SAFE_FILENAME_REGEX
 from app.core_backend.models.schema import (
     ExperimentData,
     ExperimentType,
@@ -850,3 +852,67 @@ def reproduce_experiment_from_payload(
     """
     report = reproduce_experiment_metrics(record)
     return report
+
+
+class GenerateReportRequest(BaseModel):
+    experiment_name: str = Field(..., max_length=200, description="Name or title of the experiment")
+    student_name: Optional[str] = Field("NeuroLab Scholar", max_length=100, description="Student name")
+    metrics: Dict[str, Any] = Field(default_factory=dict, description="Experimental metrics dictionary")
+    ai_summary: Optional[str] = Field("", description="AI tutor summary or conclusion")
+    format: Optional[str] = Field("pdf", description="Requested format: 'pdf' or 'html'")
+
+
+class GenerateReportResponse(BaseModel):
+    status: str = Field("success", description="Status of generation")
+    filename: str = Field(..., description="Report filename")
+    download_url: str = Field(..., description="Relative download URL")
+    format: str = Field(..., description="Report format: pdf or html")
+
+
+@router.post("/generate-report", response_model=GenerateReportResponse)
+@limiter.limit("20/minute")
+def generate_experiment_report(
+    request: Request,
+    payload: GenerateReportRequest,
+):
+    """
+    Compiles an authoritative, verified scientific lab report in PDF or HTML.
+    Returns direct download URL and filename matching frontend contracts.
+    """
+    filename, download_url, fmt = build_lab_report(
+        experiment_name=payload.experiment_name,
+        student_name=payload.student_name or "NeuroLab Scholar",
+        metrics=payload.metrics,
+        ai_summary=payload.ai_summary or "",
+        preferred_format=payload.format or "pdf",
+    )
+    return {
+        "status": "success",
+        "filename": filename,
+        "download_url": download_url,
+        "format": fmt,
+    }
+
+
+@router.get("/reports/{filename}")
+def download_experiment_report(filename: str):
+    """
+    Serves a generated lab report with strict path-traversal protection.
+    """
+    if not SAFE_FILENAME_REGEX.match(filename) or ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid filename: Path traversal characters are forbidden.",
+        )
+    file_path = os.path.join(REPORTS_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Report file not found or has expired.",
+        )
+    media_type = "application/pdf" if filename.endswith(".pdf") else "text/html"
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type=media_type,
+    )

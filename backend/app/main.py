@@ -1,5 +1,8 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Response, Depends, APIRouter
+from fastapi import FastAPI, Request, Response, Depends, APIRouter, status
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
@@ -133,6 +136,71 @@ logger.info("Prometheus metrics instrumented at /metrics (access protected)")
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Standardized validation error response preserving detail contract and adding Request-ID."""
+    req_id = getattr(request.state, "request_id", None)
+    logger.warning(
+        "request_validation_failed",
+        path=request.url.path,
+        errors=exc.errors(),
+        request_id=req_id,
+    )
+    headers = {"X-Request-ID": req_id} if req_id else {}
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "detail": exc.errors(),
+            "status": "error",
+            "message": "Validation failed for request parameters or payload.",
+            "request_id": req_id,
+        },
+        headers=headers,
+    )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Standardized HTTP error response preserving detail contract and adding Request-ID."""
+    req_id = getattr(request.state, "request_id", None)
+    headers = getattr(exc, "headers", None) or {}
+    if req_id and "X-Request-ID" not in headers:
+        headers["X-Request-ID"] = req_id
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "status": "error",
+            "request_id": req_id,
+        },
+        headers=headers,
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Catches all unhandled exceptions, logs structured details, and returns safe 500 without leaking stack traces."""
+    req_id = getattr(request.state, "request_id", None)
+    logger.exception(
+        "unhandled_server_exception",
+        method=request.method,
+        path=request.url.path,
+        error=str(exc),
+        error_type=type(exc).__name__,
+        request_id=req_id,
+    )
+    headers = {"X-Request-ID": req_id} if req_id else {}
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "detail": "An internal server error occurred.",
+            "status": "error",
+            "request_id": req_id,
+        },
+        headers=headers,
+    )
 
 # Apply comprehensive browser and network security headers
 app.add_middleware(SecurityHeadersMiddleware)

@@ -14,10 +14,14 @@ services:
         value: production
       - key: IS_CONTAINER
         value: "true"
+      - key: ASYNC_TASKS_ENABLED
+        value: "true"
       - key: PORT
         value: "8000"
       - key: ENABLE_YOLO
         value: "false"
+      - key: ASYNC_TASKS_ENABLED
+        value: "true"
       - key: GEMINI_API_KEY
         sync: false
       - key: SUPABASE_URL
@@ -55,6 +59,8 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: IS_CONTAINER
+        value: "true"
+      - key: ASYNC_TASKS_ENABLED
         value: "true"
       - key: GEMINI_API_KEY
         sync: false

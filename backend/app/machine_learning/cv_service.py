@@ -1495,16 +1495,54 @@ class CVTracker:
             return float(self.calibration_data["scale_factor_m_per_px"])
         return client_px_to_meters if (client_px_to_meters and client_px_to_meters > 0) else 0.005
 
+    def get_device(self) -> str:
+        """Determines active hardware acceleration device (cuda / cpu)."""
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return f"cuda:{torch.cuda.current_device()}"
+        except Exception:
+            pass
+        return "cpu"
+
+    def get_memory_usage_mb(self) -> float:
+        """Estimates process resident memory consumption in MB."""
+        try:
+            import psutil
+            process = psutil.Process()
+            return round(process.memory_info().rss / (1024 * 1024), 2)
+        except Exception:
+            return 0.0
+
     def check_readiness(self) -> Dict[str, Any]:
         """Explicit model-loading and readiness verification."""
+        active_det = "ColorSegmentationDetector"
+        if self.yolo_model is not None:
+            active_det = "YOLODetector"
+
+        device_info = self.get_device()
+        mem_mb = self.get_memory_usage_mb()
+
         return {
             "ready": self.model_ready,
             "active_model": self.model_name,
+            "active_detector": active_det,
+            "model_version": "v1.2.0" if self.yolo_model else "opencv_kinematics_v4.10",
+            "model_path": getattr(self, "yolo_weights_path", None) or "built-in",
+            "device": device_info,
+            "memory_usage_mb": mem_mb,
             "yolo_loaded": self.yolo_model is not None,
             "yolo_status": self.yolo_status,
             "yolo_error": self.yolo_error,
             "classes_count": len(self.yolo_model.names) if self.yolo_model else 0,
             "supported_methods": ["color", "optical_flow", "yolo"],
+            "inference_errors": 0,
+            "model_metadata": {
+                "framework": "ultralytics_yolo" if self.yolo_model else "opencv_color_and_lucas_kanade",
+                "device": device_info,
+                "memory_mb": mem_mb,
+                "concurrency_limit": 10,
+            },
         }
 
     def reset_tracker(self):
