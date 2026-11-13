@@ -2249,17 +2249,24 @@ export default function WebcamSection() {
                             ? "Anna iframe runtime restricts direct camera access. Upload an experiment video or run our interactive sample lab!"
                             : "Enable webcam or upload a video for real-time computer vision tracking."}
                         </p>
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-center gap-2 flex-wrap">
+                          <button
+                            onClick={toggleWebcam}
+                            className="px-3.5 py-1.5 bg-emerald-500/25 hover:bg-emerald-500/35 border border-emerald-500/40 text-emerald-300 text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-500/20"
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                            Turn On Camera
+                          </button>
                           <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="px-2.5 py-1 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
+                            className="px-2.5 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
                           >
                             <Upload className="w-3 h-3" />
-                            Upload Video/Image
+                            Upload Video
                           </button>
                           <button
                             onClick={startSampleLabFeed}
-                            className="px-2.5 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
+                            className="px-2.5 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
                           >
                             <Play className="w-3 h-3" />
                             🧪 Sample Lab

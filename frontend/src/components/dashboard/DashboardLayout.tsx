@@ -16,7 +16,8 @@ import {
   Shield,
   Camera,
   Activity,
-  Target
+  Target,
+  FlaskConical
 } from 'lucide-react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -31,7 +32,8 @@ import OnboardingTour from './OnboardingTour';
 
 const navItems = [
   { icon: Home, label: 'Home', path: '/dashboard' },
-  { icon: Camera, label: 'Experiments', path: '/dashboard/experiments' },
+  { icon: Camera, label: 'Live Webcam Lab', path: '/dashboard/experiments/active' },
+  { icon: FlaskConical, label: 'Experiments', path: '/dashboard/experiments' },
   { icon: Activity, label: 'Lab History', path: '/dashboard/history' },
   { icon: Bot, label: 'AI Tutor', path: '/ai-tutor' },
   { icon: Atom, label: 'Physics Lab', path: '/dashboard/physics' },
@@ -200,6 +202,7 @@ export default function DashboardLayout({ children }: { children?: React.ReactNo
   const getHeaderInfo = () => {
     const path = location.pathname;
     if (path === '/dashboard') return { title: 'AI Laboratory', subtitle: 'Real-time STEM experiments powered by AI' };
+    if (path === '/dashboard/experiments/active') return { title: 'Live Webcam Vision Lab', subtitle: 'Real-time computer vision physical experiment tracking' };
     if (path.startsWith('/dashboard/experiments')) return { title: 'Experiments', subtitle: 'Explore hands-on STEM experiments' };
     if (path.startsWith('/dashboard/history')) return { title: 'Lab History', subtitle: 'Browse saved telemetry and AI roundtable debates' };
     if (path.startsWith('/dashboard/tutor')) return { title: 'AI Tutor', subtitle: 'Your personal AI learning assistant' };
