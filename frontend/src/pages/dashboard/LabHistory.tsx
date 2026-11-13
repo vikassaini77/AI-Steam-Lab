@@ -49,95 +49,163 @@ export default function LabHistory() {
   const apiHost = getApiBaseUrl();
 
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
 
   const fetchHistory = async () => {
     try {
       setLoading(true);
       setFetchError(null);
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${apiHost}/api/experiments/history`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        const historyArray = Array.isArray(data) ? data : (data.history || []);
-        interface RawExperiment {
-          id?: string;
-          name?: string;
-          experiment_type?: string;
-          type?: string;
-          created_at?: string;
-          timestamp?: number;
-          provenance?: {
-            computation_version?: string;
-            model?: { name?: string };
-            fps?: number;
-            reproduction_formula?: string;
-          };
-          model_name?: string;
-          calibration?: { target_color?: string };
-          metrics?: {
-            r_squared?: number;
-            final_velocity?: number | string;
-            velocity_peak?: number | string;
-            potential_energy?: number | string;
-            kinetic_energy?: number | string;
-            accuracy?: string;
-            fps?: string;
-            displacement_max?: string;
-            gravity_verified?: string;
-            sync_percentage?: string;
-            pe_max?: string;
-            ke_max?: string;
-            roundtable?: string;
-          };
-          input_data?: {
-            height?: number;
-            length?: number;
-            gravity?: number;
-          };
-          roundtable?: string;
+      setAuthNotice(null);
+
+      // 1. Read locally cached experiments from browser storage
+      const localList: Experiment[] = [];
+      try {
+        const cached = localStorage.getItem('local_stem_db');
+        if (cached) {
+          const store = JSON.parse(cached);
+          if (Array.isArray(store.experiments)) {
+            for (const item of store.experiments) {
+              if (item && typeof item === 'object') {
+                localList.push({
+                  id: item.id || `local_${Math.random().toString(36).substr(2, 9)}`,
+                  name: item.name || 'Physics Experiment',
+                  date: item.date || new Date().toISOString().split('T')[0],
+                  experimentType: (item.experimentType || item.experiment_type || item.type || 'pendulum').toLowerCase().trim(),
+                  metrics: {
+                    subject: item.metrics?.subject || 'Physics',
+                    tier: item.metrics?.tier || 'Local Archive',
+                    tracking_method: item.metrics?.tracking_method || 'Interactive Simulation',
+                    target_color: item.metrics?.target_color || 'Calibrated Target',
+                    accuracy: item.metrics?.accuracy || 'Verified (100%)',
+                    fps: item.metrics?.fps || '60 FPS',
+                    velocity_peak: item.metrics?.velocity_peak || 'N/A',
+                    displacement_max: item.metrics?.displacement_max || 'N/A',
+                    gravity_verified: item.metrics?.gravity_verified || '9.81 m/s²',
+                    sync_percentage: item.metrics?.sync_percentage || '100%',
+                    pe_max: item.metrics?.pe_max || 'N/A',
+                    ke_max: item.metrics?.ke_max || 'N/A',
+                    roundtable: item.metrics?.roundtable,
+                  },
+                });
+              }
+            }
+          }
         }
-
-        const mapped: Experiment[] = (historyArray as RawExperiment[]).map((item) => {
-          const typeName = (item.experiment_type || item.type || 'Physics Experiment').replace(/_/g, ' ').toUpperCase();
-          const dateStr = item.created_at
-            ? new Date(item.created_at).toISOString().split('T')[0]
-            : item.timestamp
-            ? new Date(item.timestamp * 1000).toISOString().split('T')[0]
-            : new Date().toISOString().split('T')[0];
-
-          return {
-            id: item.id || `exp_${Math.random().toString(36).substr(2, 9)}`,
-            name: item.name || typeName,
-            date: dateStr,
-            experimentType: (item.experiment_type || item.type || 'pendulum').toLowerCase().trim(),
-            metrics: {
-              subject: 'Physics',
-              tier: item.provenance?.computation_version || 'Production',
-              tracking_method: item.provenance?.model?.name || item.model_name || 'PhysicsEngine',
-              target_color: item.calibration?.target_color || 'Calibrated Target',
-              accuracy: item.metrics?.r_squared !== undefined ? `${(item.metrics.r_squared * 100).toFixed(1)}%` : 'Verified (100%)',
-              fps: item.provenance?.fps ? `${item.provenance.fps} FPS` : '60 FPS',
-              velocity_peak: item.metrics?.final_velocity !== undefined ? `${Number(item.metrics.final_velocity).toFixed(2)} m/s` : (item.metrics?.velocity_peak !== undefined ? `${Number(item.metrics.velocity_peak).toFixed(2)} m/s` : 'N/A'),
-              displacement_max: item.input_data?.height !== undefined ? `${item.input_data.height} m` : (item.input_data?.length !== undefined ? `${item.input_data.length} m` : 'N/A'),
-              gravity_verified: item.input_data?.gravity !== undefined ? `${item.input_data.gravity} m/s²` : '9.81 m/s²',
-              sync_percentage: '100%',
-              pe_max: item.metrics?.potential_energy !== undefined ? `${Number(item.metrics.potential_energy).toFixed(2)} J` : (item.metrics?.pe_max || 'N/A'),
-              ke_max: item.metrics?.kinetic_energy !== undefined ? `${Number(item.metrics.kinetic_energy).toFixed(2)} J` : (item.metrics?.ke_max || 'N/A'),
-              roundtable: item.roundtable || (item.provenance?.reproduction_formula ? `**Authoritative Kinematics**: Theoretical reproduction confirmed via formula: ${item.provenance.reproduction_formula}. Server-side analytical integration verified.` : undefined),
-            },
-          };
-        });
-
-        setExperiments(mapped.reverse());
-      } else {
-        const errJson = await res.json().catch(() => ({}));
-        setFetchError(errJson.detail || 'Unable to retrieve experiment history from server.');
-        setExperiments([]);
+      } catch (localErr) {
+        console.warn('Failed reading local experiment database:', localErr);
       }
-    } catch (err) {
-      console.warn('Failed to retrieve experiment history from server:', err);
-      setFetchError('Backend service currently unavailable. Please verify your connection.');
-      setExperiments([]);
+
+      // 2. Query cloud server
+      let serverMapped: Experiment[] = [];
+      let isAuthIssue = false;
+
+      interface RawExperiment {
+        id?: string;
+        name?: string;
+        experiment_type?: string;
+        type?: string;
+        created_at?: string;
+        timestamp?: number;
+        provenance?: {
+          computation_version?: string;
+          model?: { name?: string };
+          fps?: number;
+          reproduction_formula?: string;
+        };
+        model_name?: string;
+        calibration?: { target_color?: string };
+        metrics?: {
+          r_squared?: number;
+          final_velocity?: number | string;
+          velocity_peak?: number | string;
+          potential_energy?: number | string;
+          kinetic_energy?: number | string;
+          accuracy?: string;
+          fps?: string;
+          displacement_max?: string;
+          gravity_verified?: string;
+          sync_percentage?: string;
+          pe_max?: string;
+          ke_max?: string;
+          roundtable?: string;
+        };
+        input_data?: {
+          height?: number;
+          length?: number;
+          gravity?: number;
+        };
+        roundtable?: string;
+      }
+
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`${apiHost}/api/experiments/history`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          const historyArray = Array.isArray(data) ? data : (data.history || []);
+
+          serverMapped = (historyArray as RawExperiment[]).map((item) => {
+            const typeName = (item.experiment_type || item.type || 'Physics Experiment').replace(/_/g, ' ').toUpperCase();
+            const dateStr = item.created_at
+              ? new Date(item.created_at).toISOString().split('T')[0]
+              : item.timestamp
+              ? new Date(item.timestamp * 1000).toISOString().split('T')[0]
+              : new Date().toISOString().split('T')[0];
+
+            return {
+              id: item.id || `exp_${Math.random().toString(36).substr(2, 9)}`,
+              name: item.name || typeName,
+              date: dateStr,
+              experimentType: (item.experiment_type || item.type || 'pendulum').toLowerCase().trim(),
+              metrics: {
+                subject: 'Physics',
+                tier: item.provenance?.computation_version || 'Production',
+                tracking_method: item.provenance?.model?.name || item.model_name || 'PhysicsEngine',
+                target_color: item.calibration?.target_color || 'Calibrated Target',
+                accuracy: item.metrics?.r_squared !== undefined ? `${(item.metrics.r_squared * 100).toFixed(1)}%` : 'Verified (100%)',
+                fps: item.provenance?.fps ? `${item.provenance.fps} FPS` : '60 FPS',
+                velocity_peak: item.metrics?.final_velocity !== undefined ? `${Number(item.metrics.final_velocity).toFixed(2)} m/s` : (item.metrics?.velocity_peak !== undefined ? `${Number(item.metrics.velocity_peak).toFixed(2)} m/s` : 'N/A'),
+                displacement_max: item.input_data?.height !== undefined ? `${item.input_data.height} m` : (item.input_data?.length !== undefined ? `${item.input_data.length} m` : 'N/A'),
+                gravity_verified: item.input_data?.gravity !== undefined ? `${item.input_data.gravity} m/s²` : '9.81 m/s²',
+                sync_percentage: '100%',
+                pe_max: item.metrics?.potential_energy !== undefined ? `${Number(item.metrics.potential_energy).toFixed(2)} J` : (item.metrics?.pe_max || 'N/A'),
+                ke_max: item.metrics?.kinetic_energy !== undefined ? `${Number(item.metrics.kinetic_energy).toFixed(2)} J` : (item.metrics?.ke_max || 'N/A'),
+                roundtable: item.roundtable || (item.provenance?.reproduction_formula ? `**Authoritative Kinematics**: Theoretical reproduction confirmed via formula: ${item.provenance.reproduction_formula}. Server-side analytical integration verified.` : undefined),
+              },
+            };
+          });
+        } else if (res.status === 401) {
+          isAuthIssue = true;
+          setAuthNotice('Cloud synchronization is unauthenticated. Viewing local laboratory archive.');
+        } else {
+          setFetchError('Cloud archive temporarily offline. Displaying local observations.');
+        }
+      } catch (networkErr) {
+        console.warn('Could not connect to cloud experiment archive:', networkErr);
+        setFetchError('Offline Mode: Cloud synchronization unavailable.');
+      }
+
+      // 3. Merge server and local records, deduplicating by id
+      const idMap = new Map<string, Experiment>();
+      localList.forEach(exp => {
+        if (exp.id) idMap.set(exp.id, exp);
+      });
+      serverMapped.forEach(exp => {
+        if (exp.id) idMap.set(exp.id, exp);
+      });
+
+      const mergedList = Array.from(idMap.values());
+      // Sort newest to oldest
+      mergedList.sort((a, b) => {
+        const timeB = new Date(b.date).getTime() || 0;
+        const timeA = new Date(a.date).getTime() || 0;
+        return timeB - timeA;
+      });
+
+      setExperiments(mergedList);
+      if (isAuthIssue && mergedList.length === 0) {
+        setAuthNotice('Sign in to sync your cloud laboratory archive across devices, or launch a live lab session.');
+      }
     } finally {
       setLoading(false);
     }
@@ -244,6 +312,24 @@ export default function LabHistory() {
   };
 
   const handleDelete = async (id: string) => {
+    // 1. Remove from local browser cache if present
+    try {
+      const cached = localStorage.getItem('local_stem_db');
+      if (cached) {
+        const store = JSON.parse(cached);
+        if (Array.isArray(store.experiments)) {
+          store.experiments = store.experiments.filter((e: { id: string }) => e.id !== id);
+          localStorage.setItem('local_stem_db', JSON.stringify(store));
+        }
+      }
+    } catch (e) {
+      console.warn('Could not update local storage on delete:', e);
+    }
+
+    // 2. Optimistically remove from state
+    setExperiments(prev => prev.filter(e => e.id !== id));
+
+    // 3. Attempt removal from server
     try {
       const headers = await getAuthHeaders();
       const res = await fetch(`${apiHost}/api/experiments/experiment/${id}`, {
@@ -251,15 +337,12 @@ export default function LabHistory() {
         headers,
       });
       if (res.ok) {
-        setExperiments(prev => prev.filter(e => e.id !== id));
         pushNotification("Experiment record permanently removed from server archive.", "badge");
       } else {
-        const errorData = await res.json().catch(() => ({}));
-        pushNotification(errorData.detail || "Failed to remove experiment record from server.", "info");
+        pushNotification("Experiment record removed from local archive.", "info");
       }
-    } catch (e) {
-      console.error('Delete experiment error:', e);
-      pushNotification("Network error deleting experiment record.", "info");
+    } catch {
+      pushNotification("Experiment record removed from local archive.", "info");
     }
   };
 
@@ -331,6 +414,28 @@ export default function LabHistory() {
         </div>
       </motion.div>
 
+      {/* Cloud Sync Status Banner (if offline/local) */}
+      {(authNotice || fetchError) && experiments.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-between gap-3 px-5 py-3 bg-cyan-950/40 border border-cyan-500/30 rounded-2xl text-xs text-cyan-200 backdrop-blur-md"
+        >
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span>{authNotice || fetchError}</span>
+          </div>
+          {authNotice && (
+            <button
+              onClick={() => navigate('/auth')}
+              className="px-3 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-bold text-xs rounded-lg transition-colors shrink-0"
+            >
+              Sign In 🔑
+            </button>
+          )}
+        </motion.div>
+      )}
+
       {/* Loading Sandbox */}
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center space-y-4">
@@ -346,34 +451,40 @@ export default function LabHistory() {
         >
           <div className="absolute inset-0 bg-scanlines opacity-[0.02]" />
           <div className="w-16 h-16 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mx-auto text-gray-400">
-            <AlertCircle className="w-8 h-8 text-cyan-400 animate-bounce" />
+            <Sparkles className="w-8 h-8 text-cyan-400 animate-pulse" />
           </div>
           <div className="space-y-2">
             <h3 className="text-lg font-bold text-white">
-              {fetchError ? 'Connection Issue' : 'No Saved Lab Observations'}
+              No Saved Lab Observations Yet
             </h3>
-            <p className="text-xs text-gray-400 leading-relaxed">
-              {fetchError
-                ? fetchError
-                : "You haven't archived any live webcam tracking sessions yet! Head over to the live experiments workspace, lock a target bob, run your calibration, and save your observations."}
+            <p className="text-xs text-gray-400 leading-relaxed max-w-lg mx-auto">
+              {authNotice || "You haven't archived any live or simulated experiment sessions yet! Calibrate your parameters in the interactive simulator or lock a target with your webcam to start building your laboratory portfolio."}
             </p>
           </div>
           <div className="flex justify-center gap-3 flex-wrap">
-            {fetchError && (
-              <button
-                type="button"
-                onClick={fetchHistory}
-                className="px-5 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl text-white font-bold text-xs border border-white/10 transition-all"
-              >
-                Retry Server Connection 🔄
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/experiments/pendulum')}
+              className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 rounded-xl text-white font-bold text-xs shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/35 transition-all flex items-center gap-2"
+            >
+              <span>🔬</span>
+              <span>Launch Interactive Lab</span>
+            </button>
             <button
               type="button"
               onClick={() => navigate('/dashboard/experiments/active')}
-              className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 rounded-xl text-white font-bold text-xs shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/35 transition-all"
+              className="px-5 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl text-white font-bold text-xs border border-white/10 transition-all flex items-center gap-2"
             >
-              Launch Live Webcam Lab 📹
+              <span>📹</span>
+              <span>Launch Live Webcam Lab</span>
+            </button>
+            <button
+              type="button"
+              onClick={fetchHistory}
+              className="px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white font-bold text-xs border border-white/5 transition-all flex items-center gap-1.5"
+            >
+              <span>🔄</span>
+              <span>Refresh</span>
             </button>
           </div>
         </motion.div>
