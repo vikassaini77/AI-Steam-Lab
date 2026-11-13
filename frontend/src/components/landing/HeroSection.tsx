@@ -121,10 +121,10 @@ export default function HeroSection({ onLaunchLab }: HeroSectionProps) {
           className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto"
         >
           {[
-            { value: '10K+', label: 'Students', icon: '🎓' },
-            { value: '500+', label: 'Experiments', icon: '🔬' },
-            { value: '98%', label: 'Success Rate', icon: '📈' },
-            { value: '4.9', label: 'User Rating', icon: '⭐' },
+            { value: '60 FPS', label: 'On-Device Computer Vision', icon: '⚡' },
+            { value: '6 Labs', label: 'Physics Mechanics Engines', icon: '🔬' },
+            { value: '< 5%', label: 'Kinematic Numerical Error', icon: '📐' },
+            { value: '100% Free', label: 'Open Source STEM Platform', icon: '🌍' },
           ].map((stat, index) => (
             <motion.div
               key={index}

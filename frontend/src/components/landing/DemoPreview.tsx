@@ -272,9 +272,9 @@ export default function DemoPreview({ onLaunchLab }: DemoPreviewProps) {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={onLaunchLab}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl font-semibold text-white cursor-pointer"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl font-semibold text-white cursor-pointer shadow-lg shadow-cyan-500/25"
           >
-            Try Free for 14 Days
+            Launch Interactive Lab
             <ArrowRight className="w-5 h-5" />
           </motion.button>
         </motion.div>

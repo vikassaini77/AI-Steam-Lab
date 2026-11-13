@@ -110,9 +110,15 @@ export default function FeaturesPage() {
           <h4 className="text-cyan-400 font-extrabold uppercase tracking-widest text-xs mb-2">Ready to Experiment?</h4>
           <h2 className="text-2xl font-black text-white mb-4">Start Launching Physical Live Simulations Today</h2>
           <p className="text-gray-400 text-sm max-w-xl mx-auto mb-6">
-            Sign up for a free student profile or test our automated Judge Demo Mode to unlock rare badges in seconds.
+            Sign up for a free student profile or launch the Live Lab directly to explore Newtonian physics, record experimental data, and verify physical laws.
           </p>
-          <button onClick={() => navigate('/')} className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white font-bold text-sm shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all">
+          <button 
+            onClick={() => {
+              const isAuth = !!localStorage.getItem('neurolab_session');
+              navigate(isAuth ? '/dashboard' : '/auth');
+            }} 
+            className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl text-white font-bold text-sm shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all"
+          >
             Launch Platform Now
           </button>
         </div>

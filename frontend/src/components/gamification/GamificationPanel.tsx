@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Trophy,
   Star,
@@ -11,85 +11,119 @@ import {
   Lock,
   CheckCircle2,
 } from 'lucide-react';
+import { useUserStore } from '../../store/useUserStore';
+import { getApiBaseUrl, getAuthHeaders } from '../../lib/api';
 
 interface GamificationPanelProps {
   view: 'insights' | 'progress';
 }
 
-const achievements = [
-  {
-    id: 1,
-    name: 'First Steps',
-    description: 'Complete your first experiment',
-    icon: Star,
-    unlocked: true,
-    xp: 100,
-    color: 'from-yellow-500 to-orange-500',
-  },
-  {
-    id: 2,
-    name: 'Physics Pro',
-    description: 'Analyze 10 physics experiments',
-    icon: Target,
-    unlocked: true,
-    xp: 250,
-    color: 'from-cyan-500 to-blue-500',
-  },
-  {
-    id: 3,
-    name: 'Pendulum Master',
-    description: 'Complete all pendulum challenges',
-    icon: Award,
-    unlocked: false,
-    xp: 500,
-    color: 'from-violet-500 to-purple-500',
-  },
-  {
-    id: 4,
-    name: 'AI Collaborator',
-    description: 'Have 50 conversations with AI tutor',
-    icon: Trophy,
-    unlocked: false,
-    xp: 300,
-    color: 'from-green-500 to-emerald-500',
-  },
-  {
-    id: 5,
-    name: 'Week Warrior',
-    description: 'Maintain a 7-day streak',
-    icon: Flame,
-    unlocked: true,
-    xp: 200,
-    color: 'from-orange-500 to-red-500',
-  },
-];
+interface LeaderboardUser {
+  id: string | number;
+  rank: number;
+  name: string;
+  xp: number;
+  badges: number;
+}
 
-const streakData = [
-  { day: 'Mon', completed: true },
-  { day: 'Tue', completed: true },
-  { day: 'Wed', completed: true },
-  { day: 'Thu', completed: true },
-  { day: 'Fri', completed: true },
-  { day: 'Sat', completed: false },
-  { day: 'Sun', completed: false },
-];
-
-const recentActivity = [
-  { type: 'xp', text: 'Earned 150 XP for pendulum analysis', time: '2m ago' },
-  { type: 'achievement', text: 'Unlocked "Week Warrior" badge', time: '1h ago' },
-  { type: 'experiment', text: 'Completed Newton\'s Laws experiment', time: '3h ago' },
-  { type: 'question', text: 'Asked AI tutor 5 questions', time: '5h ago' },
-];
+interface RecentExperimentItem {
+  id?: string;
+  name?: string;
+  title?: string;
+  status?: string;
+}
 
 export default function GamificationPanel({ view }: GamificationPanelProps) {
-  const [currentXP] = useState(2450);
-  const [level] = useState(12);
-  const [streak] = useState(5);
-  const xpForNextLevel = 3000;
-  const progress = (currentXP / xpForNextLevel) * 100;
+  const { xp: currentXP, level, dailyStreak, completedLabs, aiInteractions } = useUserStore();
+  const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>([]);
+  const [recentExperiments, setRecentExperiments] = useState<RecentExperimentItem[]>([]);
+
+  const xpForNextLevel = Math.max(250, level * 250);
+  const progress = Math.min(100, Math.round((currentXP / xpForNextLevel) * 100));
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const API_URL = getApiBaseUrl();
+        const headers = await getAuthHeaders();
+        
+        // Fetch real leaderboard
+        const lbRes = await fetch(`${API_URL}/api/gamification/leaderboard`);
+        if (lbRes.ok) {
+          const lbData = await lbRes.json();
+          if (Array.isArray(lbData)) {
+            setLeaderboard(lbData.slice(0, 5));
+          }
+        }
+
+        // Fetch real experiment history
+        const expRes = await fetch(`${API_URL}/api/experiments/history`, { headers });
+        if (expRes.ok) {
+          const expData = await expRes.json();
+          const list = Array.isArray(expData) ? expData : (expData.experiments || expData.history || []);
+          setRecentExperiments(list.slice(0, 4));
+        }
+      } catch (err) {
+        console.warn('Could not sync gamification panel data:', err);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const achievements = [
+    {
+      id: 1,
+      name: 'First Steps',
+      description: 'Complete your first experiment',
+      icon: Star,
+      unlocked: completedLabs > 0,
+      xp: 100,
+      color: 'from-yellow-500 to-orange-500',
+    },
+    {
+      id: 2,
+      name: 'Physics Apprentice',
+      description: 'Analyze 3 physics experiments',
+      icon: Target,
+      unlocked: completedLabs >= 3,
+      xp: 250,
+      color: 'from-cyan-500 to-blue-500',
+    },
+    {
+      id: 3,
+      name: 'Kinematics Master',
+      description: 'Complete 6 laboratory modules',
+      icon: Award,
+      unlocked: completedLabs >= 6,
+      xp: 500,
+      color: 'from-violet-500 to-purple-500',
+    },
+    {
+      id: 4,
+      name: 'AI Collaborator',
+      description: 'Have 10 interactive STEM tutoring queries',
+      icon: Trophy,
+      unlocked: aiInteractions >= 10,
+      xp: 300,
+      color: 'from-green-500 to-emerald-500',
+    },
+    {
+      id: 5,
+      name: 'Streak Pioneer',
+      description: 'Maintain a 3-day active streak',
+      icon: Flame,
+      unlocked: dailyStreak >= 3,
+      xp: 200,
+      color: 'from-orange-500 to-red-500',
+    },
+  ];
+
+  const daysOfWeek = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const todayIdx = (new Date().getDay() + 6) % 7; // Monday = 0
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4 text-left">
       {/* Level & XP Header */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -112,7 +146,9 @@ export default function GamificationPanel({ view }: GamificationPanelProps) {
             </div>
             <div>
               <p className="text-white font-semibold">Level {level}</p>
-              <p className="text-gray-400 text-sm">Junior Scientist</p>
+              <p className="text-gray-400 text-sm">
+                {level >= 5 ? 'Senior Researcher' : level >= 2 ? 'Lab Apprentice' : 'Junior Scientist'}
+              </p>
             </div>
           </div>
           <div className="text-right">
@@ -137,7 +173,7 @@ export default function GamificationPanel({ view }: GamificationPanelProps) {
           </motion.div>
         </div>
         <p className="text-xs text-gray-500 mt-2 text-center">
-          {(xpForNextLevel - currentXP).toLocaleString()} XP to Level {level + 1}
+          {Math.max(0, xpForNextLevel - currentXP).toLocaleString()} XP to Level {level + 1}
         </p>
       </motion.div>
 
@@ -154,33 +190,36 @@ export default function GamificationPanel({ view }: GamificationPanelProps) {
                 <Flame className="w-5 h-5 text-orange-500" />
                 <span className="text-white font-semibold">Learning Streak</span>
               </div>
-              <span className="text-orange-400 font-bold">{streak} days</span>
+              <span className="text-orange-400 font-bold">{dailyStreak} {dailyStreak === 1 ? 'day' : 'days'}</span>
             </div>
             <div className="flex justify-between">
-              {streakData.map((day, index) => (
-                <motion.div
-                  key={index}
-                  className="text-center"
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <div
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center mb-1 ${
-                      day.completed
-                        ? 'bg-gradient-to-r from-orange-500 to-red-500'
-                        : 'bg-white/5 border border-white/10'
-                    }`}
+              {daysOfWeek.map((day, index) => {
+                const isActive = index <= todayIdx && dailyStreak > (todayIdx - index);
+                return (
+                  <motion.div
+                    key={day}
+                    className="text-center"
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: index * 0.05 }}
                   >
-                    {day.completed ? (
-                      <Flame className="w-5 h-5 text-white" />
-                    ) : (
-                      <span className="text-xs text-gray-500">{index + 1}</span>
-                    )}
-                  </div>
-                  <span className="text-xs text-gray-500">{day.day}</span>
-                </motion.div>
-              ))}
+                    <div
+                      className={`w-10 h-10 rounded-lg flex items-center justify-center mb-1 ${
+                        isActive
+                          ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white'
+                          : 'bg-white/5 border border-white/10 text-gray-500'
+                      }`}
+                    >
+                      {isActive ? (
+                        <Flame className="w-5 h-5 text-white" />
+                      ) : (
+                        <span className="text-xs">{index + 1}</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-500">{day}</span>
+                  </motion.div>
+                );
+              })}
             </div>
           </motion.div>
 
@@ -195,41 +234,29 @@ export default function GamificationPanel({ view }: GamificationPanelProps) {
               <span className="text-white font-semibold">Recent Activity</span>
             </div>
             <div className="space-y-3">
-              {recentActivity.map((activity, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ x: -10, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="flex items-start gap-3 pb-3 border-b border-white/5 last:border-0 last:pb-0"
-                >
-                  <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                      activity.type === 'xp'
-                        ? 'bg-cyan-500/20'
-                        : activity.type === 'achievement'
-                        ? 'bg-yellow-500/20'
-                        : activity.type === 'experiment'
-                        ? 'bg-green-500/20'
-                        : 'bg-violet-500/20'
-                    }`}
+              {recentExperiments.length > 0 ? (
+                recentExperiments.map((exp: RecentExperimentItem, index: number) => (
+                  <motion.div
+                    key={exp.id || index}
+                    initial={{ x: -10, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="flex items-start gap-3 pb-3 border-b border-white/5 last:border-0 last:pb-0"
                   >
-                    {activity.type === 'xp' ? (
+                    <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
                       <Zap className="w-4 h-4 text-cyan-400" />
-                    ) : activity.type === 'achievement' ? (
-                      <Trophy className="w-4 h-4 text-yellow-400" />
-                    ) : activity.type === 'experiment' ? (
-                      <Target className="w-4 h-4 text-green-400" />
-                    ) : (
-                      <Star className="w-4 h-4 text-violet-400" />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm text-white">{activity.text}</p>
-                    <p className="text-xs text-gray-500">{activity.time}</p>
-                  </div>
-                </motion.div>
-              ))}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white truncate">{exp.title || exp.name || 'Laboratory Simulation'}</p>
+                      <p className="text-xs text-gray-500">{exp.status === 'completed' ? 'Completed • Earned XP' : 'Analyzed run'}</p>
+                    </div>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="py-4 text-center text-xs text-gray-500">
+                  No experiment runs recorded yet. Complete experiments to log activity!
+                </div>
+              )}
             </div>
           </motion.div>
         </>
@@ -248,46 +275,43 @@ export default function GamificationPanel({ view }: GamificationPanelProps) {
             </div>
 
             <div className="grid grid-cols-1 gap-3">
-              {achievements.map((achievement, index) => (
-                <motion.div
-                  key={achievement.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                  whileHover={{ scale: 1.02 }}
-                  className={`relative p-3 rounded-xl border ${
-                    achievement.unlocked
-                      ? 'bg-gradient-to-r from-white/10 to-white/5 border-white/20'
-                      : 'bg-white/5 border-white/10 opacity-60'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
+              {achievements.map((achievement) => {
+                const IconComponent = achievement.icon;
+                return (
+                  <motion.div
+                    key={achievement.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`p-3 rounded-xl border flex items-center gap-3.5 transition-all ${
+                      achievement.unlocked
+                        ? 'bg-white/5 border-white/10 hover:border-cyan-500/30'
+                        : 'bg-white/[0.01] border-white/5 opacity-50'
+                    }`}
+                  >
                     <div
-                      className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
                         achievement.unlocked
-                          ? `bg-gradient-to-r ${achievement.color}`
-                          : 'bg-gray-700'
+                          ? `bg-gradient-to-r ${achievement.color} text-white shadow-lg`
+                          : 'bg-white/5 text-gray-500'
                       }`}
                     >
-                      {achievement.unlocked ? (
-                        <achievement.icon className="w-6 h-6 text-white" />
-                      ) : (
-                        <Lock className="w-6 h-6 text-gray-500" />
-                      )}
+                      <IconComponent className="w-5 h-5" />
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-white font-semibold">{achievement.name}</h4>
-                        {achievement.unlocked && (
-                          <CheckCircle2 className="w-4 h-4 text-green-400" />
-                        )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-white font-semibold text-xs truncate">{achievement.name}</h4>
+                        <span className="text-[10px] font-bold text-cyan-400">+{achievement.xp} XP</span>
                       </div>
-                      <p className="text-xs text-gray-400">{achievement.description}</p>
-                      <p className="text-xs text-cyan-400 mt-1">+{achievement.xp} XP</p>
+                      <p className="text-[11px] text-gray-400 mt-0.5">{achievement.description}</p>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                    {achievement.unlocked ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+                    ) : (
+                      <Lock className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                    )}
+                  </motion.div>
+                );
+              })}
             </div>
           </div>
 
@@ -296,44 +320,44 @@ export default function GamificationPanel({ view }: GamificationPanelProps) {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Award className="w-5 h-5 text-cyan-400" />
-                <span className="text-white font-semibold">Weekly Leaderboard</span>
+                <span className="text-white font-semibold">Global Leaderboard</span>
               </div>
-              <span className="text-gray-400 text-sm">Your rank: #47</span>
             </div>
 
             <div className="space-y-2">
-              {[
-                { rank: 1, name: 'Alex K.', xp: 15420, avatar: 'A' },
-                { rank: 2, name: 'Sarah M.', xp: 14850, avatar: 'S' },
-                { rank: 3, name: 'James L.', xp: 13890, avatar: 'J' },
-              ].map((user, index) => (
-                <motion.div
-                  key={user.rank}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: index * 0.1 }}
-                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors"
-                >
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                      user.rank === 1
-                        ? 'bg-yellow-500 text-yellow-900'
-                        : user.rank === 2
-                        ? 'bg-gray-300 text-gray-700'
-                        : 'bg-orange-600 text-orange-100'
-                    }`}
+              {leaderboard.length > 0 ? (
+                leaderboard.map((user, index) => (
+                  <motion.div
+                    key={user.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors"
                   >
-                    {user.rank}
-                  </div>
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 flex items-center justify-center text-white text-sm font-semibold">
-                    {user.avatar}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-white font-medium">{user.name}</p>
-                    <p className="text-xs text-gray-400">{user.xp.toLocaleString()} XP</p>
-                  </div>
-                </motion.div>
-              ))}
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${
+                        user.rank === 1
+                          ? 'bg-yellow-500 text-yellow-900'
+                          : user.rank === 2
+                          ? 'bg-gray-300 text-gray-700'
+                          : user.rank === 3
+                          ? 'bg-amber-700 text-amber-100'
+                          : 'bg-white/5 text-gray-400'
+                      }`}
+                    >
+                      {user.rank}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-medium text-xs truncate">{user.name}</p>
+                      <p className="text-[10px] text-gray-400">{user.xp.toLocaleString()} XP</p>
+                    </div>
+                  </motion.div>
+                ))
+              ) : (
+                <div className="py-4 text-center text-xs text-gray-500">
+                  Leaderboard rankings will appear as students complete laboratories.
+                </div>
+              )}
             </div>
           </div>
         </>

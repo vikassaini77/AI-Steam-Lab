@@ -188,16 +188,16 @@ export default function ProfilePage({ session }: ProfilePageProps) {
     sessionUser?.user_metadata?.edu_level || 'Undergraduate'
   );
   const [profileUrl, setProfileUrl] = useState<string>(
-    sessionUser?.user_metadata?.profile_url || 'neurolab.ai/johnsmith'
+    sessionUser?.user_metadata?.profile_url || ''
   );
   const [githubLink, setGithubLink] = useState<string>(
-    sessionUser?.user_metadata?.github || 'github.com/johnsmith-stem'
+    sessionUser?.user_metadata?.github || ''
   );
   const [linkedinLink, setLinkedinLink] = useState<string>(
-    sessionUser?.user_metadata?.linkedin || 'linkedin.com/in/johnsmith'
+    sessionUser?.user_metadata?.linkedin || ''
   );
   const [websiteLink, setWebsiteLink] = useState<string>(
-    sessionUser?.user_metadata?.website || 'johnsmith.space'
+    sessionUser?.user_metadata?.website || ''
   );
   const [profileVisibility, setProfileVisibility] = useState<'public' | 'private'>(
     sessionUser?.user_metadata?.profile_visibility || 'public'
@@ -207,11 +207,26 @@ export default function ProfilePage({ session }: ProfilePageProps) {
   const [passwordCurrent, setPasswordCurrent] = useState<string>('');
   const [passwordNew, setPasswordNew] = useState<string>('');
   const [twoFactor, setTwoFactor] = useState<boolean>(false);
-  const [devices, setDevices] = useState([
-    { id: 1, name: 'Windows 11 PC • Chrome Browser', location: 'New York, US (Current Device)', time: 'Active now', current: true },
-    { id: 2, name: 'Apple iPhone 15 Pro • Safari Mobile', location: 'Boston, US', time: 'Active 2 hours ago', current: false },
-    { id: 3, name: 'iPad Pro 12.9 • NeuroLab Native App', location: 'New York, US', time: 'Active 1 day ago', current: false }
-  ]);
+  const [devices, setDevices] = useState(() => {
+    if (typeof navigator === 'undefined') {
+      return [{ id: 1, name: 'Active Web Client', location: 'Current Session', time: 'Active now', current: true }];
+    }
+    const ua = navigator.userAgent;
+    let browser = 'Modern Browser';
+    if (ua.includes('Firefox/')) browser = 'Firefox';
+    else if (ua.includes('Edg/')) browser = 'Microsoft Edge';
+    else if (ua.includes('Chrome/')) browser = 'Chrome';
+    else if (ua.includes('Safari/') && !ua.includes('Chrome/')) browser = 'Safari';
+
+    let os = 'Desktop Device';
+    if (ua.includes('Win')) os = 'Windows PC';
+    else if (ua.includes('Mac')) os = 'macOS Device';
+    else if (ua.includes('Linux') && !ua.includes('Android')) os = 'Linux Workstation';
+    else if (ua.includes('Android')) os = 'Android Mobile';
+    else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'Apple iOS Device';
+
+    return [{ id: 1, name: `${os} • ${browser}`, location: 'Local Session (Current Device)', time: 'Active now', current: true }];
+  });
 
   // 4. Notifications Prefs
   const [notifs, setNotifs] = useState({
@@ -896,7 +911,8 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                         type="text"
                         value={githubLink}
                         onChange={(e) => setGithubLink(e.target.value)}
-                        className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold focus:outline-none"
+                        placeholder="https://github.com/your-username"
+                        className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold focus:outline-none placeholder-gray-600"
                       />
                     </div>
 
@@ -906,7 +922,8 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                         type="text"
                         value={linkedinLink}
                         onChange={(e) => setLinkedinLink(e.target.value)}
-                        className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold focus:outline-none"
+                        placeholder="https://linkedin.com/in/your-profile"
+                        className="w-full px-4 py-3 bg-[#13131c] border border-[#22222f] rounded-xl text-white text-xs font-semibold focus:outline-none placeholder-gray-600"
                       />
                     </div>
                   </div>

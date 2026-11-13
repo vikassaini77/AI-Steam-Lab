@@ -45,7 +45,7 @@ const translations = {
   en: {
     title: "NeuroLab AI Live STEM Lab",
     subtitle: "AI-Powered Real-Time Physics Laboratory",
-    judgeDemo: "Launch Judge Demo Mode",
+    judgeDemo: "Guided Lab Tour",
     webcamTitle: "Webcam Vision Feed",
     digitalTwinTitle: "Synchronized Digital Twin Sim",
     activeSync: "ACTIVE SYNC",
@@ -83,7 +83,7 @@ const translations = {
   hi: {
     title: "न्यूरोलैब एआई लाइव स्टेम लैब",
     subtitle: "एआई-संचालित वास्तविक समय भौतिकी प्रयोगशाला",
-    judgeDemo: "जज डेमो मोड लॉन्च करें",
+    judgeDemo: "इंटरैक्टिव लैब टूर",
     webcamTitle: "वेबकैम विजन फीड",
     digitalTwinTitle: "सिंक्रनाइज़ डिजिटल ट्विन सिमुलेशन",
     activeSync: "सक्रिय सिंक",
@@ -121,7 +121,7 @@ const translations = {
   es: {
     title: "Laboratorio NeuroLab AI Live STEM",
     subtitle: "Laboratorio de Física en Tiempo Real con IA",
-    judgeDemo: "Iniciar Modo Demo del Juez",
+    judgeDemo: "Tour del Laboratorio",
     webcamTitle: "Transmisión de Visión por Cámara",
     digitalTwinTitle: "Simulación Digital Twin Sincronizada",
     activeSync: "SINCRONIZACIÓN ACTIVA",
@@ -159,7 +159,7 @@ const translations = {
   fr: {
     title: "Laboratoire NeuroLab AI Live STEM",
     subtitle: "Laboratoire de Physique en Temps Réel Assisté par IA",
-    judgeDemo: "Lancer le Mode Démo du Juge",
+    judgeDemo: "Visite du Laboratoire",
     webcamTitle: "Flux de Vision de la Caméra",
     digitalTwinTitle: "Simulation Jumeau Numérique Synchronisée",
     activeSync: "SYNCHRONISATION ACTIVE",
@@ -198,37 +198,37 @@ const translations = {
 
 const demoSpeeches = {
   en: {
-    step1: "Welcome judges! Initiating the Live Lab calibration for the physical pendulum system. Locking computer vision target and calibrating coordinates.",
+    step1: "Welcome to the NeuroLab physical simulation tour! Initiating the Live Lab calibration for the physical pendulum system. Locking computer vision target and calibrating coordinates.",
     step2: "Synchronizing the virtual Digital Twin. Our computer vision tracks physical coordinates, calculating velocity, displacement, and mechanical energy conservation in real time.",
-    step3: "Success! Physical experiment verified at 99.4% accuracy rate. Simple Harmonic Motion is fully confirmed. Unlocking your Rare Gravity Pioneer Achievement Badge.",
-    step4: "Compiling complete scientific lab observations. Directly initiating download of the custom PDF Lab Report compiled via FastAPI and ReportLab!",
-    wrap: "Judge demonstration complete! The live Digital Twin mirrors physical mechanics and compiles complete metrics. What else would you like to explore today?",
+    step3: "Success! Physical experiment verified against theoretical kinematics. Simple Harmonic Motion is fully confirmed. Unlocking your Gravity Pioneer Achievement Badge.",
+    step4: "Compiling complete scientific lab observations. Directly generating the custom PDF Lab Report with trajectory plots and kinematic metrics!",
+    wrap: "Interactive simulation tour complete! The live Digital Twin mirrors physical mechanics and compiles complete metrics. What else would you like to explore today?",
   },
   hi: {
-    step1: "माननीय जजों का स्वागत है! भौतिक लोलक प्रणाली के लिए लाइव लैब अंशांकन शुरू किया जा रहा है। कंप्यूटर विज़न लक्ष्य को लॉक कर रहा है।",
+    step1: "न्यूरोलैब सिमुलेशन टूर में आपका स्वागत है! भौतिक लोलक प्रणाली के लिए लाइव लैब अंशांकन शुरू किया जा रहा है। कंप्यूटर विज़न लक्ष्य को लॉक कर रहा है।",
     step2: "डिजिटल ट्विन सिंक्रनाइज़ हो रहा है। हमारा कंप्यूटर विज़न वास्तविक समय में वेग, विस्थापन और यांत्रिक ऊर्जा संरक्षण की गणना कर रहा है।",
-    step3: "सफलता! 99.4% सटीकता के साथ भौतिक प्रयोग सत्यापित हुआ। सरल आवर्त गति की पुष्टि हो गई है। ग्रैविटी पायनियर बैज अनलॉक हो गया है।",
+    step3: "सफलता! भौतिक प्रयोग सत्यापित हुआ। सरल आवर्त गति की पुष्टि हो गई है। ग्रैविटी पायनियर बैज अनलॉक हो गया है।",
     step4: "वैज्ञानिक अवलोकन संकलित किए जा रहे हैं। फास्टएपीआई और रिपोर्टलैब द्वारा कस्टम पीडीएफ लैब रिपोर्ट तैयार की जा रही है!",
-    wrap: "डेमो पूरा हुआ! डिजिटल ट्विन भौतिकी को सटीकता से दर्शाता है। क्या आप कुछ और जानना चाहते हैं?",
-    step1_phonetic: "Namaste judges! Live Lab calibration shuru ho rahi hai. Computer vision target lock ho gaya hai.",
+    wrap: "सिमुलेशन टूर पूरा हुआ! डिजिटल ट्विन भौतिकी को सटीकता से दर्शाता है। क्या आप कुछ और जानना चाहते हैं?",
+    step1_phonetic: "NeuroLab simulation tour mein aapka swagat hai! Live Lab calibration shuru ho rahi hai. Computer vision target lock ho gaya hai.",
     step2_phonetic: "Digital Twin synchronize ho raha hai. Computer vision velocity aur mechanical energy calculate kar raha hai.",
     step3_phonetic: "Success! Prayog verify ho gaya hai. Gravity Pioneer badge unlock ho gaya hai.",
     step4_phonetic: "Vaigyanik observations compile ho rahe hain. Custom PDF report tayar ho rahi hai.",
-    wrap_phonetic: "Judge demo poora hua! Digital Twin physics ko darshata hai. Aap aage kya dekhna chahte hain?",
+    wrap_phonetic: "Simulation tour poora hua! Digital Twin physics ko darshata hai. Aap aage kya dekhna chahte hain?",
   },
   es: {
-    step1: "¡Bienvenidos jueces! Iniciando la calibración del laboratorio en vivo para el péndulo físico. Fijando objetivo y calibrando coordenadas.",
+    step1: "¡Bienvenido al recorrido de simulación de NeuroLab! Iniciando la calibración del laboratorio en vivo para el péndulo físico. Fijando objetivo y calibrando coordenadas.",
     step2: "Sincronizando el Digital Twin. Nuestra visión computacional calcula velocidad, desplazamiento y conservación de energía mecánica.",
-    step3: "¡Éxito! Experimento físico verificado al 99.4%. Movimiento Armónico Simple confirmado. Desbloqueando la insignia Gravity Pioneer.",
+    step3: "¡Éxito! Experimento físico verificado. Movimiento Armónico Simple confirmado. Desbloqueando la insignia Gravity Pioneer.",
     step4: "Compilando observaciones científicas. Descargando el informe de laboratorio PDF generado con FastAPI y ReportLab.",
-    wrap: "¡Demostración completada! El Digital Twin replica la física en tiempo real. ¿Qué más desea explorar hoy?",
+    wrap: "¡Recorrido de simulación completado! El Digital Twin replica la física en tiempo real. ¿Qué más desea explorar hoy?",
   },
   fr: {
-    step1: "Bienvenue aux juges ! Initialisation de l'étalonnage du pendule physique. Verrouillage de la cible par vision par ordinateur.",
+    step1: "Bienvenue dans la visite guidée de NeuroLab ! Initialisation de l'étalonnage du pendule physique. Verrouillage de la cible par vision par ordinateur.",
     step2: "Synchronisation du jumeau numérique. Notre vision par ordinateur calcule la vitesse, le déplacement et l'énergie en temps réel.",
-    step3: "Succès ! Expérience vérifiée à 99.4% de précision. Mouvement harmonique simple confirmé. Badge Gravity Pioneer débloqué.",
+    step3: "Succès ! Expérience vérifiée. Mouvement harmonique simple confirmé. Badge Gravity Pioneer débloqué.",
     step4: "Compilation des observations scientifiques. Téléchargement du rapport PDF généré via FastAPI et ReportLab.",
-    wrap: "Démonstration terminée ! Le jumeau numérique reproduit la physique avec précision. Que souhaitez-vous explorer d'autre ?",
+    wrap: "Visite de simulation terminée ! Le jumeau numérique reproduit la physique avec précision. Que souhaitez-vous explorer d'autre ?",
   },
 };
 
@@ -393,7 +393,7 @@ export default function WebcamSection() {
   const [chartData, setChartData] = useState<{ time: number; position: number; velocity: number; ke: number; pe: number }[]>([]);
 
   // Professor Nova dialogue caption state
-  const [novaCaption, setNovaCaption] = useState<string>("Hello! I am Professor Nova, your real-time AI scientist. Toggle webcam or launch Judge Demo Mode!");
+  const [novaCaption, setNovaCaption] = useState<string>("Hello! I am Professor Nova, your real-time AI scientist. Toggle your webcam or start the guided simulation tour!");
   const [isNovaSpeaking, setIsNovaSpeaking] = useState<boolean>(false);
 
   // Real-time AI logs feed
@@ -545,13 +545,13 @@ export default function WebcamSection() {
   // Update default caption when language toggles without auto-speaking
   useEffect(() => {
     if (currentLang === 'hi') {
-      setNovaCaption("नमस्ते! मैं प्रोफेसर नोवा हूं, आपका एआई वैज्ञानिक। वेबकैम चालू करें या जज डेमो मोड लॉन्च करें!");
+      setNovaCaption("नमस्ते! मैं प्रोफेसर नोवा हूं, आपका एआई वैज्ञानिक। वेबकैम चालू करें या इंटरैक्टिव लैब टूर शुरू करें!");
     } else if (currentLang === 'es') {
-      setNovaCaption("¡Hola! Soy la Profesora Nova, tu científica de IA en tiempo real. ¡Activa la cámara o inicia el Modo Demo!");
+      setNovaCaption("¡Hola! Soy la Profesora Nova, tu científica de IA en tiempo real. ¡Activa la cámara o inicia el recorrido guiado!");
     } else if (currentLang === 'fr') {
-      setNovaCaption("Bonjour! Je suis le Professeur Nova, votre scientifique IA. Activez la caméra ou lancez le mode démo!");
+      setNovaCaption("Bonjour! Je suis le Professeur Nova, votre scientifique IA. Activez la caméra ou lancez la visite guidée!");
     } else {
-      setNovaCaption("Hello! I am Professor Nova, your real-time AI scientist. Toggle webcam or launch Judge Demo Mode!");
+      setNovaCaption("Hello! I am Professor Nova, your real-time AI scientist. Toggle your webcam or start the guided simulation tour!");
     }
     // Cancel any active speech on language change to avoid overlapping speech
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {

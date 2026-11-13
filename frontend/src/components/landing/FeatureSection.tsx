@@ -14,7 +14,7 @@ const features = [
   {
     icon: Eye,
     title: 'Real-Time Object Detection',
-    description: 'AI instantly identifies objects in your camera feed with 99% accuracy',
+    description: 'AI tracks experiment markers in your camera feed with sub-pixel precision',
     color: 'from-cyan-500 to-blue-500',
     glow: 'shadow-cyan-500/50',
   },
