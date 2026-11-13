@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Heart, Github, Twitter, Linkedin, ExternalLink, Lock, ChevronRight } from 'lucide-react';
+import { Heart, Github, Linkedin, ExternalLink, Lock, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Footer() {
@@ -41,13 +41,8 @@ export default function Footer() {
   const socials = [
     { 
       icon: Github, 
-      href: 'https://github.com/vikassaini77', 
-      label: 'GitHub Profile (vikassaini77)' 
-    },
-    { 
-      icon: Twitter, 
-      href: 'https://twitter.com', 
-      label: 'Twitter Feed' 
+      href: 'https://github.com/vikassaini77/AI-Steam-Lab', 
+      label: 'NeuroLab GitHub Repository' 
     },
     { 
       icon: Linkedin, 

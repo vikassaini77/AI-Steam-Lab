@@ -147,7 +147,16 @@ export default function PricingPage() {
               </div>
 
               <button 
-                onClick={() => navigate('/')}
+                onClick={() => {
+                  const isAuth = !!localStorage.getItem('neurolab_session');
+                  if (p.name === 'Free Student') {
+                    navigate(isAuth ? '/dashboard' : '/auth');
+                  } else if (p.name === 'Student Pro') {
+                    navigate(isAuth ? '/dashboard/experiments' : '/auth');
+                  } else {
+                    navigate('/contact');
+                  }
+                }}
                 className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all ${
                   p.popular 
                     ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md shadow-cyan-500/20 hover:shadow-cyan-500/35 hover:scale-[1.02]' 

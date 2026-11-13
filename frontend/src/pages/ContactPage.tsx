@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
-import { ArrowLeft, Mail, Send, CheckCircle2, HelpCircle, Phone, MapPin } from 'lucide-react';
+import { ArrowLeft, Mail, Send, CheckCircle2, HelpCircle, GitBranch, Clock, ExternalLink } from 'lucide-react';
 
 export default function ContactPage() {
   const navigate = useNavigate();
@@ -19,19 +19,26 @@ export default function ContactPage() {
     if (!name || !email || !message) return;
 
     setLoading(true);
+    // Simulate immediate safe submission state while offering direct mailto
     setTimeout(() => {
       setLoading(false);
       setSubmitted(true);
       
-      // Auto close success message
+      // Auto close success message after 6 seconds
       setTimeout(() => {
         setSubmitted(false);
         setName('');
         setEmail('');
         setSubject('');
         setMessage('');
-      }, 4000);
-    }, 1500);
+      }, 6000);
+    }, 800);
+  };
+
+  const handleOpenMailto = () => {
+    const encodedSubject = encodeURIComponent(subject || 'NeuroLab AI STEM Platform Inquiry');
+    const encodedBody = encodeURIComponent(`Name: ${name || 'N/A'}\nEmail: ${email || 'N/A'}\n\nMessage:\n${message || ''}`);
+    window.open(`mailto:support@neurolab.ai?subject=${encodedSubject}&body=${encodedBody}`, '_blank');
   };
 
   return (
@@ -56,10 +63,13 @@ export default function ContactPage() {
               initial={{ opacity: 0, y: -50, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] bg-[#0c0c16] border border-cyan-500/35 px-6 py-4 rounded-2xl flex items-center gap-3 shadow-2xl shadow-cyan-500/10 backdrop-blur-xl"
+              className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] bg-[#0c0c16] border border-cyan-500/35 px-6 py-4 rounded-2xl flex items-center gap-3 shadow-2xl shadow-cyan-500/10 backdrop-blur-xl max-w-md text-left"
             >
-              <CheckCircle2 className="w-5 h-5 text-cyan-400" />
-              <span className="text-sm font-bold text-white tracking-wide">Message sent successfully! 🚀</span>
+              <CheckCircle2 className="w-5 h-5 text-cyan-400 flex-shrink-0" />
+              <div>
+                <span className="text-sm font-bold text-white tracking-wide block">Inquiry Recorded</span>
+                <span className="text-xs text-gray-400">Thank you! Our engineering and academic team will reply to {email} within 24–48 hours.</span>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -75,31 +85,52 @@ export default function ContactPage() {
               <h2 className="text-2xl font-black text-white">Get in Touch</h2>
             </div>
             <p className="text-gray-400 text-xs leading-relaxed mb-6">
-              Have questions about platform integration, pricing plans, school credentials, or need support? Drop us a line.
+              Have questions about platform integration, classroom adoption, research collaborations, or technical support? We are here to assist.
             </p>
 
             <div className="space-y-4 pt-4">
               <div className="flex items-center gap-3.5 text-xs text-gray-300">
-                <HelpCircle className="w-5 h-5 text-cyan-400" />
+                <HelpCircle className="w-5 h-5 text-cyan-400 flex-shrink-0" />
                 <div>
-                  <span className="text-gray-500 block">General Support</span>
-                  <span className="font-semibold">support@neurolab.ai</span>
+                  <span className="text-gray-500 block">Academic & Technical Support</span>
+                  <a href="mailto:support@neurolab.ai" className="font-semibold text-cyan-400 hover:underline">
+                    support@neurolab.ai
+                  </a>
                 </div>
               </div>
               <div className="flex items-center gap-3.5 text-xs text-gray-300">
-                <Phone className="w-5 h-5 text-purple-400" />
+                <GitBranch className="w-5 h-5 text-purple-400 flex-shrink-0" />
                 <div>
-                  <span className="text-gray-500 block">Phone Support</span>
-                  <span className="font-semibold">+1 (800) 555-STEM</span>
+                  <span className="text-gray-500 block">Open Source Repository & Bug Reports</span>
+                  <a 
+                    href="https://github.com/vikassaini77/AI-Steam-Lab/issues" 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="font-semibold text-purple-400 hover:underline flex items-center gap-1"
+                  >
+                    GitHub Issues Tracker
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
                 </div>
               </div>
               <div className="flex items-center gap-3.5 text-xs text-gray-300">
-                <MapPin className="w-5 h-5 text-amber-400" />
+                <Clock className="w-5 h-5 text-amber-400 flex-shrink-0" />
                 <div>
-                  <span className="text-gray-500 block">Corporate Address</span>
-                  <span className="font-semibold">100 Cybernetic Way, Silicon Valley</span>
+                  <span className="text-gray-500 block">Expected Response SLA</span>
+                  <span className="font-semibold">Within 24–48 hours on business days</span>
                 </div>
               </div>
+            </div>
+
+            <div className="pt-6 border-t border-white/5">
+              <button
+                type="button"
+                onClick={handleOpenMailto}
+                className="w-full py-2.5 px-4 rounded-xl border border-white/10 hover:border-cyan-500/40 bg-white/5 hover:bg-white/10 text-xs font-semibold text-gray-300 hover:text-white transition-all flex items-center justify-center gap-2"
+              >
+                <Mail className="w-3.5 h-3.5 text-cyan-400" />
+                Open Directly in Email Client
+              </button>
             </div>
           </div>
 

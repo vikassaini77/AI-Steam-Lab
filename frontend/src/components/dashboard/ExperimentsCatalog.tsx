@@ -1,129 +1,195 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Zap, Play, Clock, Lock, Check } from "lucide-react";
+import { Zap, Play, Clock, Lock, Check, Sparkles } from "lucide-react";
+import { getApiBaseUrl, getAuthHeaders } from "../../lib/api";
+
+interface HistoryRecord {
+  experiment_id?: string;
+  exp_id?: string;
+  type?: string;
+  title?: string;
+  status?: string;
+  completed?: boolean;
+  trials?: unknown[];
+  accuracy?: number;
+}
+
+interface ExperimentItem {
+  id: string;
+  subject: string;
+  tier: 'Beginner' | 'Intermediate' | 'Advanced';
+  title: string;
+  desc: string;
+  time: string;
+  xp: string;
+  progress: number;
+  status: 'Start' | 'Continue' | 'Review' | 'Coming Soon';
+  locked: boolean;
+  roadmap?: boolean;
+}
+
+const INITIAL_EXPERIMENTS: ExperimentItem[] = [
+  {
+    id: 'pendulum',
+    subject: 'Physics',
+    tier: 'Beginner',
+    title: 'Simple Pendulum Oscillation',
+    desc: 'Measure pendulum oscillation periods, evaluate small-angle approximations, and quantify error against Newtonian dynamics.',
+    time: '20 min',
+    xp: '150 XP',
+    progress: 0,
+    status: 'Start',
+    locked: false
+  },
+  {
+    id: 'projectile_motion',
+    subject: 'Physics',
+    tier: 'Beginner',
+    title: 'Projectile Motion Analysis',
+    desc: 'Calculate kinematic ballistic trajectories, verify launch velocities and ranges, and analyze parabolic flight.',
+    time: '15 min',
+    xp: '100 XP',
+    progress: 0,
+    status: 'Start',
+    locked: false
+  },
+  {
+    id: 'free_fall',
+    subject: 'Physics',
+    tier: 'Beginner',
+    title: 'Free Fall & Gravity Verification',
+    desc: 'Measure gravitational acceleration g via drop times, analyze quadratic position-time curves, and examine air resistance.',
+    time: '15 min',
+    xp: '120 XP',
+    progress: 0,
+    status: 'Start',
+    locked: false
+  },
+  {
+    id: 'circular_motion',
+    subject: 'Physics',
+    tier: 'Intermediate',
+    title: 'Uniform Circular Motion',
+    desc: 'Compute centripetal acceleration, angular frequencies, and verify centripetal force requirements across planetary gravities.',
+    time: '25 min',
+    xp: '200 XP',
+    progress: 0,
+    status: 'Start',
+    locked: false
+  },
+  {
+    id: 'harmonic_motion',
+    subject: 'Physics',
+    tier: 'Intermediate',
+    title: 'Simple Harmonic Motion (Spring-Mass)',
+    desc: "Investigate Hooke's law restoring force, natural frequencies, and mechanical energy oscillations between kinetic and elastic.",
+    time: '25 min',
+    xp: '220 XP',
+    progress: 0,
+    status: 'Start',
+    locked: false
+  },
+  {
+    id: 'collision_momentum',
+    subject: 'Physics',
+    tier: 'Advanced',
+    title: 'Collision and Linear Momentum',
+    desc: 'Test 1D elastic and inelastic collisions, verify conservation of momentum, and evaluate coefficient of restitution.',
+    time: '30 min',
+    xp: '300 XP',
+    progress: 0,
+    status: 'Start',
+    locked: false
+  },
+  {
+    id: 'chemical_reaction',
+    subject: 'Chemistry',
+    tier: 'Intermediate',
+    title: 'Spectrophotometry & Chemical Kinetics',
+    desc: 'Colorimetric analysis to detect and classify chemical reaction rates, absorbance spectra, and stoichiometry in real time.',
+    time: '25 min',
+    xp: '200 XP',
+    progress: 0,
+    status: 'Coming Soon',
+    locked: true,
+    roadmap: true
+  },
+  {
+    id: 'stress_analysis',
+    subject: 'Engineering',
+    tier: 'Advanced',
+    title: 'Structural Stress & Beam Deflection',
+    desc: 'Design structural trusses and calculate stress concentrations, load-bearing capacities, and strain curves.',
+    time: '45 min',
+    xp: '400 XP',
+    progress: 0,
+    status: 'Coming Soon',
+    locked: true,
+    roadmap: true
+  }
+];
 
 function ExperimentsCatalog() {
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [experiments, setExperiments] = useState<ExperimentItem[]>(INITIAL_EXPERIMENTS);
 
-  const categories = ['All', 'Physics', 'Chemistry', 'Mathematics', 'Engineering'];
+  const categories = ['All', 'Physics', 'Chemistry', 'Engineering'];
 
-  const experiments = [
-    {
-      id: 'pendulum',
-      subject: 'Physics',
-      tier: 'Beginner',
-      title: 'Simple Pendulum Oscillation',
-      desc: 'Measure pendulum oscillation periods, evaluate small-angle approximations, and quantify error against Newtonian dynamics.',
-      time: '20 min',
-      xp: '150 XP',
-      progress: 0,
-      status: 'Start',
-      locked: false
-    },
-    {
-      id: 'projectile_motion',
-      subject: 'Physics',
-      tier: 'Beginner',
-      title: 'Projectile Motion Analysis',
-      desc: 'Calculate kinematic ballistic trajectories, verify launch velocities and ranges, and analyze parabolic flight.',
-      time: '15 min',
-      xp: '100 XP',
-      progress: 100,
-      status: 'Review',
-      locked: false
-    },
-    {
-      id: 'free_fall',
-      subject: 'Physics',
-      tier: 'Beginner',
-      title: 'Free Fall & Gravity Verification',
-      desc: 'Measure gravitational acceleration g via drop times, analyze quadratic position-time curves, and examine air resistance.',
-      time: '15 min',
-      xp: '120 XP',
-      progress: 40,
-      status: 'Continue',
-      locked: false
-    },
-    {
-      id: 'circular_motion',
-      subject: 'Physics',
-      tier: 'Intermediate',
-      title: 'Uniform Circular Motion',
-      desc: 'Compute centripetal acceleration, angular frequencies, and verify centripetal force requirements across planetary gravities.',
-      time: '25 min',
-      xp: '200 XP',
-      progress: 0,
-      status: 'Start',
-      locked: false
-    },
-    {
-      id: 'harmonic_motion',
-      subject: 'Physics',
-      tier: 'Intermediate',
-      title: 'Simple Harmonic Motion (Spring-Mass)',
-      desc: "Investigate Hooke's law restoring force, natural frequencies, and mechanical energy oscillations between kinetic and elastic.",
-      time: '25 min',
-      xp: '220 XP',
-      progress: 0,
-      status: 'Start',
-      locked: false
-    },
-    {
-      id: 'collision_momentum',
-      subject: 'Physics',
-      tier: 'Advanced',
-      title: 'Collision and Linear Momentum',
-      desc: 'Test 1D elastic and inelastic collisions, verify conservation of momentum, and evaluate coefficient of restitution.',
-      time: '30 min',
-      xp: '300 XP',
-      progress: 0,
-      status: 'Start',
-      locked: false
-    },
-    {
-      id: 'chemical_reaction',
-      subject: 'Chemistry',
-      tier: 'Intermediate',
-      title: 'Chemical Reaction Detection',
-      desc: 'Use color analysis to detect and classify chemical reactions in real-time.',
-      time: '25 min',
-      xp: '200 XP',
-      progress: 65,
-      status: 'Continue',
-      locked: false
-    },
-    {
-      id: 'stress_analysis',
-      subject: 'Engineering',
-      tier: 'Advanced',
-      title: 'Bridge Stress Analysis',
-      desc: 'Build structures and analyze stress points using computer vision.',
-      time: '45 min',
-      xp: '400 XP',
-      progress: 0,
-      status: 'Locked',
-      locked: true,
-      unlockLevel: 25
-    }
-  ];
+  useEffect(() => {
+    const fetchHistoryAndSync = async () => {
+      try {
+        const headers = await getAuthHeaders();
+        const API_URL = getApiBaseUrl();
+        const res = await fetch(`${API_URL}/api/experiments/history`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          const historyList: HistoryRecord[] = Array.isArray(data)
+            ? data
+            : (data.experiments || data.history || []);
 
-  const handleLaunchExperiment = (exp: (typeof experiments)[0]) => {
-    const supportedEngineIds = [
-      'pendulum',
-      'projectile_motion',
-      'free_fall',
-      'circular_motion',
-      'harmonic_motion',
-      'collision_momentum'
-    ];
-    if (supportedEngineIds.includes(exp.id)) {
-      navigate(`/dashboard/experiments/${exp.id}`);
-    } else {
-      navigate('/dashboard/experiments/active');
-    }
+          setExperiments(prev =>
+            prev.map(exp => {
+              if (exp.roadmap) return exp;
+
+              const match = historyList.find(
+                (h: HistoryRecord) =>
+                  h.experiment_id === exp.id ||
+                  h.exp_id === exp.id ||
+                  h.type === exp.id ||
+                  (h.title && h.title.toLowerCase().includes(exp.id.replace('_', ' ')))
+              );
+
+              if (match) {
+                const isCompleted =
+                  match.status === 'completed' ||
+                  match.completed === true ||
+                  (match.trials && match.trials.length > 0) ||
+                  (match.accuracy !== undefined && match.accuracy > 0);
+
+                if (isCompleted) {
+                  return { ...exp, progress: 100, status: 'Review' };
+                }
+                return { ...exp, progress: 50, status: 'Continue' };
+              }
+
+              return { ...exp, progress: 0, status: 'Start' };
+            })
+          );
+        }
+      } catch (err) {
+        console.warn("Could not sync user experiment progress:", err);
+      }
+    };
+
+    fetchHistoryAndSync();
+  }, []);
+
+  const handleLaunchExperiment = (exp: ExperimentItem) => {
+    if (exp.locked || exp.roadmap) return;
+    navigate(`/dashboard/experiments/${exp.id}`);
   };
 
   const filtered = experiments.filter((exp) => {
@@ -157,7 +223,7 @@ function ExperimentsCatalog() {
                 : 'bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10'
             }`}
           >
-            {cat}
+            {cat} {cat === 'Physics' && '(6 Labs)'} {cat === 'Chemistry' && '(Roadmap)'} {cat === 'Engineering' && '(Roadmap)'}
           </button>
         ))}
       </div>
@@ -166,14 +232,14 @@ function ExperimentsCatalog() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
         {filtered.map((exp, idx) => (
           <motion.div
-            key={exp.title}
+            key={exp.id}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: idx * 0.05 }}
-            whileHover={{ y: -4, border: '1px solid rgba(6, 182, 212, 0.4)' }}
+            whileHover={!exp.locked ? { y: -4, border: '1px solid rgba(6, 182, 212, 0.4)' } : {}}
             className={`p-6 rounded-2xl border backdrop-blur-sm flex flex-col justify-between min-h-[320px] ${
               exp.locked
-                ? 'bg-white/2 border-white/5 opacity-50'
+                ? 'bg-white/[0.02] border-white/5 opacity-70'
                 : 'bg-white/5 border-white/10'
             }`}
           >
@@ -185,28 +251,34 @@ function ExperimentsCatalog() {
                     ? 'text-blue-400 bg-blue-500/10 border-blue-500/20'
                     : exp.subject === 'Chemistry'
                     ? 'text-green-400 bg-green-500/10 border-green-500/20'
-                    : exp.subject === 'Mathematics'
-                    ? 'text-purple-400 bg-purple-500/10 border-purple-500/20'
                     : 'text-orange-400 bg-orange-500/10 border-orange-500/20'
                 }`}>
                   {exp.subject}
                 </span>
 
-                <span className={`px-2 py-0.5 text-xs font-semibold rounded border flex items-center gap-1 ${
-                  exp.tier === 'Beginner'
-                    ? 'text-green-400 bg-green-500/10 border-green-500/20'
-                    : exp.tier === 'Intermediate'
-                    ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20'
-                    : 'text-red-400 bg-red-500/10 border-red-500/20'
-                }`}>
-                  {exp.tier}
-                  {exp.progress === 100 && exp.tier === 'Beginner' && '✓'}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {exp.roadmap && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded border border-purple-500/30 bg-purple-500/10 text-purple-300 flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5" />
+                      In Development
+                    </span>
+                  )}
+                  <span className={`px-2 py-0.5 text-xs font-semibold rounded border flex items-center gap-1 ${
+                    exp.tier === 'Beginner'
+                      ? 'text-green-400 bg-green-500/10 border-green-500/20'
+                      : exp.tier === 'Intermediate'
+                      ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20'
+                      : 'text-red-400 bg-red-500/10 border-red-500/20'
+                  }`}>
+                    {exp.tier}
+                    {exp.progress === 100 && ' ✓'}
+                  </span>
+                </div>
               </div>
 
               {/* Title & Description */}
               <h3 className="text-xl font-bold text-white mt-4">{exp.title}</h3>
-              <p className="text-xs text-gray-400 mt-2 leading-relaxed h-12 overflow-hidden">
+              <p className="text-xs text-gray-400 mt-2 leading-relaxed min-h-[3rem] line-clamp-3">
                 {exp.desc}
               </p>
 
@@ -226,25 +298,31 @@ function ExperimentsCatalog() {
             {/* Progress & Action Bottom Grid */}
             <div className="mt-6 pt-4 border-t border-white/5 space-y-4">
               {/* Progress Bar */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-[11px] font-bold">
-                  <span className="text-gray-500">Progress</span>
-                  <span className="text-white">{exp.progress}%</span>
+              {!exp.roadmap ? (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[11px] font-bold">
+                    <span className="text-gray-500">Progress</span>
+                    <span className="text-white">{exp.progress}%</span>
+                  </div>
+                  <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${exp.progress}%` }}
+                      className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full"
+                    />
+                  </div>
                 </div>
-                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${exp.progress}%` }}
-                    className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full"
-                  />
+              ) : (
+                <div className="text-[11px] text-gray-500 italic py-1">
+                  Scheduled for upcoming curriculum release
                 </div>
-              </div>
+              )}
 
               {/* Button */}
               {exp.locked ? (
-                <div className="w-full py-3 bg-white/2 border border-white/5 rounded-xl text-center text-xs font-bold text-gray-500 flex items-center justify-center gap-2 cursor-not-allowed">
+                <div className="w-full py-3 bg-white/[0.02] border border-white/5 rounded-xl text-center text-xs font-bold text-gray-500 flex items-center justify-center gap-2 cursor-not-allowed">
                   <Lock className="w-4 h-4" />
-                  Unlock at Level {exp.unlockLevel}
+                  Roadmap Module (Coming Soon)
                 </div>
               ) : exp.status === 'Review' ? (
                 <motion.button
@@ -261,10 +339,10 @@ function ExperimentsCatalog() {
                   whileHover={{ scale: 1.02, boxShadow: '0 0 25px rgba(6, 182, 212, 0.3)' }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => handleLaunchExperiment(exp)}
-                  className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl text-center text-xs font-bold transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl text-center text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20"
                 >
                   <Play className="w-4 h-4 fill-current" />
-                  Continue
+                  Continue Lab
                 </motion.button>
               ) : (
                 <motion.button
@@ -284,7 +362,5 @@ function ExperimentsCatalog() {
     </div>
   );
 }
-
-// -------------------------------------------------------------
 
 export default ExperimentsCatalog;

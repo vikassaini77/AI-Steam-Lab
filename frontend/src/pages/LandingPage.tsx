@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react';
+import LandingNavbar from '../components/landing/LandingNavbar';
 import ParticleBackground from '../components/landing/ParticleBackground';
 import HeroSection from '../components/landing/HeroSection';
 import FeatureSection from '../components/landing/FeatureSection';
@@ -14,6 +15,9 @@ interface LandingPageProps {
 export default function LandingPage({ onLaunchLab }: LandingPageProps) {
   return (
     <div className="relative min-h-screen bg-[#0a0a1a] overflow-x-hidden">
+      {/* Top Navbar */}
+      <LandingNavbar onLaunchLab={onLaunchLab} />
+
       {/* Particle background */}
       <ParticleBackground />
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { pushNotification } from '../lib/notificationStore';
+import { useUserStore } from '../store/useUserStore';
 import {
   User,
   Bell,
@@ -54,14 +55,23 @@ export default function ProfilePage({ session }: ProfilePageProps) {
   };
 
   const sessionUser = session?.user;
-  const initialEmail = sessionUser?.email || 'john.smith@example.com';
-  const initialFullName = sessionUser?.user_metadata?.full_name || 'John Smith';
+  const { xp: storedXp, level: storedLevel, completedLabs } = useUserStore();
+  const currentXp = Math.max(0, storedXp || 0);
+  const currentLevel = Math.max(1, storedLevel || Math.floor(currentXp / 1000) + 1);
+  const xpInCurrentLevel = currentXp % 1000;
+  const levelProgressPct = Math.min(100, Math.max(0, Number(((xpInCurrentLevel / 1000) * 100).toFixed(1))));
+  const xpToNextLevel = 1000 - xpInCurrentLevel;
+  const nextLevel = currentLevel + 1;
+
+  const initialEmail = sessionUser?.email || '';
+  const initialFullName = sessionUser?.user_metadata?.full_name || sessionUser?.email?.split('@')[0] || 'Student';
   const initials = initialFullName
     .split(' ')
+    .filter(Boolean)
     .map((n: string) => n[0])
     .join('')
     .toUpperCase()
-    .substring(0, 2) || 'JS';
+    .substring(0, 2) || 'ST';
 
   // Navigation tabs selection
   const [activeTab, setActiveTab] = useState<string>('account');
@@ -100,7 +110,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
     sessionUser?.email || initialEmail
   );
   const [phone, setPhone] = useState<string>(
-    sessionUser?.user_metadata?.phone || '+1 (555) 019-2834'
+    sessionUser?.user_metadata?.phone || ''
   );
   const [country, setCountry] = useState<string>(
     sessionUser?.user_metadata?.country || 'United States'
@@ -543,7 +553,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
               <div className="text-center space-y-2">
                 <span className="text-4xl">⚠️</span>
                 <h3 className="text-xl font-extrabold text-white">Permanently Delete Account?</h3>
-                <p className="text-xs text-gray-400 leading-relaxed">This action cannot be undone. You will lose your total level progress (Level 12), accumulated Achievements (6 badges), and total XP cache (2,450 XP).</p>
+                <p className="text-xs text-gray-400 leading-relaxed">This action cannot be undone. You will lose your total level progress (Level {currentLevel}), completed labs ({completedLabs}), and accumulated XP cache ({currentXp.toLocaleString()} XP).</p>
               </div>
 
               <div className="flex gap-3">
@@ -786,7 +796,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                     </div>
                   </div>
                   <span className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold rounded-full">
-                    Level 12
+                    Level {currentLevel}
                   </span>
                 </div>
 
@@ -1416,25 +1426,25 @@ export default function ProfilePage({ session }: ProfilePageProps) {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 bg-white/[0.01] border border-white/5 rounded-xl space-y-1">
-                    <span className="text-3xl font-black text-white">6/12</span>
-                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Unlocked Badges</p>
+                    <span className="text-3xl font-black text-white">{completedLabs > 0 ? `${Math.min(completedLabs, 12)}/12` : '0/12'}</span>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Completed Labs</p>
                   </div>
                   
                   <div className="p-4 bg-white/[0.01] border border-white/5 rounded-xl space-y-1">
-                    <span className="text-3xl font-black text-amber-500">2,450 XP</span>
+                    <span className="text-3xl font-black text-amber-500">{currentXp.toLocaleString()} XP</span>
                     <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Total Earned XP</p>
                   </div>
                 </div>
 
                 <div className="p-4 bg-white/[0.01] border border-white/5 rounded-xl space-y-3">
                   <div className="flex justify-between text-xs font-bold text-white">
-                    <span>Level 12 Progression</span>
-                    <span className="text-cyan-400">81.6% Completed</span>
+                    <span>Level {currentLevel} Progression</span>
+                    <span className="text-cyan-400">{levelProgressPct}% Completed</span>
                   </div>
                   <div className="h-2 bg-[#1c1c2b] rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: '81.6%' }} />
+                    <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: `${levelProgressPct}%` }} />
                   </div>
-                  <p className="text-[10px] text-gray-500">Earn 550 additional XP to advance to Level 13 (Senior Specialist).</p>
+                  <p className="text-[10px] text-gray-500">Earn {xpToNextLevel} additional XP to advance to Level {nextLevel}.</p>
                 </div>
 
                 <button

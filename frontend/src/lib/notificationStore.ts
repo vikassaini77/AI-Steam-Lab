@@ -44,36 +44,7 @@ function playPopSound() {
 type Listener = (notifications: Notification[]) => void;
 type PopupListener = (notification: Notification) => void;
 
-let notifications: Notification[] = [
-  {
-    id: 1,
-    text: "🎉 Congratulations! You unlocked the 'Quick Learner' badge! (+300 XP)",
-    time: '2 mins ago',
-    read: false,
-    type: 'badge',
-  },
-  {
-    id: 2,
-    text: '🔥 Streak Alert: Maintain your 5-day streak! Log in tomorrow to secure it.',
-    time: '1 hour ago',
-    read: false,
-    type: 'streak',
-  },
-  {
-    id: 3,
-    text: "🤖 AI Tutor: You have 1 new suggested topic: 'Newton's Laws of Motion'.",
-    time: '3 hours ago',
-    read: true,
-    type: 'info',
-  },
-  {
-    id: 4,
-    text: '📊 Weekly Report: You gained 850 XP and completed 3 labs this week!',
-    time: '1 day ago',
-    read: true,
-    type: 'xp',
-  },
-];
+let notifications: Notification[] = [];
 
 let nextId = 100;
 const listeners: Listener[] = [];
