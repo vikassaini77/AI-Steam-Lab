@@ -125,6 +125,32 @@ export default function ExperimentWorkspace() {
   const [mass, setMass] = useState<number>(1.0);
   const [damping, setDamping] = useState<number>(0.0);
 
+  // Real-time Physics Simulation Animation State
+  const [simPlaying, setSimPlaying] = useState<boolean>(true);
+  const [simTime, setSimTime] = useState<number>(0);
+  const [simSpeed, setSimSpeed] = useState<number>(1.0);
+
+  // High-precision RequestAnimationFrame loop for live 60 FPS model physics
+  useEffect(() => {
+    let animId: number;
+    let lastTime: number | null = null;
+
+    const loop = (timestamp: number) => {
+      if (lastTime !== null) {
+        const deltaSec = (timestamp - lastTime) / 1000;
+        const dt = Math.min(deltaSec, 0.1) * simSpeed;
+        if (simPlaying) {
+          setSimTime((prev) => prev + dt);
+        }
+      }
+      lastTime = timestamp;
+      animId = requestAnimationFrame(loop);
+    };
+
+    animId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animId);
+  }, [simPlaying, simSpeed]);
+
   // Theoretical Results
   const [theoreticalData, setTheoreticalData] = useState<TheoreticalData | null>(null);
   const [calculating, setCalculating] = useState<boolean>(false);
@@ -956,39 +982,403 @@ export default function ExperimentWorkspace() {
         {/* Right Column (4 cols): Animated Simulation Bob + Physical Parameters */}
         <div className="lg:col-span-4 space-y-6">
           {/* Animated Canvas / Mini Visualizer */}
-          <div className="bg-[#10101c] border border-[#212133] rounded-2xl p-5 space-y-4 shadow-xl">
-            <span className="text-xs font-bold text-white flex items-center justify-between">
-              <span>Interactive Model</span>
-              <span className="text-[10px] text-cyan-400 font-mono">Real-time Simulation</span>
-            </span>
+          <div className="bg-[#10101c] border border-[#212133] rounded-2xl p-5 space-y-4 shadow-xl text-left">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white flex items-center gap-2">
+                <Atom className="w-4 h-4 text-cyan-400" />
+                <span>Interactive Model</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-[10px] font-mono">
+                {simPlaying ? (
+                  <span className="flex items-center gap-1.5 text-emerald-400">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Live 60 FPS
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-amber-400">
+                    <Pause className="w-2.5 h-2.5" />
+                    Paused
+                  </span>
+                )}
+              </span>
+            </div>
 
-            {/* Pendulum Visualizer SVG */}
-            <div className="h-64 bg-black/50 border border-white/5 rounded-xl flex items-center justify-center relative overflow-hidden">
-              <svg className="w-full h-full" viewBox="0 0 200 240">
-                {/* Pivot point */}
-                <circle cx="100" cy="20" r="4" fill="#94a3b8" />
-                <rect x="80" y="16" width="40" height="4" fill="#64748b" rx="2" />
+            {/* Simulation Controls Bar */}
+            <div className="flex items-center justify-between bg-white/[0.03] border border-white/5 p-2 rounded-xl text-xs">
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setSimPlaying(!simPlaying)}
+                  className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all ${
+                    simPlaying
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500/30'
+                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                  }`}
+                  title={simPlaying ? 'Pause Simulation' : 'Resume Simulation'}
+                >
+                  {simPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                  <span>{simPlaying ? 'Pause' : 'Play'}</span>
+                </button>
+                <button
+                  onClick={() => setSimTime(0)}
+                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors border border-white/5"
+                  title="Reset to initial state (t = 0)"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </button>
+              </div>
 
-                {/* Equilibrium vertical dashed line */}
-                <line x1="100" y1="20" x2="100" y2="210" stroke="#334155" strokeDasharray="3 3" />
+              {/* Speed Buttons */}
+              <div className="flex items-center gap-1 bg-black/40 p-0.5 rounded-lg border border-white/5">
+                {[0.5, 1.0, 2.0].map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setSimSpeed(s)}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
+                      simSpeed === s
+                        ? 'bg-cyan-500 text-black shadow-sm'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    {s}x
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                {/* Pendulum Rod */}
-                {(() => {
-                  const rad = (angleDeg * Math.PI) / 180;
-                  const rodLen = 160;
-                  const bx = 100 + rodLen * Math.sin(rad);
-                  const by = 20 + rodLen * Math.cos(rad);
-                  return (
-                    <g>
-                      <line x1="100" y1="20" x2={bx} y2={by} stroke="#06b6d4" strokeWidth="2.5" />
-                      <circle cx={bx} cy={by} r="14" fill="#ef4444" stroke="#ffffff" strokeWidth="1.5" />
-                      <text x={bx} y={by + 4} textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="bold">
-                        m
+            {/* Dynamic Visualizer SVG tailored to expId */}
+            <div className="h-64 bg-black/60 border border-white/5 rounded-xl flex items-center justify-center relative overflow-hidden select-none">
+              {/* Background Cartesian grid overlay */}
+              <div className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{
+                backgroundImage: 'linear-gradient(rgba(255,255,255,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.4) 1px, transparent 1px)',
+                backgroundSize: '20px 20px'
+              }} />
+
+              {/* Experiment 1: Pendulum */}
+              {(expId === 'pendulum' || !['projectile_motion', 'free_fall', 'circular_motion', 'harmonic_motion', 'collision_momentum'].includes(expId)) && (() => {
+                const effL = Math.max(0.2, length);
+                const effG = Math.max(0.5, gravity);
+                const omega = Math.sqrt(effG / effL);
+                const theta0Rad = (Math.max(2, angleDeg) * Math.PI) / 180;
+                const decay = Math.exp(-damping * 0.05 * simTime);
+                const currentRad = theta0Rad * Math.cos(omega * simTime) * decay;
+                const currentDeg = (currentRad * 180) / Math.PI;
+                const omegaCurrent = -theta0Rad * omega * Math.sin(omega * simTime) * decay;
+                const velocity = effL * omegaCurrent;
+
+                const rodLen = 145;
+                const bx = 100 + rodLen * Math.sin(currentRad);
+                const by = 25 + rodLen * Math.cos(currentRad);
+
+                const maxDeg = Math.max(2, angleDeg);
+                const arcRad = (maxDeg * Math.PI) / 180;
+                const leftArcX = 100 - rodLen * Math.sin(arcRad);
+                const leftArcY = 25 + rodLen * Math.cos(arcRad);
+                const rightArcX = 100 + rodLen * Math.sin(arcRad);
+                const rightArcY = 25 + rodLen * Math.cos(arcRad);
+
+                return (
+                  <svg className="w-full h-full" viewBox="0 0 200 240">
+                    {/* Fixed ceiling mount */}
+                    <rect x="70" y="18" width="60" height="7" fill="#475569" rx="2" />
+                    <circle cx="100" cy="25" r="5" fill="#38bdf8" stroke="#ffffff" strokeWidth="1" />
+
+                    {/* Equilibrium vertical dashed line */}
+                    <line x1="100" y1="25" x2="100" y2="210" stroke="#334155" strokeDasharray="3 3" />
+
+                    {/* Amplitude arc trajectory guideline */}
+                    <path
+                      d={`M ${leftArcX} ${leftArcY} A ${rodLen} ${rodLen} 0 0 0 ${rightArcX} ${rightArcY}`}
+                      fill="none"
+                      stroke="#06b6d4"
+                      strokeOpacity="0.25"
+                      strokeWidth="1.5"
+                      strokeDasharray="2 3"
+                    />
+
+                    {/* Swinging Pendulum Rod */}
+                    <line
+                      x1="100"
+                      y1="25"
+                      x2={bx}
+                      y2={by}
+                      stroke="#06b6d4"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                    />
+
+                    {/* Velocity vector tangent arrow */}
+                    {Math.abs(velocity) > 0.05 && (
+                      <line
+                        x1={bx}
+                        y1={by}
+                        x2={bx + Math.cos(currentRad) * velocity * 12}
+                        y2={by - Math.sin(currentRad) * velocity * 12}
+                        stroke="#10b981"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      />
+                    )}
+
+                    {/* Glowing Bob with mass label */}
+                    <g className="cursor-pointer" onClick={() => setSimTime(t => t + 0.5)}>
+                      <circle cx={bx} cy={by} r="16" fill="rgba(239, 68, 68, 0.25)" className="animate-ping" style={{ animationDuration: '3s' }} />
+                      <circle cx={bx} cy={by} r="14" fill="#ef4444" stroke="#ffffff" strokeWidth="2" filter="drop-shadow(0 0 8px rgba(239,68,68,0.7))" />
+                      <text x={bx} y={by + 4} textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="bold" pointerEvents="none">
+                        {mass.toFixed(1)}k
                       </text>
                     </g>
-                  );
-                })()}
-              </svg>
+
+                    {/* Angle arc indicator near pivot */}
+                    <path
+                      d={`M 100 50 A 25 25 0 0 ${currentRad > 0 ? 1 : 0} ${100 + 25 * Math.sin(currentRad)} ${25 + 25 * Math.cos(currentRad)}`}
+                      fill="none"
+                      stroke="#f59e0b"
+                      strokeWidth="1.5"
+                    />
+                    <text x="100" y="230" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="monospace">
+                      θ(t) = {currentDeg.toFixed(1)}° • v = {Math.abs(velocity).toFixed(2)} m/s
+                    </text>
+                  </svg>
+                );
+              })()}
+
+              {/* Experiment 2: Projectile Motion */}
+              {expId === 'projectile_motion' && (() => {
+                const v0 = 16;
+                const effG = Math.max(0.5, gravity);
+                const thetaRad = (Math.min(80, Math.max(15, angleDeg)) * Math.PI) / 180;
+                const tFlight = (2 * v0 * Math.sin(thetaRad)) / effG;
+                const range = (v0 * v0 * Math.sin(2 * thetaRad)) / effG;
+                const maxHeight = (v0 * v0 * Math.sin(thetaRad) * Math.sin(thetaRad)) / (2 * effG);
+
+                const cycle = tFlight + 0.8;
+                const tCur = simTime % cycle;
+                const isFlying = tCur <= tFlight;
+                const tEval = isFlying ? tCur : tFlight;
+
+                const curX = v0 * Math.cos(thetaRad) * tEval;
+                const curY = Math.max(0, v0 * Math.sin(thetaRad) * tEval - 0.5 * effG * tEval * tEval);
+
+                // Map to SVG coordinates (x: 25 to 175, y: 195 down to 40)
+                const sx = 25 + (curX / range) * 150;
+                const sy = 195 - (curY / (maxHeight * 1.15)) * 140;
+
+                // Build full trajectory arc path
+                const points = [];
+                for (let i = 0; i <= 30; i++) {
+                  const tSample = (i / 30) * tFlight;
+                  const xs = 25 + ((v0 * Math.cos(thetaRad) * tSample) / range) * 150;
+                  const ys = 195 - ((v0 * Math.sin(thetaRad) * tSample - 0.5 * effG * tSample * tSample) / (maxHeight * 1.15)) * 140;
+                  points.push(`${i === 0 ? 'M' : 'L'} ${xs.toFixed(1)} ${ys.toFixed(1)}`);
+                }
+
+                return (
+                  <svg className="w-full h-full" viewBox="0 0 200 240">
+                    {/* Ground line */}
+                    <line x1="15" y1="195" x2="185" y2="195" stroke="#475569" strokeWidth="2" />
+
+                    {/* Launch Cannon at bottom left */}
+                    <circle cx="25" cy="195" r="8" fill="#38bdf8" />
+                    <line x1="25" y1="195" x2={25 + 16 * Math.cos(thetaRad)} y2={195 - 16 * Math.sin(thetaRad)} stroke="#0284c7" strokeWidth="5" strokeLinecap="round" />
+
+                    {/* Full Parabolic Trajectory Path */}
+                    <path d={points.join(' ')} fill="none" stroke="#06b6d4" strokeWidth="2" strokeDasharray="3 3" opacity="0.6" />
+
+                    {/* Projectile ball */}
+                    <circle cx={sx} cy={sy} r="9" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.5" filter="drop-shadow(0 0 6px #f59e0b)" />
+
+                    {/* Landing impact wave */}
+                    {!isFlying && (
+                      <circle cx="175" cy="195" r="14" fill="none" stroke="#f59e0b" strokeWidth="2" opacity="0.8" className="animate-ping" />
+                    )}
+
+                    <text x="100" y="225" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="monospace">
+                      x = {curX.toFixed(1)}m • y = {curY.toFixed(1)}m • t = {tEval.toFixed(2)}s
+                    </text>
+                  </svg>
+                );
+              })()}
+
+              {/* Experiment 3: Free Fall */}
+              {expId === 'free_fall' && (() => {
+                const effG = Math.max(0.5, gravity);
+                const hTotal = 20;
+                const tFall = Math.sqrt((2 * hTotal) / effG);
+                const cycle = tFall + 0.8;
+                const tCur = simTime % cycle;
+                const isDropping = tCur <= tFall;
+                const tEval = isDropping ? tCur : tFall;
+
+                const yDrop = 0.5 * effG * tEval * tEval;
+                const vInstant = effG * tEval;
+                const sy = 40 + (yDrop / hTotal) * 145;
+
+                return (
+                  <svg className="w-full h-full" viewBox="0 0 200 240">
+                    {/* Top release tower */}
+                    <rect x="75" y="25" width="50" height="15" fill="#475569" rx="3" />
+                    <text x="100" y="36" textAnchor="middle" fill="#e2e8f0" fontSize="8" fontWeight="bold">RELEASE</text>
+
+                    {/* Ground plate */}
+                    <rect x="50" y="195" width="100" height="8" fill="#334155" rx="2" />
+                    <line x1="20" y1="203" x2="180" y2="203" stroke="#1e293b" strokeWidth="2" />
+
+                    {/* Vertical guideline */}
+                    <line x1="100" y1="40" x2="100" y2="195" stroke="#334155" strokeDasharray="3 3" />
+
+                    {/* Velocity arrow growing downwards */}
+                    {isDropping && (
+                      <line x1="100" y1={sy} x2="100" y2={sy + Math.min(30, vInstant * 1.5)} stroke="#10b981" strokeWidth="2" strokeLinecap="round" />
+                    )}
+
+                    {/* Falling Ball */}
+                    <circle cx="100" cy={sy} r="12" fill="#ef4444" stroke="#ffffff" strokeWidth="1.5" filter="drop-shadow(0 0 8px rgba(239,68,68,0.7))" />
+                    <text x="100" y={sy + 3} textAnchor="middle" fill="#ffffff" fontSize="8" fontWeight="bold">m</text>
+
+                    {/* Impact flash */}
+                    {!isDropping && (
+                      <ellipse cx="100" cy="195" rx="22" ry="5" fill="#f59e0b" opacity="0.6" className="animate-pulse" />
+                    )}
+
+                    <text x="100" y="225" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="monospace">
+                      Drop: {yDrop.toFixed(1)}m • v = {vInstant.toFixed(1)} m/s
+                    </text>
+                  </svg>
+                );
+              })()}
+
+              {/* Experiment 4: Uniform Circular Motion */}
+              {expId === 'circular_motion' && (() => {
+                const effR = 55;
+                const effG = Math.max(0.5, gravity);
+                const omega = Math.sqrt(effG / Math.max(0.2, length)) * 1.3;
+                const angleCur = omega * simTime;
+                const bx = 100 + effR * Math.cos(angleCur);
+                const by = 110 + effR * Math.sin(angleCur);
+                const vx = -Math.sin(angleCur) * 22;
+                const vy = Math.cos(angleCur) * 22;
+
+                return (
+                  <svg className="w-full h-full" viewBox="0 0 200 240">
+                    {/* Orbit Ring */}
+                    <circle cx="100" cy="110" r={effR} fill="none" stroke="#06b6d4" strokeWidth="1.5" strokeDasharray="3 3" opacity="0.5" />
+
+                    {/* Tether Radius */}
+                    <line x1="100" y1="110" x2={bx} y2={by} stroke="#38bdf8" strokeWidth="2" />
+
+                    {/* Center Pivot */}
+                    <circle cx="100" cy="110" r="5" fill="#e2e8f0" stroke="#0284c7" strokeWidth="2" />
+
+                    {/* Tangential Velocity Vector Arrow */}
+                    <line x1={bx} y1={by} x2={bx + vx} y2={by + vy} stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" />
+
+                    {/* Centripetal Acceleration Arrow (Inwards) */}
+                    <line x1={bx} y1={by} x2={bx - Math.cos(angleCur) * 18} y2={by - Math.sin(angleCur) * 18} stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" />
+
+                    {/* Orbiting Bob */}
+                    <circle cx={bx} cy={by} r="12" fill="#8b5cf6" stroke="#ffffff" strokeWidth="1.5" filter="drop-shadow(0 0 8px #8b5cf6)" />
+                    <text x={bx} y={by + 3} textAnchor="middle" fill="#ffffff" fontSize="8" fontWeight="bold">m</text>
+
+                    <text x="100" y="225" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="monospace">
+                      ω = {omega.toFixed(2)} rad/s • v = {(omega * length).toFixed(2)} m/s
+                    </text>
+                  </svg>
+                );
+              })()}
+
+              {/* Experiment 5: Simple Harmonic Motion (Spring-Mass) */}
+              {expId === 'harmonic_motion' && (() => {
+                const effG = Math.max(0.5, gravity);
+                const omega = Math.sqrt(effG / Math.max(0.2, length)) * 1.4;
+                const amplitude = 32;
+                const dy = amplitude * Math.cos(omega * simTime) * Math.exp(-damping * 0.04 * simTime);
+                const massY = 120 + dy;
+
+                // Build spring zigzag points from y=25 to y=massY-15
+                const springTop = 25;
+                const springBottom = massY - 14;
+                const numCoils = 9;
+                const coilStep = (springBottom - springTop) / numCoils;
+                const springPoints = [`M 100 ${springTop}`];
+                for (let i = 1; i < numCoils; i++) {
+                  const cx = i % 2 === 1 ? 115 : 85;
+                  const cy = springTop + i * coilStep;
+                  springPoints.push(`L ${cx} ${cy.toFixed(1)}`);
+                }
+                springPoints.push(`L 100 ${springBottom.toFixed(1)}`);
+
+                return (
+                  <svg className="w-full h-full" viewBox="0 0 200 240">
+                    {/* Fixed Ceiling */}
+                    <rect x="70" y="18" width="60" height="7" fill="#475569" rx="2" />
+
+                    {/* Equilibrium Reference Line */}
+                    <line x1="40" y1="120" x2="160" y2="120" stroke="#334155" strokeDasharray="3 3" />
+                    <text x="165" y="123" fill="#64748b" fontSize="8" fontFamily="monospace">y=0</text>
+
+                    {/* Elastic Spring Coil */}
+                    <path d={springPoints.join(' ')} fill="none" stroke="#06b6d4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+                    {/* Mass Block */}
+                    <rect x="80" y={massY - 14} width="40" height="28" fill="#3b82f6" stroke="#ffffff" strokeWidth="2" rx="4" filter="drop-shadow(0 0 8px rgba(59,130,246,0.6))" />
+                    <text x="100" y={massY + 3} textAnchor="middle" fill="#ffffff" fontSize="10" fontWeight="bold">
+                      {mass.toFixed(1)} kg
+                    </text>
+
+                    {/* Restoring Force arrow F = -ky */}
+                    <line x1="135" y1="120" x2="135" y2={120 - dy * 0.7} stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" />
+
+                    <text x="100" y="225" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="monospace">
+                      Δy = {dy.toFixed(1)}px • F = {(-dy * 0.2).toFixed(1)}N
+                    </text>
+                  </svg>
+                );
+              })()}
+
+              {/* Experiment 6: Collision and Linear Momentum */}
+              {expId === 'collision_momentum' && (() => {
+                const cycle = 4.0;
+                const tCur = simTime % cycle;
+                // Approach 0 to 1.8s, Collide at 1.8 to 2.0s, Rebound 2.0 to 4.0s
+                let c1x = 40;
+                let c2x = 160;
+                if (tCur < 1.8) {
+                  c1x = 35 + (tCur / 1.8) * 45; // 35 -> 80
+                  c2x = 165 - (tCur / 1.8) * 45; // 165 -> 120
+                } else if (tCur < 2.0) {
+                  c1x = 80;
+                  c2x = 120;
+                } else {
+                  const tReb = (tCur - 2.0) / 2.0;
+                  c1x = 80 - tReb * 45; // 80 -> 35
+                  c2x = 120 + tReb * 45; // 120 -> 165
+                }
+
+                return (
+                  <svg className="w-full h-full" viewBox="0 0 200 240">
+                    {/* Air Track */}
+                    <rect x="20" y="130" width="160" height="8" fill="#334155" rx="3" />
+                    <line x1="20" y1="140" x2="180" y2="140" stroke="#1e293b" strokeWidth="2" />
+
+                    {/* Cart 1 */}
+                    <rect x={c1x - 20} y="105" width="36" height="24" fill="#06b6d4" stroke="#ffffff" strokeWidth="1.5" rx="3" />
+                    <text x={c1x - 2} y="120" textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="bold">m₁</text>
+
+                    {/* Cart 2 */}
+                    <rect x={c2x - 16} y="105" width="36" height="24" fill="#ec4899" stroke="#ffffff" strokeWidth="1.5" rx="3" />
+                    <text x={c2x + 2} y="120" textAnchor="middle" fill="#ffffff" fontSize="9" fontWeight="bold">m₂</text>
+
+                    {/* Collision Spark when touching */}
+                    {tCur >= 1.7 && tCur <= 2.1 && (
+                      <circle cx="100" cy="117" r="12" fill="#f59e0b" opacity="0.8" className="animate-ping" />
+                    )}
+
+                    <text x="100" y="225" textAnchor="middle" fill="#94a3b8" fontSize="10" fontFamily="monospace">
+                      p₁ + p₂ = {(mass * 1.5).toFixed(2)} kg•m/s (Conserved)
+                    </text>
+                  </svg>
+                );
+              })()}
             </div>
 
             {/* Quick Metrics Badge List */}
