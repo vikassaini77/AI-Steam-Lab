@@ -1,6 +1,6 @@
 import { BrowserRouter, HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useState, useEffect, Suspense as ReactSuspense } from 'react';
-import type { Session } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 import { ErrorBoundary } from 'react-error-boundary';
 import type { FallbackProps } from 'react-error-boundary';
 import { lazy } from 'react';
@@ -47,7 +47,29 @@ function AppContent() {
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        setSession(session);
+        if (session) {
+          setSession(session);
+        } else if (import.meta.env.MODE === 'anna') {
+          // Provide an immediate local guest scholar session for Anna runtime
+          const guestSession: Session = {
+            access_token: 'anna_guest_token',
+            token_type: 'bearer',
+            expires_in: 86400,
+            expires_at: Math.floor(Date.now() / 1000) + 86400,
+            refresh_token: 'anna_guest_refresh',
+            user: {
+              id: 'anna_guest_scholar',
+              app_metadata: {},
+              user_metadata: {
+                full_name: 'Anna Scholar',
+                username: 'anna_scholar',
+              },
+              aud: 'authenticated',
+              created_at: new Date().toISOString(),
+            } as unknown as User,
+          };
+          setSession(guestSession);
+        }
       } catch (error) {
         console.error('Auth init error:', error);
       } finally {
@@ -83,8 +105,12 @@ function AppContent() {
 
   const RequireAuthFallback = () => {
     useEffect(() => {
-      setCurrentPage('intro');
-      navigate('/', { replace: true });
+      if (import.meta.env.MODE === 'anna') {
+        navigate('/dashboard', { replace: true });
+      } else {
+        setCurrentPage('intro');
+        navigate('/', { replace: true });
+      }
     }, []);
     return <PageLoader />;
   };
@@ -112,7 +138,15 @@ function AppContent() {
     <>
       <CookieConsent />
       <Routes>
-        <Route path="/" element={<LandingPage onLaunchLab={handleLaunchLab} />} />
+        <Route 
+          path="/" 
+          element={
+            import.meta.env.MODE === 'anna' 
+              ? <Navigate to="/dashboard" replace /> 
+              : <LandingPage onLaunchLab={handleLaunchLab} />
+          } 
+        />
+        <Route path="/welcome" element={<LandingPage onLaunchLab={handleLaunchLab} />} />
         <Route path="/auth" element={<Navigate to="/" replace />} />
         
         {/* Live Lab direct routing */}
@@ -123,7 +157,7 @@ function AppContent() {
         
         <Route
           path="/dashboard/*"
-          element={session ? <Dashboard session={session} /> : <Navigate to="/" replace />}
+          element={session || import.meta.env.MODE === 'anna' ? <Dashboard session={session} /> : <Navigate to="/" replace />}
         />
         <Route
           path="/profile"

@@ -24,6 +24,7 @@
         "name": "main",
         "title": "NeuroLab AI",
         "default": true,
+        "entry": "index.html",
         "resizable": true,
         "movable": true,
         "single_instance": false

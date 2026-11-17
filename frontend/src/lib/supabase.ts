@@ -10,10 +10,54 @@ const isRealSupabaseConfigured =
   !supabaseUrl.includes('0ec90b57d6e95fcbda19832f') &&
   !supabaseUrl.includes('your-supabase-project-id');
 
-// Initialize the real supabase client
+const memoryStorage = new Map<string, string>();
+export const safeStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        return window.localStorage.getItem(key);
+      }
+    } catch {
+      // Sandboxed iframe without storage permission
+    }
+    return memoryStorage.get(key) ?? null;
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, value);
+        return;
+      }
+    } catch {
+      // Sandboxed iframe without storage permission
+    }
+    memoryStorage.set(key, value);
+  },
+  removeItem: (key: string): void => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(key);
+        return;
+      }
+    } catch {
+      // Sandboxed iframe without storage permission
+    }
+    memoryStorage.delete(key);
+  },
+};
+
+// Initialize the real supabase client with resilient fallback storage
 const realSupabase = createClient(
   supabaseUrl || 'https://tmxlvvypzbrtwvpukvfx.supabase.co',
-  supabaseAnonKey || 'sb_publishable_Cmpj3H-TzdYLRo0qCMZltQ_CQ3aHtQ8'
+  supabaseAnonKey || 'sb_publishable_Cmpj3H-TzdYLRo0qCMZltQ_CQ3aHtQ8',
+  {
+    auth: {
+      storage: safeStorage,
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+    },
+  }
 );
 
 interface MockSignUpParams {
