@@ -15,7 +15,8 @@
       "format": "static-spa",
       "entry": "index.html",
       "external_origins": [
-        "https://neurolab-backend-uxhv.onrender.com"
+        "https://neurolab-backend-uxhv.onrender.com",
+        "https://tmxlvvypzbrtwvpukvfx.supabase.co"
       ]
     },
     "views": [
