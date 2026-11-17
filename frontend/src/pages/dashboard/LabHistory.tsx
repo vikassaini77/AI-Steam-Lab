@@ -218,20 +218,21 @@ export default function LabHistory() {
 
   const handleDownloadPDF = async (exp: Experiment) => {
     pushNotification("⚡ Compiling scientific PDF report...", "xp");
+    const expMetrics = exp.metrics || {};
     try {
       const response = await fetch(`${apiHost}/api/experiments/generate-report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          experiment_name: exp.name,
+          experiment_name: exp.name || 'Physics Experiment',
           student_name: 'NeuroLab Scholar',
           metrics: {
-            displacement: exp.metrics.displacement_max || 'N/A',
-            velocity_peak: exp.metrics.velocity_peak || 'N/A',
-            gravity_verified: exp.metrics.gravity_verified || 'N/A',
-            sync_percentage: exp.metrics.sync_percentage || 'N/A'
+            displacement: expMetrics.displacement_max || 'N/A',
+            velocity_peak: expMetrics.velocity_peak || 'N/A',
+            gravity_verified: expMetrics.gravity_verified || 'N/A',
+            sync_percentage: expMetrics.sync_percentage || 'N/A'
           },
-          ai_summary: exp.metrics.roundtable?.replace(/\*\*[a-zA-Z\s]+\*\*:\s/g, '') || 'Experiment successfully logged.'
+          ai_summary: expMetrics.roundtable?.replace(/\*\*[a-zA-Z\s]+\*\*:\s/g, '') || 'Experiment successfully logged.'
         })
       });
 
@@ -254,7 +255,7 @@ export default function LabHistory() {
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Lab Report: ${exp.name}</title>
+  <title>Lab Report: ${exp.name || 'Physics Experiment'}</title>
   <style>
     body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 40px; color: #333; max-width: 800px; margin: 0 auto; line-height: 1.6; }
     h1 { color: #0e7490; border-bottom: 2px solid #0891b2; padding-bottom: 10px; margin-bottom: 30px; }
@@ -270,26 +271,26 @@ export default function LabHistory() {
 <body>
   <h1>NeuroLab Scientific Report</h1>
   
-  <div class="metric"><span class="label">Experiment Name:</span> <span class="value">${exp.name}</span></div>
-  <div class="metric"><span class="label">Date Recorded:</span> <span class="value">${exp.date}</span></div>
-  <div class="metric"><span class="label">Subject Area:</span> <span class="value">${exp.metrics.subject || 'Physics'}</span></div>
+  <div class="metric"><span class="label">Experiment Name:</span> <span class="value">${exp.name || 'Physics Experiment'}</span></div>
+  <div class="metric"><span class="label">Date Recorded:</span> <span class="value">${exp.date || new Date().toISOString().split('T')[0]}</span></div>
+  <div class="metric"><span class="label">Subject Area:</span> <span class="value">${expMetrics.subject || 'Physics'}</span></div>
   
   <h2>Kinematics & Telemetry</h2>
-  <div class="metric"><span class="label">Peak Velocity:</span> <span class="value">${exp.metrics.velocity_peak || 'N/A'}</span></div>
-  <div class="metric"><span class="label">Max Amplitude:</span> <span class="value">${exp.metrics.displacement_max || 'N/A'}</span></div>
-  <div class="metric"><span class="label">Gravity Verified:</span> <span class="value">${exp.metrics.gravity_verified || 'N/A'}</span></div>
-  <div class="metric"><span class="label">Simulation Sync:</span> <span class="value">${exp.metrics.sync_percentage || 'N/A'}</span></div>
-  <div class="metric"><span class="label">Max Potential Energy:</span> <span class="value">${exp.metrics.pe_max || 'N/A'}</span></div>
-  <div class="metric"><span class="label">Max Kinetic Energy:</span> <span class="value">${exp.metrics.ke_max || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Peak Velocity:</span> <span class="value">${expMetrics.velocity_peak || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Max Amplitude:</span> <span class="value">${expMetrics.displacement_max || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Gravity Verified:</span> <span class="value">${expMetrics.gravity_verified || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Simulation Sync:</span> <span class="value">${expMetrics.sync_percentage || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Max Potential Energy:</span> <span class="value">${expMetrics.pe_max || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Max Kinetic Energy:</span> <span class="value">${expMetrics.ke_max || 'N/A'}</span></div>
   
   <h2>Computer Vision Details</h2>
-  <div class="metric"><span class="label">Tracking Method:</span> <span class="value">${exp.metrics.tracking_method || 'N/A'}</span></div>
-  <div class="metric"><span class="label">Tracking Target:</span> <span class="value">${exp.metrics.target_color || 'N/A'}</span></div>
-  <div class="metric"><span class="label">Tracking Confidence:</span> <span class="value">${exp.metrics.accuracy || 'N/A'} @ ${exp.metrics.fps || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Tracking Method:</span> <span class="value">${expMetrics.tracking_method || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Tracking Target:</span> <span class="value">${expMetrics.target_color || 'N/A'}</span></div>
+  <div class="metric"><span class="label">Tracking Confidence:</span> <span class="value">${expMetrics.accuracy || 'N/A'} @ ${expMetrics.fps || 'N/A'}</span></div>
 
   <h2>Scientific Roundtable Summary</h2>
   <div class="summary">
-    <div class="dialogue">${exp.metrics.roundtable || 'No dialogue logged.'}</div>
+    <div class="dialogue">${expMetrics.roundtable || 'No dialogue logged.'}</div>
   </div>
   
   <div class="footer">
@@ -352,10 +353,10 @@ export default function LabHistory() {
 
   // Helper to parse dialogues for multi-agent Roundtable presentation
   const parseRoundtable = (text?: string) => {
-    if (!text) return [];
+    if (typeof text !== 'string' || !text.trim()) return [];
     
     // Split by dialogue lines, e.g. **Professor Nova**: ...
-    const lines = text.split('\n\n');
+    const lines = text.split('\n\n').filter(Boolean);
     return lines.map(line => {
       let role = 'Professor Nova';
       let avatar = '👩‍🏫';
@@ -492,15 +493,18 @@ export default function LabHistory() {
         /* Chronological Runs Grid */
         <div className="space-y-6">
           {experiments.map((exp, idx) => {
-            const parsedDialogues = parseRoundtable(exp.metrics.roundtable);
+            const expMetrics = exp.metrics || {};
+            const parsedDialogues = parseRoundtable(expMetrics.roundtable);
             const isExpanded = expandedId === exp.id;
             
             // Map subjects dynamically
-            const subject = exp.metrics.subject || "Physics";
-            const trackingMethod = exp.metrics.tracking_method || "Client Edge CV";
-            const targetColor = exp.metrics.target_color || "Red";
-            const accuracy = exp.metrics.accuracy || "99.2%";
-            const fps = exp.metrics.fps || "60 FPS";
+            const subject = expMetrics.subject || "Physics";
+            const trackingMethod = expMetrics.tracking_method || "Client Edge CV";
+            const targetColor = expMetrics.target_color || "Red";
+            const accuracy = expMetrics.accuracy || "99.2%";
+            const fps = expMetrics.fps || "60 FPS";
+            const tc = String(targetColor).toLowerCase();
+            const dotBg = tc === 'red' ? '#ff3366' : tc === 'green' ? '#00ff88' : '#00d4ff';
 
             return (
               <motion.div
@@ -547,7 +551,7 @@ export default function LabHistory() {
                           <span className="text-white font-bold">{trackingMethod}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: targetColor.toLowerCase() === 'red' ? '#ff3366' : targetColor.toLowerCase() === 'green' ? '#00ff88' : '#00d4ff' }} />
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dotBg }} />
                           <span>Target:</span>
                           <span className="text-white font-bold">{targetColor} bob</span>
                         </div>
@@ -565,32 +569,32 @@ export default function LabHistory() {
                   <div className="lg:col-span-5 grid grid-cols-3 gap-3">
                     <div className="p-3.5 bg-black/25 border border-white/5 rounded-2xl text-center space-y-1">
                       <span className="text-[8px] text-gray-500 font-extrabold uppercase tracking-widest block">Peak Velocity</span>
-                      <h4 className="text-base font-black text-white">{exp.metrics.velocity_peak || 'N/A'}</h4>
+                      <h4 className="text-base font-black text-white">{expMetrics.velocity_peak || 'N/A'}</h4>
                     </div>
 
                     <div className="p-3.5 bg-black/25 border border-white/5 rounded-2xl text-center space-y-1">
                       <span className="text-[8px] text-gray-500 font-extrabold uppercase tracking-widest block">Max Amplitude</span>
-                      <h4 className="text-base font-black text-white">{exp.metrics.displacement_max || 'N/A'}</h4>
+                      <h4 className="text-base font-black text-white">{expMetrics.displacement_max || 'N/A'}</h4>
                     </div>
 
                     <div className="p-3.5 bg-black/25 border border-white/5 rounded-2xl text-center space-y-1">
                       <span className="text-[8px] text-gray-500 font-extrabold uppercase tracking-widest block">Gravity Constant</span>
-                      <h4 className="text-base font-black text-emerald-400">{exp.metrics.gravity_verified || 'N/A'}</h4>
+                      <h4 className="text-base font-black text-emerald-400">{expMetrics.gravity_verified || 'N/A'}</h4>
                     </div>
 
                     <div className="p-3.5 bg-black/25 border border-white/5 rounded-2xl text-center space-y-1">
                       <span className="text-[8px] text-gray-500 font-extrabold uppercase tracking-widest block">Simulation Sync</span>
-                      <h4 className="text-base font-black text-purple-400">{exp.metrics.sync_percentage || 'N/A'}</h4>
+                      <h4 className="text-base font-black text-purple-400">{expMetrics.sync_percentage || 'N/A'}</h4>
                     </div>
 
                     <div className="p-3.5 bg-black/25 border border-white/5 rounded-2xl text-center space-y-1">
                       <span className="text-[8px] text-gray-500 font-extrabold uppercase tracking-widest block">Max PE</span>
-                      <h4 className="text-base font-black text-cyan-400">{exp.metrics.pe_max || 'N/A'}</h4>
+                      <h4 className="text-base font-black text-cyan-400">{expMetrics.pe_max || 'N/A'}</h4>
                     </div>
 
                     <div className="p-3.5 bg-black/25 border border-white/5 rounded-2xl text-center space-y-1">
                       <span className="text-[8px] text-gray-500 font-extrabold uppercase tracking-widest block">Max KE</span>
-                      <h4 className="text-base font-black text-purple-400">{exp.metrics.ke_max || 'N/A'}</h4>
+                      <h4 className="text-base font-black text-purple-400">{expMetrics.ke_max || 'N/A'}</h4>
                     </div>
                   </div>
 

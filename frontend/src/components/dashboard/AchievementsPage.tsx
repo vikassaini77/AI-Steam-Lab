@@ -44,6 +44,23 @@ interface BadgeDef {
   };
 }
 
+const safeExpType = (h?: UserExperimentRecord | null): string => {
+  if (!h) return '';
+  const raw = h.experiment_type ?? h.type ?? '';
+  return String(raw).toLowerCase().trim();
+};
+
+const formatUnlockDate = (dateVal?: string | number): string => {
+  if (!dateVal) return "Recently unlocked";
+  try {
+    const d = typeof dateVal === 'number' ? new Date(dateVal * 1000) : new Date(dateVal);
+    if (isNaN(d.getTime())) return "Recently unlocked";
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return "Recently unlocked";
+  }
+};
+
 const BADGE_CATALOG: BadgeDef[] = [
   {
     id: "first_steps",
@@ -53,14 +70,13 @@ const BADGE_CATALOG: BadgeDef[] = [
     xpReward: 50,
     icon: Target,
     evaluator: (history) => {
-      const unlocked = history.length >= 1;
-      const firstExp = history[0];
-      const dateStr = firstExp?.created_at
-        ? new Date(firstExp.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-        : unlocked ? "Recently unlocked" : undefined;
+      const valid = Array.isArray(history) ? history.filter(Boolean) : [];
+      const unlocked = valid.length >= 1;
+      const firstExp = valid[0];
+      const dateStr = firstExp?.created_at ? formatUnlockDate(firstExp.created_at) : (unlocked ? "Recently unlocked" : undefined);
       return {
         unlocked,
-        progress: Math.min(1, history.length),
+        progress: Math.min(1, valid.length),
         maxProgress: 1,
         unlockedDate: dateStr,
       };
@@ -74,8 +90,9 @@ const BADGE_CATALOG: BadgeDef[] = [
     xpReward: 100,
     icon: Atom,
     evaluator: (history) => {
-      const match = history.find(h => {
-        const t = (h.experiment_type || h.type || '').toLowerCase();
+      const valid = Array.isArray(history) ? history.filter(Boolean) : [];
+      const match = valid.find(h => {
+        const t = safeExpType(h);
         return t.includes('pendulum') || t.includes('free_fall');
       });
       const unlocked = !!match;
@@ -83,9 +100,7 @@ const BADGE_CATALOG: BadgeDef[] = [
         unlocked,
         progress: unlocked ? 1 : 0,
         maxProgress: 1,
-        unlockedDate: match?.created_at
-          ? new Date(match.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-          : unlocked ? "Recently unlocked" : undefined,
+        unlockedDate: match?.created_at ? formatUnlockDate(match.created_at) : (unlocked ? "Recently unlocked" : undefined),
       };
     },
   },
@@ -97,16 +112,15 @@ const BADGE_CATALOG: BadgeDef[] = [
     xpReward: 150,
     icon: Brain,
     evaluator: (history) => {
-      const count = history.length;
+      const valid = Array.isArray(history) ? history.filter(Boolean) : [];
+      const count = valid.length;
       const unlocked = count >= 3;
-      const thirdExp = history[2];
+      const thirdExp = valid[2];
       return {
         unlocked,
         progress: Math.min(3, count),
         maxProgress: 3,
-        unlockedDate: thirdExp?.created_at
-          ? new Date(thirdExp.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-          : unlocked ? "Recently unlocked" : undefined,
+        unlockedDate: thirdExp?.created_at ? formatUnlockDate(thirdExp.created_at) : (unlocked ? "Recently unlocked" : undefined),
       };
     },
   },
@@ -118,8 +132,9 @@ const BADGE_CATALOG: BadgeDef[] = [
     xpReward: 200,
     icon: Flame,
     evaluator: (history) => {
-      const match = history.find(h => {
-        const t = (h.experiment_type || h.type || '').toLowerCase();
+      const valid = Array.isArray(history) ? history.filter(Boolean) : [];
+      const match = valid.find(h => {
+        const t = safeExpType(h);
         return t.includes('harmonic') || t.includes('circular');
       });
       const unlocked = !!match;
@@ -127,9 +142,7 @@ const BADGE_CATALOG: BadgeDef[] = [
         unlocked,
         progress: unlocked ? 1 : 0,
         maxProgress: 1,
-        unlockedDate: match?.created_at
-          ? new Date(match.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-          : unlocked ? "Recently unlocked" : undefined,
+        unlockedDate: match?.created_at ? formatUnlockDate(match.created_at) : (unlocked ? "Recently unlocked" : undefined),
       };
     },
   },
@@ -141,8 +154,9 @@ const BADGE_CATALOG: BadgeDef[] = [
     xpReward: 250,
     icon: Zap,
     evaluator: (history) => {
-      const match = history.find(h => {
-        const t = (h.experiment_type || h.type || '').toLowerCase();
+      const valid = Array.isArray(history) ? history.filter(Boolean) : [];
+      const match = valid.find(h => {
+        const t = safeExpType(h);
         return t.includes('collision');
       });
       const unlocked = !!match;
@@ -150,9 +164,7 @@ const BADGE_CATALOG: BadgeDef[] = [
         unlocked,
         progress: unlocked ? 1 : 0,
         maxProgress: 1,
-        unlockedDate: match?.created_at
-          ? new Date(match.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-          : unlocked ? "Recently unlocked" : undefined,
+        unlockedDate: match?.created_at ? formatUnlockDate(match.created_at) : (unlocked ? "Recently unlocked" : undefined),
       };
     },
   },
@@ -164,10 +176,11 @@ const BADGE_CATALOG: BadgeDef[] = [
     xpReward: 300,
     icon: Star,
     evaluator: (_history, xp) => {
-      const unlocked = xp >= 500;
+      const val = Number(xp) || 0;
+      const unlocked = val >= 500;
       return {
         unlocked,
-        progress: Math.min(500, Math.max(0, xp)),
+        progress: Math.min(500, Math.max(0, val)),
         maxProgress: 500,
         unlockedDate: unlocked ? "Achieved" : undefined,
       };
@@ -181,10 +194,11 @@ const BADGE_CATALOG: BadgeDef[] = [
     xpReward: 350,
     icon: Sparkles,
     evaluator: (_history, _xp, level) => {
-      const unlocked = level >= 3;
+      const val = Number(level) || 1;
+      const unlocked = val >= 3;
       return {
         unlocked,
-        progress: Math.min(3, Math.max(1, level)),
+        progress: Math.min(3, Math.max(1, val)),
         maxProgress: 3,
         unlockedDate: unlocked ? "Achieved" : undefined,
       };
@@ -198,8 +212,9 @@ const BADGE_CATALOG: BadgeDef[] = [
     xpReward: 500,
     icon: Trophy,
     evaluator: (history) => {
+      const valid = Array.isArray(history) ? history.filter(Boolean) : [];
       const uniqueTypes = new Set(
-        history.map(h => (h.experiment_type || h.type || '').toLowerCase()).filter(Boolean)
+        valid.map(safeExpType).filter(Boolean)
       );
       const unlocked = uniqueTypes.size >= 6;
       return {
@@ -242,18 +257,60 @@ function AchievementsPage() {
     }
 
     const fetchHistory = async () => {
+      // 1. Read locally cached experiments from browser storage
+      const localList: UserExperimentRecord[] = [];
+      try {
+        const cached = localStorage.getItem('local_stem_db');
+        if (cached) {
+          const store = JSON.parse(cached);
+          if (Array.isArray(store?.experiments)) {
+            for (const item of store.experiments) {
+              if (item && typeof item === 'object') {
+                localList.push({
+                  id: item.id || `local_${Math.random().toString(36).substr(2, 9)}`,
+                  experiment_type: item.experimentType || item.experiment_type || item.type,
+                  type: item.type || item.experimentType || item.experiment_type,
+                  created_at: item.date || item.created_at,
+                });
+              }
+            }
+          }
+        }
+      } catch (localErr) {
+        console.warn('Failed reading local experiment database for achievements:', localErr);
+      }
+
+      // 2. Query cloud server
+      let serverList: UserExperimentRecord[] = [];
       try {
         const apiBase = getApiBaseUrl();
         const headers = await getAuthHeaders();
         const res = await fetch(`${apiBase}/api/experiments/history`, { headers });
         if (res.ok) {
           const data = await res.json();
-          if (isMounted) {
-            setHistory(data.history || []);
-          }
+          const rawArray = Array.isArray(data) ? data : Array.isArray(data?.history) ? data.history : [];
+          serverList = (rawArray as UserExperimentRecord[]).filter(Boolean).map((item) => ({
+            id: item.id,
+            experiment_type: item.experiment_type || item.type,
+            type: item.type || item.experiment_type,
+            created_at: item.created_at || (item.timestamp ? new Date(item.timestamp * 1000).toISOString() : undefined),
+          }));
         }
       } catch (err) {
         console.warn("Failed to fetch experiment history for achievements:", err);
+      }
+
+      // 3. Deduplicate
+      const idMap = new Map<string, UserExperimentRecord>();
+      localList.forEach((exp, idx) => {
+        idMap.set(exp.id || `local_${idx}`, exp);
+      });
+      serverList.forEach((exp, idx) => {
+        idMap.set(exp.id || `server_${idx}`, exp);
+      });
+
+      if (isMounted) {
+        setHistory(Array.from(idMap.values()));
       }
     };
 
@@ -278,9 +335,11 @@ function AchievementsPage() {
         const API_URL = getApiBaseUrl();
         const response = await fetch(`${API_URL}/api/gamification/leaderboard`);
         if (response.ok) {
-          const data: LeaderboardUser[] = await response.json();
-          const enrichedData = data.map((user: LeaderboardUser) => {
-            const userLvl = Math.max(1, Math.floor(user.xp / 1000) + (user.xp > 0 ? 1 : 0));
+          const data = await response.json();
+          const rawList: LeaderboardUser[] = Array.isArray(data) ? data : Array.isArray(data?.leaderboard) ? data.leaderboard : [];
+          const enrichedData = rawList.filter(Boolean).map((user: LeaderboardUser) => {
+            const userXp = Number(user.xp) || 0;
+            const userLvl = Math.max(1, Math.floor(userXp / 1000) + (userXp > 0 ? 1 : 0));
             let badgeStr = '🔬 Lab Novice';
             if (user.rank === 1) badgeStr = '🏆 Top Scholar';
             else if (user.rank === 2) badgeStr = '⭐ Gravity Sage';
@@ -289,8 +348,9 @@ function AchievementsPage() {
             
             return {
               ...user,
-              level: userLvl,
-              badge: badgeStr,
+              xp: userXp,
+              level: user.level || userLvl,
+              badge: user.badge || badgeStr,
               isUser: user.user_id === currentUserId
             };
           });
