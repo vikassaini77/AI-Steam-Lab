@@ -1727,6 +1727,67 @@ export default function WebcamSection() {
     }
   };
 
+  const downloadAnalyticalCSV = () => {
+    try {
+      const theoreticalPeriod = 2 * Math.PI * Math.sqrt(Math.max(0.1, length) / 9.81);
+      const rows = [
+        ['Timestamp', 'Sample_Index', 'Position_m', 'Velocity_m_s', 'Kinetic_Energy_J', 'Potential_Energy_J', 'Length_m', 'Mass_kg', 'Theoretical_Period_s'],
+        ...(chartData.length > 0
+          ? chartData.map((pt, idx) => [
+              new Date(Date.now() - (chartData.length - idx) * 100).toISOString(),
+              String(idx + 1),
+              pt.position.toFixed(3),
+              pt.velocity.toFixed(3),
+              pt.ke.toFixed(4),
+              pt.pe.toFixed(4),
+              length.toFixed(2),
+              mass.toFixed(2),
+              theoreticalPeriod.toFixed(3)
+            ])
+          : [
+              [
+                new Date().toISOString(),
+                '1',
+                (length * Math.sin((amplitude * Math.PI) / 180)).toFixed(3),
+                '0.000',
+                '0.0000',
+                (mass * 9.81 * length * (1 - Math.cos((amplitude * Math.PI) / 180))).toFixed(4),
+                length.toFixed(2),
+                mass.toFixed(2),
+                theoreticalPeriod.toFixed(3)
+              ]
+            ])
+      ];
+      const csvString = rows.map(r => r.join(',')).join('\n');
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `neurolab_physics_telemetry_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      handleAutoSaveAction('Analytical CSV logs downloaded successfully! 📊');
+    } catch (err) {
+      console.error(err);
+      handleAutoSaveAction('Failed to export analytical CSV.');
+    }
+  };
+
+  const shareExperimentSession = () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(window.location.href);
+        handleAutoSaveAction('Lab experiment link copied to clipboard! 🔗');
+      } else {
+        handleAutoSaveAction('Calibration session shared!');
+      }
+    } catch {
+      handleAutoSaveAction('Calibration session shared!');
+    }
+  };
+
   const saveExperimentSession = async () => {
     handleAutoSaveAction("💾 Archiving live session to lab database...");
     try {
@@ -2981,7 +3042,7 @@ export default function WebcamSection() {
                 </button>
 
                 <button
-                  onClick={() => handleAutoSaveAction('Analytical CSV logs downloaded successfully! 📊')}
+                  onClick={downloadAnalyticalCSV}
                   className="w-full py-2.5 bg-white/5 border border-white/10 hover:border-cyan-500/40 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-400" />
@@ -2989,7 +3050,7 @@ export default function WebcamSection() {
                 </button>
 
                 <button
-                  onClick={() => handleAutoSaveAction('Calibration session shared!')}
+                  onClick={shareExperimentSession}
                   className="w-full py-2.5 bg-white/5 border border-white/10 hover:border-[#22222f] text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
                 >
                   <Share2 className="w-3.5 h-3.5 text-cyan-400" />

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { 
   PanelLeftClose, 
   PanelLeftOpen, MoreHorizontal, Settings, ArrowLeft,
-  Trash2, Zap, Sliders, User, HelpCircle, LogOut
+  Trash2, FlaskConical, Sliders, User, HelpCircle, LogOut
 } from 'lucide-react';
 import AITutorSettingsModal from './AITutorSettingsModal';
 import { useChatStore } from '../../lib/chatStore';
@@ -153,12 +153,12 @@ export default function AITutorSidebar({ isOpen, onToggle }: SidebarProps) {
                       <button 
                         onClick={() => {
                           setProfileMenuOpen(false);
-                          navigate('/pricing');
+                          navigate('/dashboard/experiments');
                         }}
                         className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-cyan-400 bg-cyan-400/10 hover:bg-cyan-400/20 transition-colors"
                       >
-                        <Zap className="w-4 h-4" />
-                        Upgrade plan
+                        <FlaskConical className="w-4 h-4" />
+                        Explore STEM Labs
                       </button>
                       <button 
                         onClick={() => {

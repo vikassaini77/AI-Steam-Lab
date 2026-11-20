@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Zap, Play, Clock, Lock, Check, Sparkles, Camera } from "lucide-react";
+import { Zap, Play, Clock, Check, Sparkles, Camera } from "lucide-react";
 import { getApiBaseUrl, getAuthHeaders } from "../../lib/api";
 
 interface HistoryRecord {
@@ -24,7 +24,7 @@ interface ExperimentItem {
   time: string;
   xp: string;
   progress: number;
-  status: 'Start' | 'Continue' | 'Review' | 'Coming Soon';
+  status: 'Start' | 'Continue' | 'Review';
   locked: boolean;
   roadmap?: boolean;
 }
@@ -32,7 +32,7 @@ interface ExperimentItem {
 const INITIAL_EXPERIMENTS: ExperimentItem[] = [
   {
     id: 'pendulum',
-    subject: 'Physics',
+    subject: 'Mechanics',
     tier: 'Beginner',
     title: 'Simple Pendulum Oscillation',
     desc: 'Measure pendulum oscillation periods, evaluate small-angle approximations, and quantify error against Newtonian dynamics.',
@@ -44,7 +44,7 @@ const INITIAL_EXPERIMENTS: ExperimentItem[] = [
   },
   {
     id: 'projectile_motion',
-    subject: 'Physics',
+    subject: 'Kinematics',
     tier: 'Beginner',
     title: 'Projectile Motion Analysis',
     desc: 'Calculate kinematic ballistic trajectories, verify launch velocities and ranges, and analyze parabolic flight.',
@@ -56,7 +56,7 @@ const INITIAL_EXPERIMENTS: ExperimentItem[] = [
   },
   {
     id: 'free_fall',
-    subject: 'Physics',
+    subject: 'Kinematics',
     tier: 'Beginner',
     title: 'Free Fall & Gravity Verification',
     desc: 'Measure gravitational acceleration g via drop times, analyze quadratic position-time curves, and examine air resistance.',
@@ -68,7 +68,7 @@ const INITIAL_EXPERIMENTS: ExperimentItem[] = [
   },
   {
     id: 'circular_motion',
-    subject: 'Physics',
+    subject: 'Dynamics',
     tier: 'Intermediate',
     title: 'Uniform Circular Motion',
     desc: 'Compute centripetal acceleration, angular frequencies, and verify centripetal force requirements across planetary gravities.',
@@ -80,7 +80,7 @@ const INITIAL_EXPERIMENTS: ExperimentItem[] = [
   },
   {
     id: 'harmonic_motion',
-    subject: 'Physics',
+    subject: 'Mechanics',
     tier: 'Intermediate',
     title: 'Simple Harmonic Motion (Spring-Mass)',
     desc: "Investigate Hooke's law restoring force, natural frequencies, and mechanical energy oscillations between kinetic and elastic.",
@@ -92,7 +92,7 @@ const INITIAL_EXPERIMENTS: ExperimentItem[] = [
   },
   {
     id: 'collision_momentum',
-    subject: 'Physics',
+    subject: 'Dynamics',
     tier: 'Advanced',
     title: 'Collision and Linear Momentum',
     desc: 'Test 1D elastic and inelastic collisions, verify conservation of momentum, and evaluate coefficient of restitution.',
@@ -101,32 +101,6 @@ const INITIAL_EXPERIMENTS: ExperimentItem[] = [
     progress: 0,
     status: 'Start',
     locked: false
-  },
-  {
-    id: 'chemical_reaction',
-    subject: 'Chemistry',
-    tier: 'Intermediate',
-    title: 'Spectrophotometry & Chemical Kinetics',
-    desc: 'Colorimetric analysis to detect and classify chemical reaction rates, absorbance spectra, and stoichiometry in real time.',
-    time: '25 min',
-    xp: '200 XP',
-    progress: 0,
-    status: 'Coming Soon',
-    locked: true,
-    roadmap: true
-  },
-  {
-    id: 'stress_analysis',
-    subject: 'Engineering',
-    tier: 'Advanced',
-    title: 'Structural Stress & Beam Deflection',
-    desc: 'Design structural trusses and calculate stress concentrations, load-bearing capacities, and strain curves.',
-    time: '45 min',
-    xp: '400 XP',
-    progress: 0,
-    status: 'Coming Soon',
-    locked: true,
-    roadmap: true
   }
 ];
 
@@ -136,7 +110,7 @@ function ExperimentsCatalog() {
   const [searchQuery, setSearchQuery] = useState('');
   const [experiments, setExperiments] = useState<ExperimentItem[]>(INITIAL_EXPERIMENTS);
 
-  const categories = ['All', 'Physics', 'Chemistry', 'Engineering'];
+  const categories = ['All', 'Kinematics', 'Dynamics', 'Mechanics'];
 
   useEffect(() => {
     const fetchHistoryAndSync = async () => {
@@ -350,12 +324,7 @@ function ExperimentsCatalog() {
               )}
 
               {/* Button */}
-              {exp.locked ? (
-                <div className="w-full py-3 bg-white/[0.02] border border-white/5 rounded-xl text-center text-xs font-bold text-gray-500 flex items-center justify-center gap-2 cursor-not-allowed">
-                  <Lock className="w-4 h-4" />
-                  Roadmap Module (Coming Soon)
-                </div>
-              ) : exp.status === 'Review' ? (
+              {exp.status === 'Review' ? (
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}

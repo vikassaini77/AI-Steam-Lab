@@ -179,7 +179,7 @@ export default function AITutorPanel() {
         recognitionRef.current.start();
         setIsListening(true);
       } else {
-        alert("Microphone dictation is not supported in this browser.");
+        pushNotification("Microphone speech recognition is not supported in this environment.", "info");
       }
     }
   };

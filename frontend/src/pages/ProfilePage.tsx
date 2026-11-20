@@ -28,7 +28,6 @@ import {
   Sparkles,
   Sliders,
   Database,
-  Link as LinkIcon,
   Trash2,
   Check,
   Search,
@@ -288,15 +287,6 @@ export default function ProfilePage({ session }: ProfilePageProps) {
     activityVisible: true
   });
 
-  // 11. Connected Accounts
-  const [connectedAccs, setConnectedAccs] = useState({
-    google: true,
-    github: true,
-    linkedin: false,
-    discord: false,
-    microsoft: false
-  });
-
   // FAQs Accordion states
   const [faqExpanded, setFaqExpanded] = useState<number | null>(null);
 
@@ -403,8 +393,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
       group: 'Access & Compliance',
       items: [
         { id: 'privacy', label: 'Privacy', icon: Shield, keywords: ['leaderboard', 'public', 'visibility', 'sharing'] },
-        { id: 'data', label: 'Data Management', icon: Database, keywords: ['export', 'download', 'delete', 'account'] },
-        { id: 'connections', label: 'Connected Accounts', icon: LinkIcon, keywords: ['google', 'github', 'discord', 'microsoft'] }
+        { id: 'data', label: 'Data Management', icon: Database, keywords: ['export', 'download', 'delete', 'account'] }
       ]
     },
     {
@@ -463,12 +452,6 @@ export default function ProfilePage({ session }: ProfilePageProps) {
       const errMsg = err instanceof Error ? err.message : String(err);
       handleAutoSaveAction(`Failed to update password: ${errMsg} ⚠️`);
     }
-  };
-
-  const handleSyncAccount = (acc: 'google' | 'github' | 'linkedin' | 'discord' | 'microsoft') => {
-    setConnectedAccs(prev => ({ ...prev, [acc]: !prev[acc] }));
-    const active = !connectedAccs[acc];
-    handleAutoSaveAction(active ? `Connected ${acc} account! 🔗` : `Disconnected ${acc} account!`);
   };
 
   const handlePerformDelete = () => {
@@ -1485,50 +1468,6 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                       Delete Account Permanently
                     </button>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* 12. Connected Accounts Tab */}
-            {activeTab === 'connections' && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-bold text-white">Third-Party Integrations</h3>
-                  <p className="text-xs text-gray-400 mt-1">Connect social accounts to login quickly and sync repository codes.</p>
-                </div>
-
-                <div className="divide-y divide-white/5">
-                  {(['google', 'github', 'linkedin', 'discord', 'microsoft'] as const).map((acc) => {
-                    const isConnected = connectedAccs[acc];
-                    return (
-                      <div key={acc} className="py-4 flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center font-extrabold uppercase ${
-                            isConnected ? 'text-cyan-400' : 'text-gray-500'
-                          }`}>
-                            {acc[0]}
-                          </div>
-                          <div>
-                            <h5 className="font-bold text-white capitalize">{acc}</h5>
-                            <p className="text-[10px] text-gray-500 mt-0.5">
-                              {isConnected ? 'Connected • Synced today' : 'Not Connected'}
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => handleSyncAccount(acc)}
-                          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wide uppercase transition-all ${
-                            isConnected
-                              ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/10'
-                              : 'bg-white/5 hover:bg-white/10 text-white border border-white/10'
-                          }`}
-                        >
-                          {isConnected ? 'Disconnect' : 'Connect'}
-                        </button>
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             )}

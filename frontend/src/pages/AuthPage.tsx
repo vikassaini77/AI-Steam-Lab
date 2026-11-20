@@ -154,8 +154,18 @@ function SignInForm({ onSwitch, onAuthSuccess, onForgot }: { onSwitch: () => voi
   };
 
   const handleOAuth = async (provider: 'google' | 'github') => {
-    const providerName = provider === 'google' ? 'Google' : 'GitHub';
-    setError(`${providerName} sign in is coming soon!`);
+    try {
+      setLoading(true);
+      setError(null);
+      const { error } = await supabase.auth.signInWithOAuth({ provider });
+      if (error) throw error;
+      onAuthSuccess?.();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || `${provider} sign in failed.`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -252,7 +262,7 @@ function SignInForm({ onSwitch, onAuthSuccess, onForgot }: { onSwitch: () => voi
 }
 
 /* ─── Sign Up Form ───────────────────────────────── */
-function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (email: string) => void }) {
+function SignUpForm({ onSwitch, onVerify, onAuthSuccess }: { onSwitch: () => void; onVerify: (email: string) => void; onAuthSuccess?: () => void }) {
   const [formData, setFormData] = useState({
     firstName: '', lastName: '', username: '', email: '',
     password: '', confirmPassword: '', country: '', education: '', stemInterest: '',
@@ -315,8 +325,18 @@ function SignUpForm({ onSwitch, onVerify }: { onSwitch: () => void; onVerify: (e
   };
 
   const handleOAuth = async (provider: 'google' | 'github') => {
-    const providerName = provider === 'google' ? 'Google' : 'GitHub';
-    setError(`${providerName} sign in is coming soon!`);
+    try {
+      setLoading(true);
+      setError(null);
+      const { error } = await supabase.auth.signInWithOAuth({ provider });
+      if (error) throw error;
+      onAuthSuccess?.();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || `${provider} sign in failed.`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -975,6 +995,7 @@ export default function AuthPage({ onAuthSuccess, initialView = 'signin' }: Auth
               <SignUpForm
                 onSwitch={() => setView('signin')}
                 onVerify={(email) => { setSignupEmail(email); setView('verify'); }}
+                onAuthSuccess={onAuthSuccess}
               />
             )}
             {view === 'forgot' && (
