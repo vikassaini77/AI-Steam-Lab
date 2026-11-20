@@ -14,6 +14,7 @@ import {
   Pause,
   RefreshCw,
   Maximize2,
+  Minimize2,
   Cpu,
   Zap,
   Download,
@@ -335,6 +336,18 @@ export default function WebcamSection() {
   const [hasDetectedObject, setHasDetectedObject] = useState<boolean>(false);
   const [selectedCVSource, setSelectedCVSource] = useState<'auto' | 'cloud' | 'client'>('auto');
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [screenFocus, setScreenFocus] = useState<'split' | 'camera' | 'twin'>('split');
+  const [theaterModal, setTheaterModal] = useState<'none' | 'camera' | 'twin'>('none');
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setTheaterModal('none');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2111,36 +2124,158 @@ export default function WebcamSection() {
         {/* Left Side: Dynamic Side-by-Side Digital Twin synchronized views */}
         <div className="lg:col-span-8 space-y-6">
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Screen Layout Switcher & Theater Mode Launcher */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0e0e18] border border-[#22222f] p-3 rounded-2xl shadow-lg">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                <Maximize2 className="w-3.5 h-3.5 text-cyan-400" /> Screen View:
+              </span>
+              <div className="flex bg-[#070710] border border-white/10 rounded-xl p-1 gap-1">
+                <button
+                  onClick={() => setScreenFocus('split')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    screenFocus === 'split'
+                      ? 'bg-cyan-500 text-black shadow-md shadow-cyan-500/20'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Side-by-Side (50/50)
+                </button>
+                <button
+                  onClick={() => setScreenFocus('camera')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    screenFocus === 'camera'
+                      ? 'bg-cyan-500 text-black shadow-md shadow-cyan-500/20'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Big Camera (Focus)
+                </button>
+                <button
+                  onClick={() => setScreenFocus('twin')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    screenFocus === 'twin'
+                      ? 'bg-purple-500 text-white shadow-md shadow-purple-500/20'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Big Simulation (Focus)
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setTheaterModal('camera')}
+                className="px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-cyan-500/10"
+                title="Expand camera view to full screen theater"
+              >
+                <Maximize2 className="w-3.5 h-3.5" /> Full Theater Mode
+              </button>
+            </div>
+          </div>
+
+          <div className={`grid gap-6 ${
+            screenFocus === 'split' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'
+          }`}>
             
             {/* LEFT ENGINE: Real Camera Vision / simulated HSV Overlay */}
-            <div className="bg-[#12121a] border border-[#22222f] rounded-3xl overflow-hidden shadow-2xl relative flex flex-col justify-between">
+            <div className={`bg-[#12121a] border border-[#22222f] rounded-3xl overflow-hidden shadow-2xl relative flex flex-col justify-between transition-all duration-300 ${
+              theaterModal === 'camera'
+                ? 'fixed inset-0 z-[10000] p-4 md:p-8 bg-[#070712]/98 backdrop-blur-2xl overflow-y-auto flex flex-col justify-between'
+                : screenFocus === 'camera'
+                  ? 'order-1'
+                  : screenFocus === 'twin'
+                    ? 'order-2'
+                    : 'order-1'
+            }`}>
               <div className="absolute inset-0 bg-scanlines pointer-events-none opacity-20" />
-              <div className="absolute top-4 left-4 z-20 flex flex-wrap gap-2 items-center">
-                <span className="px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/20 text-[9px] font-extrabold text-cyan-400 rounded-md tracking-wider uppercase">{t.webcamTitle}</span>
-                <span className="px-2 py-0.5 bg-purple-500/10 border border-purple-500/20 text-[9px] font-bold text-purple-300 rounded-md tracking-wider">
-                  Detector: {activeDetector}
-                </span>
-                {isCvDegraded && (
-                  <span className="px-2 py-0.5 bg-amber-500/15 border border-amber-500/30 text-[9px] font-bold text-amber-300 rounded-md tracking-wider flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3 text-amber-400" />
-                    Degraded Mode (YOLO Fallback)
-                  </span>
-                )}
-                {cameraActive && !hasDetectedObject && (
-                  <span className="px-2 py-0.5 bg-red-500/15 border border-red-500/30 text-[9px] font-bold text-red-300 rounded-md tracking-wider">
-                    {cvDetectionMessage || 'Searching for target...'}
-                  </span>
-                )}
-              </div>
               
-              <div className="w-full relative bg-[#06060f] border-b border-[#22222f] overflow-hidden">
+              {/* Theater Mode Top Bar */}
+              {theaterModal === 'camera' && (
+                <div className="max-w-6xl w-full mx-auto flex items-center justify-between pb-3 border-b border-white/10 mb-2 relative z-30">
+                  <div className="flex items-center gap-3">
+                    <span className="px-3 py-1 bg-cyan-500/20 border border-cyan-400 text-cyan-300 font-extrabold text-xs rounded-lg uppercase tracking-wider">
+                      Live Webcam Vision Lab — Full Theater View
+                    </span>
+                    <span className="text-xs text-gray-400 font-mono hidden sm:inline">
+                      Detector: {activeDetector} · Frame Rate: {activeFeedType === 'sample' ? '30 FPS Sample Feed' : isWebcamLive ? '60 FPS Live Camera' : 'Idle'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTheaterModal('twin');
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 font-bold text-xs flex items-center gap-1.5 transition-all"
+                    >
+                      Switch to Digital Twin ⚛️
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTheaterModal('none');
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-black text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-500/30 transition-all"
+                    >
+                      <Minimize2 className="w-3.5 h-3.5" />
+                      Exit Theater Mode (Esc)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Standard Mode Card Header */}
+              {theaterModal !== 'camera' && (
+                <div className="p-4 pb-2 flex items-center justify-between relative z-20">
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <span className="px-2.5 py-1 bg-cyan-500/10 border border-cyan-500/20 text-[9px] font-extrabold text-cyan-400 rounded-md tracking-wider uppercase">{t.webcamTitle}</span>
+                    <span className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 text-[9px] font-bold text-purple-300 rounded-md tracking-wider">
+                      Detector: {activeDetector}
+                    </span>
+                    {isCvDegraded && (
+                      <span className="px-2 py-0.5 bg-amber-500/15 border border-amber-500/30 text-[9px] font-bold text-amber-300 rounded-md tracking-wider flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-amber-400" />
+                        Degraded
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setTheaterModal('camera')}
+                      className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-[10px] font-extrabold flex items-center gap-1 transition-all"
+                      title="Enlarge screen"
+                    >
+                      <Maximize2 className="w-3 h-3" /> Enlarge
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              <div 
+                onClick={() => {
+                  if (theaterModal !== 'camera') {
+                    setTheaterModal('camera');
+                  }
+                }}
+                className={`w-full relative bg-[#06060f] border-y border-[#22222f] overflow-hidden group/screen cursor-pointer ${
+                  theaterModal === 'camera'
+                    ? 'h-[60vh] min-h-[420px] max-w-6xl w-full mx-auto rounded-2xl'
+                    : screenFocus === 'camera'
+                      ? 'aspect-video max-h-[500px]'
+                      : 'aspect-video'
+                }`}
+              >
                 {cameraActive ? (
                   <>
                     {/* Settings Gear Button */}
                     <button
-                      onClick={() => setShowSettings(!showSettings)}
-                      className="absolute top-3 right-16 z-20 p-1.5 bg-black/60 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/30 text-gray-400 hover:text-cyan-400 rounded-lg backdrop-blur-sm transition-all"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowSettings(!showSettings);
+                      }}
+                      className="absolute top-3 right-3 z-30 p-1.5 bg-black/75 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/30 text-gray-400 hover:text-cyan-400 rounded-lg backdrop-blur-sm transition-all shadow-lg"
                       title="Open Settings"
                     >
                       <Settings className="w-3.5 h-3.5" />
@@ -2153,6 +2288,7 @@ export default function WebcamSection() {
                           initial={{ opacity: 0, x: 50 }}
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: 50 }}
+                          onClick={(e) => e.stopPropagation()}
                           className="absolute right-0 top-0 bottom-0 w-64 bg-[#0a0a14]/95 backdrop-blur-md border-l border-white/10 z-50 p-4 flex flex-col gap-4 text-left shadow-2xl overflow-y-auto"
                         >
                           <div className="flex justify-between items-center border-b border-white/5 pb-2">
@@ -2275,15 +2411,15 @@ export default function WebcamSection() {
                     </AnimatePresence>
 
                     {/* ── UNIFIED VISION ENGINE CONTAINER ── */}
-                    <div className="relative aspect-video bg-black w-full overflow-hidden rounded-lg">
+                    <div className="relative w-full h-full bg-black overflow-hidden flex items-center justify-center">
                       <canvas ref={canvasRef} className="hidden" />
                       
-                      {/* Interactive Sample Lab Feed Canvas (Mounted directly to ensure instant 100% rendering in cloud VM) */}
+                      {/* Interactive Sample Lab Feed Canvas */}
                       <canvas
                         ref={sampleCanvasRef}
                         width={640}
                         height={360}
-                        className={`absolute inset-0 w-full h-full object-contain ${activeFeedType === 'sample' ? 'block' : 'hidden'}`}
+                        className={`w-full h-full object-contain ${activeFeedType === 'sample' ? 'block' : 'hidden'}`}
                       />
 
                       {/* Raw Camera or Video File Feed */}
@@ -2292,7 +2428,7 @@ export default function WebcamSection() {
                         autoPlay
                         playsInline
                         muted
-                        className={`absolute inset-0 w-full h-full object-cover ${activeFeedType === 'sample' ? 'hidden' : 'block'}`}
+                        className={`w-full h-full object-contain ${activeFeedType === 'sample' ? 'hidden' : 'block'}`}
                         style={{ transform: activeFeedType === 'webcam' ? 'scaleX(-1)' : 'none' }}
                       />
                       
@@ -2312,60 +2448,43 @@ export default function WebcamSection() {
                         style={{ display: backendMode === 'client' ? 'block' : 'none' }}
                       />
 
-                      {/* HUD Badges */}
-                      <div className="absolute top-3 left-3 flex flex-col gap-2 z-30">
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-black/60 rounded-full border border-white/10 backdrop-blur-sm w-max">
+                      {/* Stacked Clean HUD Badges (Top-Left) */}
+                      <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-30 pointer-events-none">
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-black/80 rounded-full border border-white/10 backdrop-blur-sm w-max shadow-md">
                           <div className={`w-1.5 h-1.5 rounded-full ${isWebcamLive ? 'bg-emerald-400' : activeFeedType === 'sample' ? 'bg-cyan-400' : 'bg-purple-400'} animate-pulse`} />
-                          <span className={`text-[10px] ${isWebcamLive ? 'text-emerald-300' : activeFeedType === 'sample' ? 'text-cyan-300' : 'text-purple-300'} font-bold uppercase`}>
+                          <span className={`text-[9px] ${isWebcamLive ? 'text-emerald-300' : activeFeedType === 'sample' ? 'text-cyan-300' : 'text-purple-300'} font-black uppercase tracking-wider`}>
                             {activeFeedType === 'sample' ? 'SAMPLE LAB (30 FPS)' : activeFeedType === 'video' ? 'VIDEO PLAYBACK' : 'LIVE WEBCAM FEED'}
                           </span>
                         </div>
+                        
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-black/80 rounded-full border border-cyan-500/30 backdrop-blur-sm w-max shadow-md">
+                          <div className={`w-1.5 h-1.5 rounded-full ${hasDetectedObject ? 'bg-emerald-400' : 'bg-cyan-400'} animate-pulse`} />
+                          <span className={`text-[9px] ${hasDetectedObject ? 'text-emerald-300' : 'text-cyan-300'} font-black uppercase tracking-wider`}>
+                            {hasDetectedObject ? 'TARGET LOCKED' : cvDetectionMessage || 'AI VISION ACTIVE'}
+                          </span>
+                        </div>
+
                         {uploadedMediaName && activeFeedType !== 'sample' && (
                           <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/20 rounded-full border border-purple-500/40 backdrop-blur-sm w-max">
                             <FileVideo className="w-3 h-3 text-purple-400" />
-                            <span className="text-[10px] text-purple-300 font-bold max-w-[130px] truncate">{uploadedMediaName}</span>
+                            <span className="text-[9px] text-purple-300 font-bold max-w-[130px] truncate">{uploadedMediaName}</span>
                           </div>
                         )}
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-500/20 rounded-full border border-cyan-500/40 backdrop-blur-sm w-max">
-                          <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
-                          <span className="text-[10px] text-cyan-400 font-bold uppercase">
-                            {hasDetectedObject ? 'TARGET LOCKED' : 'DETECTION ENGINE'}
-                          </span>
-                        </div>
                       </div>
-                    </div>
 
-                    {/* ── Dynamic mode badge top-center ── */}
-                    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20">
-                      {backendMode === 'connecting' && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-black/70 backdrop-blur-sm rounded-full border border-amber-500/30">
-                          <Loader2 className="w-3 h-3 text-amber-400 animate-spin" />
-                          <span className="text-xs text-amber-300 font-semibold">Connecting to backend...</span>
-                        </div>
-                      )}
-                      {backendMode === 'ws' && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-black/70 backdrop-blur-sm rounded-full border border-emerald-500/40">
-                          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                          <span className="text-xs text-emerald-300 font-semibold">🔬 Backend CV — WebSocket</span>
-                        </div>
-                      )}
-                      {backendMode === 'http' && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-black/70 backdrop-blur-sm rounded-full border border-cyan-500/40">
-                          <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                          <span className="text-xs text-cyan-300 font-semibold">🔬 Backend CV — HTTP</span>
-                        </div>
-                      )}
-                      {backendMode === 'client' && (
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-black/70 backdrop-blur-sm rounded-full border border-violet-500/40">
-                          <div className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
-                          <span className="text-xs text-violet-300 font-semibold">⚡ Client AI Vision Active</span>
+                      {/* Hover Overlay Hint for Enlarging */}
+                      {theaterModal !== 'camera' && (
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/screen:opacity-100 transition-opacity flex items-center justify-center pointer-events-none z-30">
+                          <span className="px-4 py-2 rounded-full bg-cyan-500/90 text-black font-black text-xs shadow-2xl flex items-center gap-2">
+                            <Maximize2 className="w-4 h-4" /> Click Screen to Enlarge
+                          </span>
                         </div>
                       )}
                     </div>
 
                     {/* ── Color target hint (client mode) ── */}
                     {backendMode === 'client' && (
-                      <div className="absolute bottom-3 left-3 z-20 px-2.5 py-1.5 bg-black/70 backdrop-blur-sm rounded-xl border border-white/10">
+                      <div className="absolute bottom-3 left-3 z-20 px-2.5 py-1.5 bg-black/75 backdrop-blur-sm rounded-xl border border-white/10 pointer-events-none">
                         <p className="text-[9px] text-gray-300 font-medium">
                           {activeFeedType === 'sample' ? (
                             <>
@@ -2373,7 +2492,7 @@ export default function WebcamSection() {
                             </>
                           ) : (
                             <>
-                              Point a <span className={`font-black ${colorTarget === 'red' ? 'text-red-400' : colorTarget === 'green' ? 'text-green-400' : 'text-blue-400'}`}>{colorTarget.toUpperCase()}</span> object at the camera to track it
+                              Point a <span className={`font-black ${colorTarget === 'red' ? 'text-red-400' : colorTarget === 'green' ? 'text-green-400' : 'text-blue-400'}`}>{colorTarget.toUpperCase()}</span> object at the camera
                             </>
                           )}
                         </p>
@@ -2381,63 +2500,50 @@ export default function WebcamSection() {
                     )}
 
                     {/* ── Privacy note ── */}
-                    <div className="absolute bottom-3 right-3 z-20 px-2.5 py-1 bg-black/60 backdrop-blur-sm rounded-full border border-white/10">
+                    <div className="absolute bottom-3 right-3 z-20 px-2.5 py-1 bg-black/60 backdrop-blur-sm rounded-full border border-white/10 pointer-events-none">
                       <span className="text-[9px] text-gray-400">🔒 Local only • Not stored</span>
                     </div>
 
-                    {/* ── LIVE TELEMETRY POP-UP PANEL ── */}
+                    {/* ── LIVE TELEMETRY POP-UP PANEL (Only in non-theater compact mode) ── */}
                     <AnimatePresence>
-                      {realPhysics && (
+                      {realPhysics && theaterModal !== 'camera' && (
                         <motion.div
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: -20 }}
-                          className="absolute top-20 left-4 z-40 w-52 bg-black/85 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-3 shadow-2xl space-y-2.5"
+                          className="absolute top-24 left-4 z-40 w-48 bg-black/85 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-2.5 shadow-2xl space-y-2 pointer-events-none"
                         >
-                          <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                          <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
                             <div className="flex items-center gap-1.5">
                               <Activity className="w-3.5 h-3.5 text-cyan-400" />
-                              <span className="text-[10px] font-bold text-cyan-100 tracking-wider uppercase">Live Telemetry</span>
+                              <span className="text-[9px] font-bold text-cyan-100 tracking-wider uppercase">Live Telemetry</span>
                             </div>
-                            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 uppercase">
-                              {realPhysics.is_calibrated ? 'Calibrated' : 'Default Scale'}
+                            <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 uppercase">
+                              {realPhysics.is_calibrated ? 'Calibrated' : 'Scale'}
                             </span>
                           </div>
                           
-                          <div className="space-y-2">
+                          <div className="space-y-1.5">
                             <div>
-                              <div className="text-[8px] text-gray-400 uppercase tracking-widest mb-0.5">Velocity (Speed / Vector)</div>
-                              <div className="text-lg font-black text-white font-mono flex items-baseline gap-1">
-                                {realPhysics.speed.toFixed(2)} <span className="text-[10px] text-cyan-400 font-normal">m/s</span>
-                              </div>
-                              <div className="text-[9px] text-cyan-300/80 font-mono">
-                                vx: {realPhysics.velocity_x?.toFixed(2) ?? '0.00'} · vy: {realPhysics.velocity_y?.toFixed(2) ?? '0.00'} m/s
+                              <div className="text-[8px] text-gray-400 uppercase tracking-widest">Velocity</div>
+                              <div className="text-base font-black text-white font-mono flex items-baseline gap-1">
+                                {realPhysics.speed.toFixed(2)} <span className="text-[9px] text-cyan-400 font-normal">m/s</span>
                               </div>
                             </div>
                             
-                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/5">
+                            <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-white/5">
                               <div>
                                 <div className="text-[8px] text-gray-400 uppercase tracking-widest">Displacement</div>
-                                <div className="text-xs font-bold text-purple-400 font-mono mt-0.5">
+                                <div className="text-[11px] font-bold text-purple-400 font-mono">
                                   {realPhysics.distance.toFixed(2)} m
                                 </div>
                               </div>
                               <div>
                                 <div className="text-[8px] text-gray-400 uppercase tracking-widest">Acceleration</div>
-                                <div className="text-xs font-bold text-emerald-400 font-mono mt-0.5">
+                                <div className="text-[11px] font-bold text-emerald-400 font-mono">
                                   {Math.abs(realPhysics.acceleration).toFixed(2)} m/s²
                                 </div>
-                                <div className="text-[8px] text-emerald-400/70 font-mono">
-                                  ax: {realPhysics.acceleration_x?.toFixed(1) ?? '0.0'} ay: {realPhysics.acceleration_y?.toFixed(1) ?? '0.0'}
-                                </div>
                               </div>
-                            </div>
-
-                            <div className="pt-1 border-t border-white/5 text-[8px] text-gray-400 flex items-center justify-between">
-                              <span>Detector:</span>
-                              <span className="text-cyan-300 font-semibold truncate max-w-[120px]" title={activeDetector}>
-                                {activeDetector}
-                              </span>
                             </div>
                           </div>
                         </motion.div>
@@ -2452,7 +2558,7 @@ export default function WebcamSection() {
                       <div className="absolute w-full h-0.5 bg-cyan-500/5 animate-radar-sweep" />
                     </div>
 
-                    <svg className="absolute inset-0 w-full h-full z-10 pointer-events-none">
+                    <svg className="absolute inset-0 w-full h-full z-10 pointer-events-none" viewBox="0 0 400 240" preserveAspectRatio="xMidYMid meet">
                       <circle cx="200" cy="20" r="4" fill="#06b6d4" />
                       <line x1="200" y1="20" x2={bobX} y2={bobY} stroke="#06b6d4" strokeWidth="1.5" strokeDasharray="3 3" />
                       <path d="M 70,130 A 130,130 0 0,0 330,130" fill="none" stroke="rgba(6, 182, 212, 0.15)" strokeWidth="1.5" strokeDasharray="2 2" />
@@ -2494,21 +2600,30 @@ export default function WebcamSection() {
                             </p>
                             <div className="flex items-center justify-center gap-2 flex-wrap">
                               <button
-                                onClick={startSampleLabFeed}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startSampleLabFeed();
+                                }}
                                 className="px-3.5 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-black rounded-lg flex items-center gap-1.5 transition-all shadow-lg shadow-cyan-500/30"
                               >
                                 <Play className="w-3.5 h-3.5 fill-current" />
                                 🧪 Launch Sample Lab (Recommended)
                               </button>
                               <button
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  fileInputRef.current?.click();
+                                }}
                                 className="px-2.5 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
                               >
                                 <Upload className="w-3 h-3" />
                                 Upload Video
                               </button>
                               <button
-                                onClick={startWebcamStream}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startWebcamStream();
+                                }}
                                 className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
                               >
                                 <RefreshCw className="w-3 h-3" />
@@ -2527,21 +2642,30 @@ export default function WebcamSection() {
                             </p>
                             <div className="flex items-center justify-center gap-2 flex-wrap">
                               <button
-                                onClick={startSampleLabFeed}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startSampleLabFeed();
+                                }}
                                 className="px-3.5 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-black rounded-lg flex items-center gap-1.5 transition-all shadow-lg shadow-cyan-500/30"
                               >
                                 <Play className="w-3.5 h-3.5 fill-current" />
                                 🧪 Launch Sample Lab
                               </button>
                               <button
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  fileInputRef.current?.click();
+                                }}
                                 className="px-2.5 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
                               >
                                 <Upload className="w-3 h-3" />
                                 Upload Video
                               </button>
                               <button
-                                onClick={startWebcamStream}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startWebcamStream();
+                                }}
                                 className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
                               >
                                 <Camera className="w-3 h-3" />
@@ -2557,21 +2681,30 @@ export default function WebcamSection() {
                             </p>
                             <div className="flex items-center justify-center gap-2 flex-wrap">
                               <button
-                                onClick={startWebcamStream}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startWebcamStream();
+                                }}
                                 className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-500/25"
                               >
                                 <Camera className="w-3.5 h-3.5" />
                                 Turn On Camera
                               </button>
                               <button
-                                onClick={startSampleLabFeed}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startSampleLabFeed();
+                                }}
                                 className="px-2.5 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
                               >
-                                <Play className="w-3 h-3" />
+                                <Play className="w-3.5 h-3.5" />
                                 🧪 Sample Lab
                               </button>
                               <button
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  fileInputRef.current?.click();
+                                }}
                                 className="px-2.5 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
                               >
                                 <Upload className="w-3 h-3" />
@@ -2586,6 +2719,40 @@ export default function WebcamSection() {
                 )}
               </div>
 
+              {/* Theater Mode Large Telemetry Row */}
+              {theaterModal === 'camera' && (
+                <div className="max-w-6xl w-full mx-auto grid grid-cols-2 md:grid-cols-4 gap-3 my-3">
+                  <div className="bg-black/80 border border-cyan-500/30 rounded-2xl p-3 text-center shadow-lg">
+                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-extrabold">Instant Velocity</span>
+                    <div className="text-2xl font-black text-cyan-400 font-mono mt-0.5">
+                      {realPhysics?.speed ? realPhysics.speed.toFixed(2) : (1.45 * Math.abs(Math.sin(currentAngle))).toFixed(2)} <span className="text-xs font-normal text-cyan-300">m/s</span>
+                    </div>
+                    <span className="text-[9px] text-gray-400 font-mono">vx: {realPhysics?.velocity_x?.toFixed(2) ?? '0.00'} · vy: {realPhysics?.velocity_y?.toFixed(2) ?? '0.00'}</span>
+                  </div>
+                  <div className="bg-black/80 border border-emerald-500/30 rounded-2xl p-3 text-center shadow-lg">
+                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-extrabold">Acceleration</span>
+                    <div className="text-2xl font-black text-emerald-400 font-mono mt-0.5">
+                      {realPhysics?.acceleration ? Math.abs(realPhysics.acceleration).toFixed(2) : (9.81 * Math.sin(Math.abs(currentAngle))).toFixed(2)} <span className="text-xs font-normal text-emerald-300">m/s²</span>
+                    </div>
+                    <span className="text-[9px] text-gray-400 font-mono">Vector: g = 9.81 m/s²</span>
+                  </div>
+                  <div className="bg-black/80 border border-purple-500/30 rounded-2xl p-3 text-center shadow-lg">
+                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-extrabold">Displacement</span>
+                    <div className="text-2xl font-black text-purple-400 font-mono mt-0.5">
+                      {realPhysics?.distance ? realPhysics.distance.toFixed(2) : (length * Math.sin(currentAngle)).toFixed(2)} <span className="text-xs font-normal text-purple-300">m</span>
+                    </div>
+                    <span className="text-[9px] text-gray-400 font-mono">Arc distance: s = L·θ</span>
+                  </div>
+                  <div className="bg-black/80 border border-amber-500/30 rounded-2xl p-3 text-center shadow-lg">
+                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-extrabold">Harmonic Period</span>
+                    <div className="text-2xl font-black text-amber-400 font-mono mt-0.5">
+                      {(2 * Math.PI * Math.sqrt(Math.max(0.1, length) / 9.81)).toFixed(2)} <span className="text-xs font-normal text-amber-300">s</span>
+                    </div>
+                    <span className="text-[9px] text-gray-400 font-mono">Formula: T = 2π√(L/g)</span>
+                  </div>
+                </div>
+              )}
+
               {/* Hidden file input for video/image drop and upload */}
               <input
                 ref={fileInputRef}
@@ -2596,7 +2763,7 @@ export default function WebcamSection() {
               />
 
               {/* Control bar */}
-              <div className="p-4 flex flex-wrap justify-between items-center gap-3 bg-[#0d0d16]">
+              <div className={`p-4 flex flex-wrap justify-between items-center gap-3 bg-[#0d0d16] ${theaterModal === 'camera' ? 'max-w-6xl w-full mx-auto rounded-2xl border border-white/10' : ''}`}>
                 <div className="flex flex-wrap gap-2">
                   {cameraState === 'requesting' ? (
                     <button
@@ -2710,25 +2877,198 @@ export default function WebcamSection() {
             </div>
 
             {/* RIGHT ENGINE: AI-Generated Synchronized Digital Twin Simulation */}
-            <div className="bg-[#12121a] border border-[#22222f] rounded-3xl overflow-hidden shadow-2xl relative flex flex-col justify-between">
-              <div className="absolute top-4 left-4 z-20 flex gap-2">
-                <span className="px-2 py-0.5 bg-purple-500/10 border border-purple-500/20 text-[9px] font-extrabold text-purple-400 rounded-md tracking-wider uppercase">{t.digitalTwinTitle}</span>
-              </div>
+            <div className={`bg-[#12121a] border border-[#22222f] rounded-3xl overflow-hidden shadow-2xl relative flex flex-col justify-between transition-all duration-300 ${
+              theaterModal === 'twin'
+                ? 'fixed inset-0 z-[10000] p-4 md:p-8 bg-[#070712]/98 backdrop-blur-2xl overflow-y-auto flex flex-col justify-between'
+                : screenFocus === 'twin'
+                  ? 'order-1'
+                  : screenFocus === 'camera'
+                    ? 'order-2'
+                    : 'order-2'
+            }`}>
               
-              <div className="aspect-video relative bg-[#05050d] flex items-center justify-center border-b border-[#22222f]">
-                <svg className="absolute inset-0 w-full h-full z-10">
-                  <circle cx="200" cy="20" r="3" fill="#a855f7" />
-                  <line x1="200" y1="20" x2={200 + 130 * Math.sin(currentAngle)} y2={20 + 130 * Math.cos(currentAngle)} stroke="#a855f7" strokeWidth="1.5" strokeDasharray="2 2" />
-                  <circle cx={200 + 130 * Math.sin(currentAngle)} cy={20 + 130 * Math.cos(currentAngle)} r="8" fill="#06b6d4" />
+              {/* Theater Mode Top Bar for Digital Twin */}
+              {theaterModal === 'twin' && (
+                <div className="max-w-6xl w-full mx-auto flex items-center justify-between pb-3 border-b border-white/10 mb-2 relative z-30">
+                  <div className="flex items-center gap-3">
+                    <span className="px-3 py-1 bg-purple-500/20 border border-purple-400 text-purple-300 font-extrabold text-xs rounded-lg uppercase tracking-wider">
+                      Digital Twin Simulation — Full Theater View
+                    </span>
+                    <span className="text-xs text-gray-400 font-mono hidden sm:inline">
+                      Harmonic Oscillator · Length: {length}m · Mass: {mass}kg · Gravity: 9.81 m/s²
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTheaterModal('camera');
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-xs flex items-center gap-1.5 transition-all"
+                    >
+                      Switch to Camera Vision 🎥
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTheaterModal('none');
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-purple-500 hover:bg-purple-400 text-white font-black text-xs flex items-center gap-1.5 shadow-lg shadow-purple-500/30 transition-all"
+                    >
+                      <Minimize2 className="w-3.5 h-3.5" />
+                      Exit Theater Mode (Esc)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Standard Mode Header for Digital Twin */}
+              {theaterModal !== 'twin' && (
+                <div className="p-4 pb-2 flex items-center justify-between relative z-20">
+                  <div className="flex gap-2 items-center">
+                    <span className="px-2.5 py-1 bg-purple-500/10 border border-purple-500/20 text-[9px] font-extrabold text-purple-400 rounded-md tracking-wider uppercase">
+                      {t.digitalTwinTitle}
+                    </span>
+                    <div className="text-[9px] text-emerald-400 font-mono font-bold uppercase bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      {t.activeSync} ({simSync}%)
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setTheaterModal('twin')}
+                      className="px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 text-[10px] font-extrabold flex items-center gap-1 transition-all"
+                      title="Enlarge digital twin simulation"
+                    >
+                      <Maximize2 className="w-3 h-3" /> Enlarge
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              <div 
+                onClick={() => {
+                  if (theaterModal !== 'twin') {
+                    setTheaterModal('twin');
+                  }
+                }}
+                className={`relative bg-[#05050d] flex items-center justify-center border-y border-[#22222f] cursor-pointer group/twin ${
+                  theaterModal === 'twin'
+                    ? 'h-[60vh] min-h-[420px] max-w-6xl w-full mx-auto rounded-2xl overflow-hidden'
+                    : screenFocus === 'twin'
+                      ? 'aspect-video max-h-[500px] w-full'
+                      : 'aspect-video w-full'
+                }`}
+              >
+                <svg 
+                  viewBox="0 0 400 240" 
+                  preserveAspectRatio="xMidYMid meet"
+                  className="w-full h-full z-10"
+                >
+                  {/* Background Grid & Axis */}
+                  <line x1="200" y1="20" x2="200" y2="230" stroke="#22223a" strokeWidth="1" strokeDasharray="4 4" />
+                  <path d="M 80,150 A 130,130 0 0,0 320,150" fill="none" stroke="#2a1f4a" strokeWidth="1" strokeDasharray="3 3" />
+                  
+                  {/* Pivot Bracket */}
+                  <rect x="185" y="10" width="30" height="10" rx="3" fill="#1e1b4b" stroke="#7c3aed" strokeWidth="1" />
+                  <circle cx="200" cy="20" r="4" fill="#a855f7" />
+                  
+                  {/* Pendulum Rod */}
+                  <line 
+                    x1="200" 
+                    y1="20" 
+                    x2={200 + 130 * Math.sin(currentAngle)} 
+                    y2={20 + 130 * Math.cos(currentAngle)} 
+                    stroke="#a855f7" 
+                    strokeWidth="2.5" 
+                    strokeDasharray="4 2" 
+                  />
+                  
+                  {/* Velocity Vector Arrow */}
+                  {Math.abs(currentVelocity) > 0.05 && (
+                    <line
+                      x1={200 + 130 * Math.sin(currentAngle)}
+                      y1={20 + 130 * Math.cos(currentAngle)}
+                      x2={200 + 130 * Math.sin(currentAngle) + 25 * Math.cos(currentAngle) * (currentVelocity > 0 ? 1 : -1)}
+                      y2={20 + 130 * Math.cos(currentAngle) - 25 * Math.sin(currentAngle) * (currentVelocity > 0 ? 1 : -1)}
+                      stroke="#22c55e"
+                      strokeWidth="2"
+                    />
+                  )}
+
+                  {/* Bob glow and body */}
+                  <circle 
+                    cx={200 + 130 * Math.sin(currentAngle)} 
+                    cy={20 + 130 * Math.cos(currentAngle)} 
+                    r="16" 
+                    fill="rgba(6, 182, 212, 0.25)" 
+                  />
+                  <circle 
+                    cx={200 + 130 * Math.sin(currentAngle)} 
+                    cy={20 + 130 * Math.cos(currentAngle)} 
+                    r="10" 
+                    fill="#06b6d4" 
+                    stroke="#67e8f9"
+                    strokeWidth="2"
+                  />
+                  <text
+                    x={200 + 130 * Math.sin(currentAngle) + 14}
+                    y={20 + 130 * Math.cos(currentAngle) + 4}
+                    fill="#67e8f9"
+                    fontSize="9"
+                    fontFamily="monospace"
+                    fontWeight="bold"
+                  >
+                    θ = {(currentAngle * (180 / Math.PI)).toFixed(1)}°
+                  </text>
                 </svg>
 
-                <div className="absolute top-4 right-4 text-[9px] text-emerald-400 font-mono font-bold uppercase bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
-                  {t.activeSync} ({simSync}%)
-                </div>
+                {/* Hover Enlarge Hint */}
+                {theaterModal !== 'twin' && (
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/twin:opacity-100 transition-opacity flex items-center justify-center pointer-events-none z-30">
+                    <span className="px-4 py-2 rounded-full bg-purple-500/90 text-white font-black text-xs shadow-2xl flex items-center gap-2">
+                      <Maximize2 className="w-4 h-4" /> Click Screen to Enlarge
+                    </span>
+                  </div>
+                )}
               </div>
 
+              {/* Theater Mode Large Telemetry Row for Digital Twin */}
+              {theaterModal === 'twin' && (
+                <div className="max-w-6xl w-full mx-auto grid grid-cols-2 md:grid-cols-4 gap-3 my-3">
+                  <div className="bg-black/80 border border-purple-500/30 rounded-2xl p-3 text-center shadow-lg">
+                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-extrabold">Instant Angle (θ)</span>
+                    <div className="text-2xl font-black text-purple-400 font-mono mt-0.5">
+                      {(currentAngle * (180 / Math.PI)).toFixed(1)}°
+                    </div>
+                    <span className="text-[9px] text-gray-400 font-mono">{currentAngle.toFixed(3)} rad</span>
+                  </div>
+                  <div className="bg-black/80 border border-cyan-500/30 rounded-2xl p-3 text-center shadow-lg">
+                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-extrabold">Angular Velocity (ω)</span>
+                    <div className="text-2xl font-black text-cyan-400 font-mono mt-0.5">
+                      {currentVelocity.toFixed(2)} <span className="text-xs font-normal text-cyan-300">rad/s</span>
+                    </div>
+                    <span className="text-[9px] text-gray-400 font-mono">dθ/dt at 60 FPS</span>
+                  </div>
+                  <div className="bg-black/80 border border-emerald-500/30 rounded-2xl p-3 text-center shadow-lg">
+                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-extrabold">Restoring Force</span>
+                    <div className="text-2xl font-black text-emerald-400 font-mono mt-0.5">
+                      {(mass * 9.81 * Math.sin(Math.abs(currentAngle))).toFixed(2)} <span className="text-xs font-normal text-emerald-300">N</span>
+                    </div>
+                    <span className="text-[9px] text-gray-400 font-mono">F = -mg·sin(θ)</span>
+                  </div>
+                  <div className="bg-black/80 border border-amber-500/30 rounded-2xl p-3 text-center shadow-lg">
+                    <span className="text-[10px] text-gray-400 uppercase tracking-widest font-extrabold">Twin Sync Score</span>
+                    <div className="text-2xl font-black text-amber-400 font-mono mt-0.5">
+                      {simSync}%
+                    </div>
+                    <span className="text-[9px] text-gray-400 font-mono">Real vs. Synthetic Match</span>
+                  </div>
+                </div>
+              )}
+
               {/* Sync calibration measurements list overlay */}
-              <div className="p-4 bg-[#0d0d16] flex justify-between items-center text-[10px] font-mono text-gray-400">
+              <div className={`p-4 bg-[#0d0d16] flex justify-between items-center text-[10px] font-mono text-gray-400 ${theaterModal === 'twin' ? 'max-w-6xl w-full mx-auto rounded-2xl border border-white/10' : ''}`}>
                 <span>Twin Length: {length}m</span>
                 <span>Mass: {mass}kg</span>
                 <span>Sync Latency: 2.1ms</span>
