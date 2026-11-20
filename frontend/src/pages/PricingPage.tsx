@@ -7,66 +7,63 @@ export default function PricingPage() {
 
   const plans = [
     {
-      name: "Free Student",
+      name: "Student Scholar",
       price: "$0",
-      period: "forever",
-      desc: "For young scientists exploring basic mechanics.",
+      period: "free forever",
+      desc: "For curious students exploring fundamental mechanics.",
       features: [
-        "10 monthly Live Lab sessions",
-        "Professor Nova AI STEM responses",
-        "HSV Color Tracking model",
-        "Basic Kinetic/Potential energy graphs",
-        "Standard achievements & badges"
+        "All 6 interactive physics simulation engines",
+        "Client-side Edge CV color tracking (100% local)",
+        "AI Science Roundtable pedagogical guidance",
+        "Real-time Kinetic/Potential energy telemetry",
+        "Gamified XP, badges & scholar achievements"
       ],
-      cta: "Get Started Free",
+      cta: "Launch Free Lab",
       popular: false
     },
     {
-      name: "Student Pro",
-      price: "$9",
-      period: "monthly",
-      desc: "Our most popular tier for advanced researchers.",
+      name: "Classroom & Teachers",
+      price: "$0",
+      period: "free forever",
+      desc: "Empowering STEM teachers and science classes.",
       features: [
-        "Unlimited Live Lab sessions",
-        "Uncapped high-priority Professor Nova",
-        "YOLOv8 Deep Learning object tracker",
-        "FastAPI scientific PDF downloads",
-        "Extended trajectory analytics",
-        "Exclusive Gravity Pioneer badges"
+        "Unlimited interactive laboratory runs",
+        "Instant publication-ready PDF lab report exports",
+        "Pre-configured inquiry challenges & quests",
+        "Classroom live demonstrations & digital twin sync",
+        "Authentic kinematics error analysis"
       ],
-      cta: "Go Pro Now",
+      cta: "Open Experiments",
       popular: true
     },
     {
-      name: "Institution",
-      price: "$49",
-      period: "monthly",
-      desc: "Designed for school departments and STEM labs.",
+      name: "Open Science Researchers",
+      price: "$0",
+      period: "open access",
+      desc: "For university physics students and research projects.",
       features: [
-        "Up to 50 active students accounts",
-        "Teacher dashboard & grading analytics",
-        "Classroom challenges & XP leaderboards",
-        "Shared cloud experimental reports",
-        "CSV analytical data logs export",
-        "Dedicated onboarding support"
+        "High-frequency telemetry & velocity extraction",
+        "Taylor approximation & damping coefficient proofs",
+        "Offline local storage persistence",
+        "Interactive STEM sample lab feed (30 FPS)",
+        "Scientific data provenance logging"
       ],
-      cta: "Upgrade Classroom",
+      cta: "Explore Research Labs",
       popular: false
     },
     {
-      name: "Enterprise",
-      price: "Custom",
-      period: "yearly pricing",
-      desc: "Custom deployment for university boards.",
+      name: "Academic Institutions",
+      price: "Free",
+      period: "open source",
+      desc: "Open access deployment for school districts & universities.",
       features: [
-        "Unlimited campus-wide user licenses",
-        "Local network hardware server hosting",
-        "Custom computer vision API integrations",
-        "SSO, SAML & secure school logins",
-        "Dedicated account science manager",
-        "Custom branding & syllabus alignment"
+        "Zero per-seat licensing or subscription fees",
+        "Self-contained client-side architecture",
+        "Compatible with Chromebooks, PCs, and Cloud Agents",
+        "Open Educational Resources (OER) aligned",
+        "Community driven on GitHub"
       ],
-      cta: "Contact Enterprise",
+      cta: "View Documentation",
       popular: false
     }
   ];
@@ -100,10 +97,10 @@ export default function PricingPage() {
             <Sparkles className="w-7 h-7" />
           </motion.div>
           <h1 className="text-4xl md:text-5xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400">
-            Harmonious SaaS Pricing
+            Open Access STEM Education
           </h1>
           <p className="text-gray-400 text-base max-w-2xl mx-auto leading-relaxed">
-            Accessible price plans tailored for single students, school classrooms, and global universities.
+            NeuroLab AI is 100% free and open-access for students, teachers, and researchers worldwide. Zero subscription fees, zero paywalls.
           </p>
         </div>
 
@@ -124,7 +121,7 @@ export default function PricingPage() {
             >
               {p.popular && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-cyan-500 text-black text-[9px] font-black uppercase rounded-full tracking-widest shadow-md">
-                  Most Popular
+                  Recommended
                 </span>
               )}
               
@@ -148,13 +145,12 @@ export default function PricingPage() {
 
               <button 
                 onClick={() => {
-                  const isAuth = !!localStorage.getItem('neurolab_session');
-                  if (p.name === 'Free Student') {
-                    navigate(isAuth ? '/dashboard' : '/auth');
-                  } else if (p.name === 'Student Pro') {
-                    navigate(isAuth ? '/dashboard/experiments' : '/auth');
+                  if (p.name === 'Academic Institutions') {
+                    navigate('/docs');
+                  } else if (p.name === 'Classroom & Teachers' || p.name === 'Open Science Researchers') {
+                    navigate('/dashboard/experiments');
                   } else {
-                    navigate('/contact');
+                    navigate('/dashboard');
                   }
                 }}
                 className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all ${
@@ -174,13 +170,13 @@ export default function PricingPage() {
           <div className="flex items-center gap-3">
             <HelpCircle className="w-5 h-5 text-purple-400" />
             <div className="text-left">
-              <h4 className="text-white font-bold text-sm">Have specific custom requirements?</h4>
-              <p className="text-gray-500 text-xs">We customize billing plans for large institutions, academies, and university blocks.</p>
+              <h4 className="text-white font-bold text-sm">Need educational onboarding or workshop materials?</h4>
+              <p className="text-gray-500 text-xs">We provide free curriculum alignment guides, lesson plans, and laboratory worksheets for educators.</p>
             </div>
           </div>
           <button onClick={() => navigate('/contact')} className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-gray-300 hover:text-white text-xs font-semibold hover:bg-white/8 transition-all flex items-center gap-1.5">
             <Mail className="w-3.5 h-3.5" />
-            Contact Sales
+            Contact Team
           </button>
         </div>
       </div>

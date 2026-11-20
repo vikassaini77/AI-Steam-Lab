@@ -14,7 +14,7 @@ const sections = [
   { id: 'intellectual-property', title: '7. Intellectual Property' },
   { id: 'user-content', title: '8. User Content & Data' },
   { id: 'privacy', title: '9. Privacy & Security' },
-  { id: 'payments', title: '10. Payments & Subscriptions' },
+  { id: 'payments', title: '10. Open Access & Educational Terms' },
   { id: 'warranties', title: '11. Disclaimer of Warranties' },
   { id: 'liability', title: '12. Limitation of Liability' },
   { id: 'indemnification', title: '13. Indemnification' },
@@ -285,13 +285,13 @@ export default function TermsPage() {
 
             <section id="payments" className="scroll-mt-24">
               <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-3">
-                <span className="text-cyan-500">10.</span> Payments, Subscriptions, and Refunds
+                <span className="text-cyan-500">10.</span> Open Access & Educational Terms
               </h2>
               <p className="leading-relaxed">
-                Certain premium features of NeuroLab AI require a paid subscription ("Pro Plan" or "Enterprise Plan"). By selecting a paid tier, you agree to pay all applicable fees in advance. Subscriptions automatically renew at the end of the billing cycle unless canceled prior to the renewal date.
+                NeuroLab AI is provided as a 100% free and open-access educational STEM platform. There are no mandatory recurring subscriptions, recharge plans, or paid paywalls required to access our interactive simulation engines, client-side computer vision lab, or AI tutor roundtable.
               </p>
               <p className="leading-relaxed mt-4">
-                <strong>Refund Policy:</strong> We offer a 14-day money-back guarantee for initial personal subscription purchases. Refund requests must be submitted to billing@neurolab.ai. Subsequent renewals and Enterprise contracts are non-refundable unless legally required.
+                <strong>Educational Use:</strong> All educational simulations, telemetry graphs, and scientific PDF lab reports generated within the platform are freely licensed for personal, classroom, and academic non-commercial research use.
               </p>
             </section>
 

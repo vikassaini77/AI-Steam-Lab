@@ -230,7 +230,7 @@ export default function PrivacyPage() {
               <ul className="space-y-2 list-disc pl-5 marker:text-emerald-500">
                 <li>To provide, maintain, and improve the NeuroLab AI platform.</li>
                 <li>To personalize your learning experience and tailor the AI Tutor's responses to your educational level.</li>
-                <li>To process payments and manage your premium subscriptions.</li>
+                <li>To manage your account settings and local experimental preferences.</li>
                 <li>To send administrative notices, technical updates, security alerts, and support messages.</li>
                 <li>To analyze usage trends and develop new educational features.</li>
                 <li>To protect the safety and security of our users and the integrity of our Services.</li>
@@ -245,7 +245,7 @@ export default function PrivacyPage() {
                 NeuroLab does NOT sell your personal data to third parties. We may share your information only in the following limited circumstances:
               </p>
               <ul className="space-y-3 list-none pl-0 mt-4">
-                <li className="pl-4 border-l-2 border-white/10"><strong className="text-gray-200">Service Providers:</strong> We share data with trusted vendors who perform services on our behalf (e.g., cloud hosting via AWS/Supabase, payment processing via Stripe), subject to strict data processing agreements.</li>
+                <li className="pl-4 border-l-2 border-white/10"><strong className="text-gray-200">Service Providers:</strong> We share data with trusted vendors who perform services on our behalf (e.g., cloud hosting via AWS/Supabase), subject to strict data processing agreements.</li>
                 <li className="pl-4 border-l-2 border-white/10"><strong className="text-gray-200">Educational Institutions:</strong> If you use NeuroLab through a school or enterprise account, your administrators may have access to your learning progress and usage data.</li>
                 <li className="pl-4 border-l-2 border-white/10"><strong className="text-gray-200">Legal Compliance:</strong> We may disclose data if required by law, subpoena, or other legal process, or if we believe disclosure is necessary to protect our rights, your safety, or the safety of others.</li>
               </ul>
