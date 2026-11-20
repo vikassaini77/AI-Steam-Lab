@@ -25,7 +25,6 @@ import {
   Key,
   HelpCircle,
   Info,
-  CreditCard,
   Sparkles,
   Sliders,
   Database,
@@ -78,8 +77,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
   const [settingsSearch, setSettingsSearch] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   
-  // Interactive Modal upgrades
-  const [showUpgradeModal, setShowUpgradeModal] = useState<boolean>(false);
+  // Interactive Modals
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
 
   // Auto-Dismiss for Toast Popup Notifications
@@ -300,9 +298,6 @@ export default function ProfilePage({ session }: ProfilePageProps) {
     microsoft: false
   });
 
-  // 12. Billing & Subscription Tiers
-  const [billingPlan, setBillingPlan] = useState<'Free' | 'Pro' | 'Student'>('Free');
-
   // FAQs Accordion states
   const [faqExpanded, setFaqExpanded] = useState<number | null>(null);
 
@@ -410,8 +405,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
       items: [
         { id: 'privacy', label: 'Privacy', icon: Shield, keywords: ['leaderboard', 'public', 'visibility', 'sharing'] },
         { id: 'data', label: 'Data Management', icon: Database, keywords: ['export', 'download', 'delete', 'account'] },
-        { id: 'connections', label: 'Connected Accounts', icon: LinkIcon, keywords: ['google', 'github', 'discord', 'microsoft'] },
-        { id: 'billing', label: 'Billing & Subscription', icon: CreditCard, keywords: ['plan', 'pro', 'upgrade', 'invoice'] }
+        { id: 'connections', label: 'Connected Accounts', icon: LinkIcon, keywords: ['google', 'github', 'discord', 'microsoft'] }
       ]
     },
     {
@@ -478,12 +472,6 @@ export default function ProfilePage({ session }: ProfilePageProps) {
     handleAutoSaveAction(active ? `Connected ${acc} account! 🔗` : `Disconnected ${acc} account!`);
   };
 
-  const handlePerformUpgrade = () => {
-    setBillingPlan('Pro');
-    setShowUpgradeModal(false);
-    setToastMessage('Successfully upgraded to Pro! 🎉 welcome to NeuroLab Elite.');
-  };
-
   const handlePerformDelete = () => {
     setShowDeleteModal(false);
     navigate('/');
@@ -509,49 +497,6 @@ export default function ProfilePage({ session }: ProfilePageProps) {
             <CheckCircle2 className="w-5 h-5 text-cyan-400" />
             <span className="text-sm font-bold text-white tracking-wide">{toastMessage}</span>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Upgrade Subscription Modal */}
-      <AnimatePresence>
-        {showUpgradeModal && (
-          <div className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-[#12121a] border border-[#22222f] rounded-3xl max-w-md w-full p-6 sm:p-8 space-y-6 shadow-2xl relative"
-            >
-              <div className="text-center space-y-2">
-                <span className="text-4xl">🚀</span>
-                <h3 className="text-xl font-extrabold text-white">Upgrade to NeuroLab Pro</h3>
-                <p className="text-xs text-gray-400">Unlock unlimited simulation resolutions, 24/7 priority AI tutor recommendations, and premium calibrations.</p>
-              </div>
-
-              <div className="bg-white/[0.02] border border-white/5 p-4 rounded-2xl space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-white font-bold">Pro Monthly Subscription</span>
-                  <span className="text-sm font-black text-cyan-400">$9.99/mo</span>
-                </div>
-                <p className="text-[10px] text-gray-500">Cancel anytime from billing settings instantly with zero hold penalties.</p>
-              </div>
-
-              <div className="flex gap-3 mt-4">
-                <button
-                  onClick={() => setShowUpgradeModal(false)}
-                  className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 rounded-xl text-xs font-bold transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handlePerformUpgrade}
-                  className="flex-1 py-3 bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 hover:brightness-110 text-white rounded-xl text-xs font-bold transition-all shadow-lg"
-                >
-                  Confirm Upgrade
-                </button>
-              </div>
-            </motion.div>
-          </div>
         )}
       </AnimatePresence>
 
@@ -1612,43 +1557,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
               </div>
             )}
 
-            {/* 13. Billing & Subscription Tab */}
-            {activeTab === 'billing' && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-xl font-bold text-white">Billing & Plan Subscription</h3>
-                  <p className="text-xs text-gray-400 mt-1">Manage monthly billing details, upgrade options, and invoice cache history.</p>
-                </div>
-
-                <div className="p-5 bg-gradient-to-r from-cyan-900/15 via-blue-900/10 to-transparent border border-cyan-500/20 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div>
-                    <span className="text-[9px] text-cyan-400 font-extrabold uppercase tracking-wider bg-cyan-500/10 border border-cyan-500/25 px-2 py-0.5 rounded">Active Plan</span>
-                    <h4 className="text-2xl font-black text-white mt-2 capitalize">{billingPlan} Plan</h4>
-                    <p className="text-[10px] text-gray-500 mt-0.5">NeuroLab {billingPlan === 'Free' ? 'Basic level learning access' : 'Full interactive access enabled'}.</p>
-                  </div>
-                  
-                  {billingPlan === 'Free' && (
-                    <button
-                      onClick={() => setShowUpgradeModal(true)}
-                      className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-xs font-bold rounded-xl transition-all shadow-lg hover:brightness-110"
-                    >
-                      Upgrade to Pro
-                    </button>
-                  )}
-                </div>
-
-                {/* Billing invoice logs list */}
-                <div className="space-y-3 pt-2">
-                  <h4 className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Billing Invoice History</h4>
-                  
-                  <div className="p-4 bg-white/[0.01] border border-white/5 rounded-xl text-center">
-                    <p className="text-xs text-gray-500 font-medium">No invoice logs found. Free tier account setup active.</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 14. Help & Support Tab */}
+            {/* Help & Support Tab */}
             {activeTab === 'support' && (
               <div className="space-y-6">
                 <div>

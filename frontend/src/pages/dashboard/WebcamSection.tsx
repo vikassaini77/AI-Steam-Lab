@@ -3,6 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Camera,
+  CameraOff,
+  X,
   Settings,
   Sparkles,
   TrendingUp,
@@ -312,7 +314,15 @@ export default function WebcamSection() {
   // Active translation set
   const t = translations[currentLang];
 
-  const [cameraActive, setCameraActive] = useState<boolean>(false);
+  // Camera & Video Feed Lifecycle State
+  type CameraState = 'idle' | 'requesting' | 'streaming' | 'permission_denied' | 'not_found' | 'error';
+  const [cameraState, setCameraState] = useState<CameraState>('idle');
+  const [cameraErrorMessage, setCameraErrorMessage] = useState<string | null>(null);
+  const [activeFeedType, setActiveFeedType] = useState<'none' | 'webcam' | 'sample' | 'video'>('none');
+  const isWebcamLive = cameraState === 'streaming';
+  const isFeedActive = isWebcamLive || activeFeedType === 'sample' || activeFeedType === 'video';
+  const cameraActive = isFeedActive;
+
   const [trackingMethod, setTrackingMethod] = useState<'color' | 'yolo'>('color');
   // Default to green to avoid false positives with red/orange room lighting and skin tones
   const [colorTarget, setColorTarget] = useState<'red' | 'green' | 'blue'>('green');
@@ -567,7 +577,9 @@ export default function WebcamSection() {
     // Reset states for clean showstopper run
     setDemoActive(true);
     setDemoStep(1);
-    setCameraActive(false);
+    setCameraState('idle');
+    setActiveFeedType('none');
+    setIsVideoSource(false);
     setIsPlaying(true);
     setVerificationPercent(50);
     setCvBobDetected(false);
@@ -1060,18 +1072,12 @@ export default function WebcamSection() {
     }
   };
 
-  // ── Unified camera activation ──
+  // ── Unified CV pipeline activation (Runs only when feed is confirmed active) ──
   useEffect(() => {
-    if (!cameraActive) {
+    if (!isFeedActive) {
       if (sendIntervalRef.current) clearInterval(sendIntervalRef.current);
       if (clientCvIntervalRef.current) clearInterval(clientCvIntervalRef.current);
-      if (sampleFeedIntervalRef.current) clearInterval(sampleFeedIntervalRef.current);
       if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
-      if (videoRef.current) {
-        videoRef.current.srcObject = null;
-        videoRef.current.src = '';
-      }
       setAnnotatedImage(null);
       setRealPhysics(null);
       setBackendMode('connecting');
@@ -1081,152 +1087,126 @@ export default function WebcamSection() {
       return;
     }
 
-    const initCameraStream = async () => {
-      try {
-        if (!isVideoSource) {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 640 }, height: { ideal: 360 } },
-            audio: false
-          });
-          streamRef.current = stream;
-          setIsCameraBlockedByPolicy(false);
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            await videoRef.current.play();
-          }
-        }
-
-        if (selectedCVSource === 'client') {
-          setBackendMode('client');
-          handleAutoSaveAction('📷 Running client-side AI vision (Edge CV)');
-          startClientCV();
-          return;
-        }
-
-        // ── Tier 1: Try WebSocket to backend ──
-        const wsUrl = getWebSocketUrl('/api/cv/ws/stream');
-
-        let wsConnected = false;
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-
-        // Give WebSocket 3 seconds to connect
-        const wsTimeout = setTimeout(() => {
-          if (!wsConnected) {
-            console.log('Backend WebSocket not available — trying HTTP...');
-            ws.close();
-            tryHttpFallback();
-          }
-        }, 3000);
-
-        ws.onopen = () => {
-          wsConnected = true;
-          clearTimeout(wsTimeout);
-          setBackendMode('ws');
-          setAiStatus('Connected');
-          handleAutoSaveAction('✅ Backend CV connected via WebSocket!');
-
-          // Start sending frames
-          sendIntervalRef.current = setInterval(() => {
-            const video = videoRef.current;
-            const canvas = canvasRef.current;
-            if (!canvas) return;
-            let sourceDrawable: CanvasImageSource | null = null;
-            if (video && video.readyState >= 2) {
-              sourceDrawable = video;
-            } else if (sampleCanvasRef.current && isVideoSource) {
-              sourceDrawable = sampleCanvasRef.current;
-            }
-            if (!sourceDrawable) return;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-            canvas.width = 640; canvas.height = 360;
-            ctx.save();
-            ctx.scale(isVideoSource ? 1 : -1, 1);
-            ctx.drawImage(sourceDrawable, isVideoSource ? 0 : -640, 0, 640, 360);
-            ctx.restore();
-            const b64 = canvas.toDataURL('image/jpeg', 0.6);
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ image: b64, tracking_method: trackingMethod, color_target: colorTarget, px_to_meters: 0.005 }));
-            }
-          }, 100);
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.annotated_image) setAnnotatedImage(data.annotated_image);
-            if (data.active_detector) setActiveDetector(data.active_detector);
-            else if (data.model_name) setActiveDetector(data.model_name);
-            if (data.is_degraded !== undefined) setIsCvDegraded(Boolean(data.is_degraded));
-            if (data.degraded_reason) setCvDegradedReason(data.degraded_reason);
-            if (data.detection_message) setCvDetectionMessage(data.detection_message);
-            setHasDetectedObject(Boolean(data.centroid && data.detections && data.detections.length > 0));
-
-            if (data.physics) {
-              const phys = data.physics;
-              const mappedSpeed = Number(phys.velocity_mps ?? phys.speed ?? 0);
-              const mappedAccel = Number(phys.acceleration_mps2 ?? phys.acceleration ?? 0);
-              const mappedDist = Number(phys.x_meters ?? phys.distance ?? 0);
-              const mappedPhysics: RealPhysicsData = {
-                speed: mappedSpeed,
-                acceleration: mappedAccel,
-                distance: mappedDist,
-                velocity_x: phys.velocity_x_mps ?? phys.velocity_x,
-                velocity_y: phys.velocity_y_mps ?? phys.velocity_y,
-                acceleration_x: phys.acceleration_x_mps2,
-                acceleration_y: phys.acceleration_y_mps2,
-                is_calibrated: phys.is_calibrated,
-                calibration_status: phys.calibration_status,
-                pendulum_params: phys.pendulum_params,
-                projectile_params: phys.projectile_params,
-                trajectory: phys.trajectory,
-              };
-              setRealPhysics(mappedPhysics);
-              const g = 9.81;
-              const angleVal = phys.pendulum_params?.angle ?? phys.projectile_params?.launch_angle ?? 0;
-              const keVal = 0.5 * mass * mappedSpeed * mappedSpeed;
-              const peVal = mass * g * (phys.pendulum_params?.estimated_length ?? length) * (1 - Math.cos(angleVal * Math.PI/180));
-              setChartData(prev => {
-                const next = [...prev, { time: Number((performance.now()/1000).toFixed(2)), position: Number((phys.distance||0).toFixed(3)), velocity: Number(mappedSpeed.toFixed(3)), ke: Number(keVal.toFixed(2)), pe: Number(peVal.toFixed(2)) }];
-                return next.length > 30 ? next.slice(-30) : next;
-              });
-            }
-          } catch(e) { console.error('WS parse error:', e); }
-        };
-
-        ws.onerror = () => {
-          if (!wsConnected) { clearTimeout(wsTimeout); tryHttpFallback(); }
-        };
-
-        ws.onclose = () => {
-          if (wsConnected) {
-            // WS was open but closed — fall back to client CV
-            setBackendMode('client');
-            startClientCV();
-          }
-        };
-
-      } catch (err: unknown) {
-        console.error('Camera init error:', err);
-        const errorObj = err as { name?: string; message?: string } | undefined;
-        const isPolicyBlocked =
-          errorObj?.name === 'NotAllowedError' ||
-          errorObj?.name === 'SecurityError' ||
-          String(errorObj?.message || '').toLowerCase().includes('permission') ||
-          String(errorObj?.message || '').toLowerCase().includes('policy');
-
-        if (isPolicyBlocked) {
-          setIsCameraBlockedByPolicy(true);
-          handleAutoSaveAction('🔒 Host camera access restricted. Video or Sample Lab enabled.');
+    const startClientCV = () => {
+      const waitAndStart = () => {
+        if ((videoRef.current && videoRef.current.readyState >= 2) || (sampleCanvasRef.current && isVideoSource)) {
+          clientCvIntervalRef.current = setInterval(runClientSideCV, 80);
         } else {
-          handleAutoSaveAction('Camera permission denied.');
+          setTimeout(waitAndStart, 300);
         }
-        setCameraActive(false);
+      };
+      waitAndStart();
+    };
+
+    // ── Tier 1: Client-Side Edge CV (Preferred for instant zero-latency processing) ──
+    if (selectedCVSource === 'client') {
+      setBackendMode('client');
+      handleAutoSaveAction('📷 Running client-side AI vision (Edge CV)');
+      startClientCV();
+      return;
+    }
+
+    // ── Tier 2: Try WebSocket to backend ──
+    const wsUrl = getWebSocketUrl('/api/cv/ws/stream');
+    let wsConnected = false;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    const wsTimeout = setTimeout(() => {
+      if (!wsConnected) {
+        console.log('Backend WebSocket not available — trying HTTP...');
+        ws.close();
+        tryHttpFallback();
+      }
+    }, 3000);
+
+    ws.onopen = () => {
+      wsConnected = true;
+      clearTimeout(wsTimeout);
+      setBackendMode('ws');
+      setAiStatus('Connected');
+      handleAutoSaveAction('✅ Backend CV connected via WebSocket!');
+
+      sendIntervalRef.current = setInterval(() => {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        let sourceDrawable: CanvasImageSource | null = null;
+        if (video && video.readyState >= 2) {
+          sourceDrawable = video;
+        } else if (sampleCanvasRef.current && isVideoSource) {
+          sourceDrawable = sampleCanvasRef.current;
+        }
+        if (!sourceDrawable) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        canvas.width = 640; canvas.height = 360;
+        ctx.save();
+        ctx.scale(isVideoSource ? 1 : -1, 1);
+        ctx.drawImage(sourceDrawable, isVideoSource ? 0 : -640, 0, 640, 360);
+        ctx.restore();
+        const b64 = canvas.toDataURL('image/jpeg', 0.6);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ image: b64, tracking_method: trackingMethod, color_target: colorTarget, px_to_meters: 0.005 }));
+        }
+      }, 100);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.annotated_image) setAnnotatedImage(data.annotated_image);
+        if (data.active_detector) setActiveDetector(data.active_detector);
+        else if (data.model_name) setActiveDetector(data.model_name);
+        if (data.is_degraded !== undefined) setIsCvDegraded(Boolean(data.is_degraded));
+        if (data.degraded_reason) setCvDegradedReason(data.degraded_reason);
+        if (data.detection_message) setCvDetectionMessage(data.detection_message);
+        setHasDetectedObject(Boolean(data.centroid && data.detections && data.detections.length > 0));
+
+        if (data.physics) {
+          const phys = data.physics;
+          const mappedSpeed = Number(phys.velocity_mps ?? phys.speed ?? 0);
+          const mappedAccel = Number(phys.acceleration_mps2 ?? phys.acceleration ?? 0);
+          const mappedDist = Number(phys.x_meters ?? phys.distance ?? 0);
+          const mappedPhysics: RealPhysicsData = {
+            speed: mappedSpeed,
+            acceleration: mappedAccel,
+            distance: mappedDist,
+            velocity_x: phys.velocity_x_mps ?? phys.velocity_x,
+            velocity_y: phys.velocity_y_mps ?? phys.velocity_y,
+            acceleration_x: phys.acceleration_x_mps2,
+            acceleration_y: phys.acceleration_y_mps2,
+            is_calibrated: phys.is_calibrated,
+            calibration_status: phys.calibration_status,
+            pendulum_params: phys.pendulum_params,
+            projectile_params: phys.projectile_params,
+            trajectory: phys.trajectory,
+          };
+          setRealPhysics(mappedPhysics);
+          const g = 9.81;
+          const angleVal = phys.pendulum_params?.angle ?? phys.projectile_params?.launch_angle ?? 0;
+          const keVal = 0.5 * mass * mappedSpeed * mappedSpeed;
+          const peVal = mass * g * (phys.pendulum_params?.estimated_length ?? length) * (1 - Math.cos(angleVal * Math.PI/180));
+          setChartData(prev => {
+            const next = [...prev, { time: Number((performance.now()/1000).toFixed(2)), position: Number((phys.distance||0).toFixed(3)), velocity: Number(mappedSpeed.toFixed(3)), ke: Number(keVal.toFixed(2)), pe: Number(peVal.toFixed(2)) }];
+            return next.length > 30 ? next.slice(-30) : next;
+          });
+        }
+      } catch(e) { console.error('WS parse error:', e); }
+    };
+
+    ws.onerror = () => {
+      if (!wsConnected) { clearTimeout(wsTimeout); tryHttpFallback(); }
+    };
+
+    ws.onclose = () => {
+      if (wsConnected) {
+        setBackendMode('client');
+        startClientCV();
       }
     };
 
-    // ── Tier 2: HTTP POST fallback ──
+    // ── HTTP fallback ──
     const tryHttpFallback = async () => {
       const apiHost = getApiBaseUrl();
       const headers = await getAuthHeaders();
@@ -1246,14 +1226,11 @@ export default function WebcamSection() {
         }
       } catch { /* fall through */ }
 
-      // ── Tier 3: Client-side CV (no backend needed) ──
-      console.log('Backend unavailable — running client-side CV');
       setBackendMode('client');
       handleAutoSaveAction('📷 Running client-side AI vision (no backend needed)');
       startClientCV();
     };
 
-    // ── HTTP streaming loop ──
     const startHttpStreaming = async (apiHost: string) => {
       const authHeaders = await getAuthHeaders();
       let isFetching = false;
@@ -1324,55 +1301,205 @@ export default function WebcamSection() {
       }, 120);
     };
 
-    // ── Client-side CV loop ──
-    const startClientCV = () => {
-      // Wait for video or sample canvas to be ready
-      const waitAndStart = () => {
-        if ((videoRef.current && videoRef.current.readyState >= 2) || (sampleCanvasRef.current && isVideoSource)) {
-          clientCvIntervalRef.current = setInterval(runClientSideCV, 80); // ~12 FPS
-        } else {
-          setTimeout(waitAndStart, 300);
-        }
-      };
-      waitAndStart();
-    };
-
-    initCameraStream();
-
     return () => {
       if (sendIntervalRef.current) clearInterval(sendIntervalRef.current);
       if (clientCvIntervalRef.current) clearInterval(clientCvIntervalRef.current);
       if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-      if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
       setAnnotatedImage(null);
       setRealPhysics(null);
       setBackendMode('connecting');
       motionPointsRef.current = [];
       prevFrameRef.current = null;
-      localStorage.removeItem('neurolab_experiment_state');
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cameraActive, trackingMethod, colorTarget, selectedCVSource]);
+  }, [isFeedActive, trackingMethod, colorTarget, selectedCVSource]);
 
-  const toggleWebcam = () => {
+  // ── Explicit Camera Lifecycle Control Flow ──
+  const startWebcamStream = async () => {
     if (demoActive) return;
-    if (cameraActive) {
-      if (sampleFeedIntervalRef.current) clearInterval(sampleFeedIntervalRef.current);
-      setIsVideoSource(false);
-      setUploadedMediaName(null);
-      setCameraActive(false);
-    } else {
-      setIsVideoSource(false);
-      setCameraActive(true);
+
+    // Reset any active feeds
+    if (sampleFeedIntervalRef.current) clearInterval(sampleFeedIntervalRef.current);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+      videoRef.current.src = '';
+    }
+
+    setCameraState('requesting');
+    setCameraErrorMessage(null);
+    setIsVideoSource(false);
+    setActiveFeedType('none');
+    setUploadedMediaName(null);
+
+    // 1. Guard against environments lacking mediaDevices API
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraState('not_found');
+      setCameraErrorMessage('Webcam API is not available in this browser environment or iframe.');
+      handleAutoSaveAction('⚠️ Webcam API not available in this environment.');
+      return;
+    }
+
+    try {
+      // 2. Pre-check video input devices if supported
+      try {
+        if (navigator.mediaDevices.enumerateDevices) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoInputs = devices.filter(d => d.kind === 'videoinput');
+          if (videoInputs.length === 0 && devices.length > 0) {
+            setCameraState('not_found');
+            setCameraErrorMessage('No camera hardware detected on this machine. (Typical for Cloud Agents and virtual environments).');
+            handleAutoSaveAction('📷 No camera found. Try the Sample Lab!');
+            return;
+          }
+        }
+      } catch {
+        // Sandboxed environments may block enumeration; proceed directly to getUserMedia
+      }
+
+      // 3. Request user camera access
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 360 } },
+          audio: false
+        });
+      } catch {
+        // Fallback to minimal video constraints
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+      }
+
+      // 4. Verify live video track
+      const videoTrack = stream.getVideoTracks()[0];
+      if (!videoTrack || videoTrack.readyState === 'ended') {
+        throw new Error('Camera track is not active or has ended.');
+      }
+
+      streamRef.current = stream;
+      setIsCameraBlockedByPolicy(false);
+
+      // Handle external track disconnection
+      videoTrack.onended = () => {
+        stopWebcamStream();
+        setCameraErrorMessage('Camera device was disconnected.');
+      };
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+
+      // 5. Only mark streaming once playback is confirmed
+      setActiveFeedType('webcam');
+      setCameraState('streaming');
+      setCameraErrorMessage(null);
+      setIsPlaying(true);
+      setAiStatus('Detecting');
+      handleAutoSaveAction('✅ Camera activated! Real-time computer vision tracking live.');
+    } catch (err: unknown) {
+      console.warn('Webcam activation error:', err);
+      const errorObj = err as { name?: string; message?: string } | undefined;
+      const errName = errorObj?.name || '';
+      const errMsg = String(errorObj?.message || '').toLowerCase();
+
+      if (
+        errName === 'NotAllowedError' ||
+        errName === 'PermissionDeniedError' ||
+        errName === 'SecurityError' ||
+        errMsg.includes('permission') ||
+        errMsg.includes('policy')
+      ) {
+        setIsCameraBlockedByPolicy(true);
+        setCameraState('permission_denied');
+        setCameraErrorMessage('Camera access was denied by browser permissions or host iframe policy.');
+        handleAutoSaveAction('🔒 Camera permission denied. Sample Lab is available.');
+      } else if (
+        errName === 'NotFoundError' ||
+        errName === 'DevicesNotFoundError' ||
+        errMsg.includes('not found') ||
+        errMsg.includes('no device') ||
+        errMsg.includes('devices not found')
+      ) {
+        setCameraState('not_found');
+        setCameraErrorMessage('No camera hardware detected on this machine. (Typical for Cloud Agents and virtual environments).');
+        handleAutoSaveAction('📷 No camera found. Try the Sample Lab!');
+      } else if (errName === 'NotReadableError' || errName === 'TrackStartError' || errMsg.includes('in use')) {
+        setCameraState('error');
+        setCameraErrorMessage('Camera is currently in use by another application or process.');
+        handleAutoSaveAction('⚠️ Camera busy or in use by another app.');
+      } else {
+        setCameraState('error');
+        setCameraErrorMessage(`Unable to open camera: ${errorObj?.message || 'Unknown device error'}`);
+        handleAutoSaveAction('⚠️ Could not open camera device.');
+      }
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      setActiveFeedType('none');
+    }
+  };
+
+  const stopWebcamStream = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraState('idle');
+    setCameraErrorMessage(null);
+    if (activeFeedType === 'webcam') {
+      setActiveFeedType('none');
+    }
+    setAiStatus('Analyzing');
+    handleAutoSaveAction('Webcam disabled.');
+  };
+
+  const closeFeed = () => {
+    stopWebcamStream();
+    if (sampleFeedIntervalRef.current) clearInterval(sampleFeedIntervalRef.current);
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+      videoRef.current.src = '';
+    }
+    setIsVideoSource(false);
+    setActiveFeedType('none');
+    setUploadedMediaName(null);
+    setCameraState('idle');
+    setCameraErrorMessage(null);
+    setAiStatus('Analyzing');
+    handleAutoSaveAction('Vision feed closed.');
   };
 
   const startSampleLabFeed = () => {
     if (demoActive) return;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+      videoRef.current.src = '';
+    }
+
+    setCameraState('idle');
+    setCameraErrorMessage(null);
     setIsCameraBlockedByPolicy(false);
     setIsVideoSource(true);
+    setActiveFeedType('sample');
     setUploadedMediaName('Sample Pendulum Harmonic Lab (30 FPS)');
-    setCameraActive(true);
     setIsPlaying(true);
     setAiStatus('Detecting');
     handleAutoSaveAction('🧪 Interactive STEM Sample Lab running! Computer vision tracking active.');
@@ -1393,18 +1520,6 @@ export default function WebcamSection() {
     const pivotY = 40;
     const omega = Math.sqrt(9.81 / 1.5);
     const theta0 = 0.52; // ~30 deg
-
-    if (videoRef.current) {
-      try {
-        const stream = (canvas as HTMLCanvasElement & { captureStream?: (fps?: number) => MediaStream }).captureStream?.(30);
-        if (stream) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(err => console.warn('Stream play error:', err));
-        }
-      } catch (e) {
-        console.warn('Canvas captureStream not supported:', e);
-      }
-    }
 
     if (sampleFeedIntervalRef.current) clearInterval(sampleFeedIntervalRef.current);
     sampleFeedIntervalRef.current = setInterval(() => {
@@ -1465,10 +1580,16 @@ export default function WebcamSection() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (sampleFeedIntervalRef.current) clearInterval(sampleFeedIntervalRef.current);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
     const url = URL.createObjectURL(file);
     setUploadedMediaName(file.name);
     setIsVideoSource(true);
-    setCameraActive(true);
+    setActiveFeedType('video');
+    setCameraState('idle');
+    setCameraErrorMessage(null);
     setIsPlaying(true);
     setIsCameraBlockedByPolicy(false);
     handleAutoSaveAction(`📹 Video loaded: ${file.name}. CV tracking active!`);
@@ -1855,19 +1976,54 @@ export default function WebcamSection() {
         <div className="space-y-1">
           <span className="text-[9px] text-gray-500 font-extrabold uppercase tracking-wider">AI Lab Status</span>
           <div className="flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${isPlaying ? 'bg-cyan-500 animate-ping' : 'bg-amber-500 animate-pulse'}`} />
-            <h4 className="text-sm font-black text-white capitalize">{aiStatus}</h4>
+            <span className={`w-2.5 h-2.5 rounded-full ${
+              isWebcamLive || activeFeedType === 'sample'
+                ? 'bg-emerald-400 animate-pulse'
+                : cameraState === 'requesting'
+                  ? 'bg-cyan-400 animate-spin'
+                  : cameraState === 'not_found' || cameraState === 'permission_denied'
+                    ? 'bg-amber-400'
+                    : 'bg-cyan-500'
+            }`} />
+            <h4 className="text-sm font-black text-white capitalize">
+              {isWebcamLive
+                ? 'Webcam Active (Live)'
+                : activeFeedType === 'sample'
+                  ? 'Sample Lab Tracking'
+                  : activeFeedType === 'video'
+                    ? 'Video Tracking'
+                    : cameraState === 'requesting'
+                      ? 'Connecting Camera...'
+                      : cameraState === 'not_found'
+                        ? 'No Camera Detected'
+                        : cameraState === 'permission_denied'
+                          ? 'Camera Restricted'
+                          : 'Digital Twin Sim'}
+            </h4>
+            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-cyan-400 font-bold uppercase">
+              {aiStatus}
+            </span>
           </div>
         </div>
 
         <div className="space-y-1">
           <span className="text-[9px] text-gray-500 font-extrabold uppercase tracking-wider">{t.fpsRate}</span>
-          <h4 className="text-sm font-black text-white">{fps} FPS <span className="text-[10px] text-cyan-400">Stable</span></h4>
+          <h4 className="text-sm font-black text-white">
+            {isWebcamLive ? `${fps} FPS` : activeFeedType === 'sample' ? '30 FPS' : '60 FPS'}{' '}
+            <span className="text-[10px] text-cyan-400">
+              {isWebcamLive ? 'Hardware' : activeFeedType === 'sample' ? 'Sample Feed' : 'Simulation'}
+            </span>
+          </h4>
         </div>
 
         <div className="space-y-1">
           <span className="text-[9px] text-gray-500 font-extrabold uppercase tracking-wider">{t.accuracy}</span>
-          <h4 className="text-sm font-black text-white">{accuracy}% <span className="text-[10px] text-emerald-400">Match</span></h4>
+          <h4 className="text-sm font-black text-white">
+            {hasDetectedObject ? `${accuracy}%` : isFeedActive ? 'Searching...' : `${accuracy}%`}{' '}
+            <span className="text-[10px] text-emerald-400">
+              {hasDetectedObject ? 'Locked' : isFeedActive ? 'Scanning' : 'Model Match'}
+            </span>
+          </h4>
         </div>
 
         {/* Glow-glowing Judge Demo button at header */}
@@ -2061,14 +2217,22 @@ export default function WebcamSection() {
                     <div className="relative aspect-video bg-black w-full overflow-hidden rounded-lg">
                       <canvas ref={canvasRef} className="hidden" />
                       
-                      {/* Raw Camera Feed (Mirrored) */}
+                      {/* Interactive Sample Lab Feed Canvas (Mounted directly to ensure instant 100% rendering in cloud VM) */}
+                      <canvas
+                        ref={sampleCanvasRef}
+                        width={640}
+                        height={360}
+                        className={`absolute inset-0 w-full h-full object-contain ${activeFeedType === 'sample' ? 'block' : 'hidden'}`}
+                      />
+
+                      {/* Raw Camera or Video File Feed */}
                       <video
                         ref={videoRef}
                         autoPlay
                         playsInline
                         muted
-                        className="absolute inset-0 w-full h-full object-cover"
-                        style={{ transform: isVideoSource ? 'none' : 'scaleX(-1)' }}
+                        className={`absolute inset-0 w-full h-full object-cover ${activeFeedType === 'sample' ? 'hidden' : 'block'}`}
+                        style={{ transform: activeFeedType === 'webcam' ? 'scaleX(-1)' : 'none' }}
                       />
                       
                       {/* Backend CV Image Overlay */}
@@ -2089,11 +2253,13 @@ export default function WebcamSection() {
 
                       {/* HUD Badges */}
                       <div className="absolute top-3 left-3 flex flex-col gap-2 z-30">
-                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-red-500/20 rounded-full border border-red-500/40 backdrop-blur-sm w-max">
-                          <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                          <span className="text-[10px] text-red-400 font-bold uppercase">{isVideoSource ? 'VIDEO FEED' : 'RAW FEED'}</span>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-black/60 rounded-full border border-white/10 backdrop-blur-sm w-max">
+                          <div className={`w-1.5 h-1.5 rounded-full ${isWebcamLive ? 'bg-emerald-400' : activeFeedType === 'sample' ? 'bg-cyan-400' : 'bg-purple-400'} animate-pulse`} />
+                          <span className={`text-[10px] ${isWebcamLive ? 'text-emerald-300' : activeFeedType === 'sample' ? 'text-cyan-300' : 'text-purple-300'} font-bold uppercase`}>
+                            {activeFeedType === 'sample' ? 'SAMPLE LAB (30 FPS)' : activeFeedType === 'video' ? 'VIDEO PLAYBACK' : 'LIVE WEBCAM FEED'}
+                          </span>
                         </div>
-                        {uploadedMediaName && (
+                        {uploadedMediaName && activeFeedType !== 'sample' && (
                           <div className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/20 rounded-full border border-purple-500/40 backdrop-blur-sm w-max">
                             <FileVideo className="w-3 h-3 text-purple-400" />
                             <span className="text-[10px] text-purple-300 font-bold max-w-[130px] truncate">{uploadedMediaName}</span>
@@ -2101,7 +2267,9 @@ export default function WebcamSection() {
                         )}
                         <div className="flex items-center gap-1.5 px-2.5 py-1 bg-cyan-500/20 rounded-full border border-cyan-500/40 backdrop-blur-sm w-max">
                           <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
-                          <span className="text-[10px] text-cyan-400 font-bold uppercase">DETECTION ENGINE</span>
+                          <span className="text-[10px] text-cyan-400 font-bold uppercase">
+                            {hasDetectedObject ? 'TARGET LOCKED' : 'DETECTION ENGINE'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -2233,45 +2401,116 @@ export default function WebcamSection() {
                       X: {bobX.toFixed(0)} Y: {bobY.toFixed(0)}
                     </div>
 
-                    {/* Camera offline / Anna iframe fallback overlay */}
+                    {/* Camera offline / Cloud Agent / Anna iframe fallback overlay */}
                     <div className="absolute bottom-3 left-3 right-3 flex items-center justify-center z-20">
-                      <div className="px-4 py-2.5 bg-black/85 rounded-xl border border-cyan-500/30 backdrop-blur-md text-center max-w-lg shadow-xl">
-                        {isCameraBlockedByPolicy ? (
-                          <div className="flex items-center gap-2 mb-1 text-amber-400 justify-center">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                            <span className="text-[11px] font-bold">Host Camera Restricted (Anna Iframe)</span>
-                          </div>
+                      <div className="px-4 py-3 bg-black/90 rounded-2xl border border-cyan-500/30 backdrop-blur-md text-center max-w-lg shadow-2xl">
+                        {cameraState === 'requesting' ? (
+                          <>
+                            <div className="flex items-center gap-2 mb-1.5 text-cyan-400 justify-center">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span className="text-xs font-bold">Connecting Camera Hardware...</span>
+                            </div>
+                            <p className="text-[10px] text-gray-300">
+                              Requesting webcam device and initializing video feed track...
+                            </p>
+                          </>
+                        ) : cameraState === 'not_found' ? (
+                          <>
+                            <div className="flex items-center gap-2 mb-1 text-amber-400 justify-center">
+                              <AlertCircle className="w-4 h-4" />
+                              <span className="text-xs font-bold">No Physical Camera Detected (Cloud Agent / VM)</span>
+                            </div>
+                            <p className="text-[10px] text-gray-300 mb-2.5">
+                              {cameraErrorMessage || 'This environment does not have a physical webcam. You can run our interactive Sample Lab or upload an experiment video!'}
+                            </p>
+                            <div className="flex items-center justify-center gap-2 flex-wrap">
+                              <button
+                                onClick={startSampleLabFeed}
+                                className="px-3.5 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-black rounded-lg flex items-center gap-1.5 transition-all shadow-lg shadow-cyan-500/30"
+                              >
+                                <Play className="w-3.5 h-3.5 fill-current" />
+                                🧪 Launch Sample Lab (Recommended)
+                              </button>
+                              <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="px-2.5 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
+                              >
+                                <Upload className="w-3 h-3" />
+                                Upload Video
+                              </button>
+                              <button
+                                onClick={startWebcamStream}
+                                className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                Retry Camera
+                              </button>
+                            </div>
+                          </>
+                        ) : isCameraBlockedByPolicy || cameraState === 'permission_denied' ? (
+                          <>
+                            <div className="flex items-center gap-2 mb-1 text-amber-400 justify-center">
+                              <AlertCircle className="w-4 h-4" />
+                              <span className="text-xs font-bold">Camera Permission Restricted (Anna Runtime)</span>
+                            </div>
+                            <p className="text-[10px] text-gray-300 mb-2.5">
+                              {cameraErrorMessage || 'Browser permissions or host iframe policy restricted direct camera access. Launch the interactive Sample Lab to test full CV tracking!'}
+                            </p>
+                            <div className="flex items-center justify-center gap-2 flex-wrap">
+                              <button
+                                onClick={startSampleLabFeed}
+                                className="px-3.5 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-black rounded-lg flex items-center gap-1.5 transition-all shadow-lg shadow-cyan-500/30"
+                              >
+                                <Play className="w-3.5 h-3.5 fill-current" />
+                                🧪 Launch Sample Lab
+                              </button>
+                              <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="px-2.5 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
+                              >
+                                <Upload className="w-3 h-3" />
+                                Upload Video
+                              </button>
+                              <button
+                                onClick={startWebcamStream}
+                                className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
+                              >
+                                <Camera className="w-3 h-3" />
+                                Grant & Retry
+                              </button>
+                            </div>
+                          </>
                         ) : (
-                          <p className="text-xs text-gray-300 font-semibold mb-1">Digital Twin Simulation Active</p>
+                          <>
+                            <p className="text-xs text-gray-200 font-bold mb-1">Digital Twin Simulation Active</p>
+                            <p className="text-[10px] text-gray-400 mb-2.5">
+                              Turn on your webcam, launch the interactive Sample Lab, or upload a video for real-time computer vision tracking.
+                            </p>
+                            <div className="flex items-center justify-center gap-2 flex-wrap">
+                              <button
+                                onClick={startWebcamStream}
+                                className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-500/25"
+                              >
+                                <Camera className="w-3.5 h-3.5" />
+                                Turn On Camera
+                              </button>
+                              <button
+                                onClick={startSampleLabFeed}
+                                className="px-2.5 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
+                              >
+                                <Play className="w-3 h-3" />
+                                🧪 Sample Lab
+                              </button>
+                              <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="px-2.5 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
+                              >
+                                <Upload className="w-3 h-3" />
+                                Upload Video
+                              </button>
+                            </div>
+                          </>
                         )}
-                        <p className="text-[10px] text-gray-400 mb-2">
-                          {isCameraBlockedByPolicy
-                            ? "Anna iframe runtime restricts direct camera access. Upload an experiment video or run our interactive sample lab!"
-                            : "Enable webcam or upload a video for real-time computer vision tracking."}
-                        </p>
-                        <div className="flex items-center justify-center gap-2 flex-wrap">
-                          <button
-                            onClick={toggleWebcam}
-                            className="px-3.5 py-1.5 bg-emerald-500/25 hover:bg-emerald-500/35 border border-emerald-500/40 text-emerald-300 text-[11px] font-black rounded-lg flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-500/20"
-                          >
-                            <Camera className="w-3.5 h-3.5" />
-                            Turn On Camera
-                          </button>
-                          <button
-                            onClick={() => fileInputRef.current?.click()}
-                            className="px-2.5 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
-                          >
-                            <Upload className="w-3 h-3" />
-                            Upload Video
-                          </button>
-                          <button
-                            onClick={startSampleLabFeed}
-                            className="px-2.5 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold rounded-lg flex items-center gap-1 transition-all"
-                          >
-                            <Play className="w-3 h-3" />
-                            🧪 Sample Lab
-                          </button>
-                        </div>
                       </div>
                     </div>
                   </>
@@ -2290,19 +2529,45 @@ export default function WebcamSection() {
               {/* Control bar */}
               <div className="p-4 flex flex-wrap justify-between items-center gap-3 bg-[#0d0d16]">
                 <div className="flex flex-wrap gap-2">
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={toggleWebcam}
-                    className={`px-3 py-2 text-[10px] font-black rounded-lg flex items-center gap-1 transition-all ${
-                      cameraActive
-                        ? 'bg-red-500/20 border border-red-500/35 text-red-400'
-                        : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'
-                    }`}
-                  >
-                    <Camera className="w-3 h-3" />
-                    {cameraActive ? (isVideoSource ? 'Close Video' : 'Disable Webcam') : 'Enable Webcam'}
-                  </motion.button>
+                  {cameraState === 'requesting' ? (
+                    <button
+                      disabled
+                      className="px-3 py-2 text-[10px] font-black rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 flex items-center gap-1.5 cursor-wait"
+                    >
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Connecting Camera...
+                    </button>
+                  ) : isWebcamLive ? (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={stopWebcamStream}
+                      className="px-3 py-2 text-[10px] font-black rounded-lg bg-red-500/20 border border-red-500/40 text-red-400 hover:bg-red-500/30 flex items-center gap-1.5 transition-all"
+                    >
+                      <CameraOff className="w-3 h-3" />
+                      Turn Off Webcam
+                    </motion.button>
+                  ) : activeFeedType === 'sample' || activeFeedType === 'video' ? (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={closeFeed}
+                      className="px-3 py-2 text-[10px] font-black rounded-lg bg-gray-600/30 border border-gray-500/40 text-gray-300 hover:bg-gray-600/40 flex items-center gap-1.5 transition-all"
+                    >
+                      <X className="w-3 h-3" />
+                      Close {activeFeedType === 'sample' ? 'Sample Lab' : 'Video'}
+                    </motion.button>
+                  ) : (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={startWebcamStream}
+                      className="px-3 py-2 text-[10px] font-black rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 flex items-center gap-1.5 transition-all"
+                    >
+                      <Camera className="w-3 h-3" />
+                      Turn On Camera
+                    </motion.button>
+                  )}
 
                   <motion.button
                     whileHover={{ scale: 1.05 }}
@@ -2319,14 +2584,18 @@ export default function WebcamSection() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={startSampleLabFeed}
-                    className="px-3 py-2 text-[10px] font-black rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 flex items-center gap-1 transition-all"
+                    className={`px-3 py-2 text-[10px] font-black rounded-lg flex items-center gap-1 transition-all ${
+                      activeFeedType === 'sample'
+                        ? 'bg-cyan-500/30 border border-cyan-400 text-cyan-200 shadow-md shadow-cyan-500/20'
+                        : 'bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25'
+                    }`}
                     title="Run pre-recorded STEM experiment"
                   >
                     <Play className="w-3 h-3" />
-                    Sample Lab
+                    {activeFeedType === 'sample' ? 'Restart Sample' : 'Sample Lab'}
                   </motion.button>
 
-                  {!cameraActive && (
+                  {!isFeedActive && (
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
@@ -2340,7 +2609,7 @@ export default function WebcamSection() {
                     </motion.button>
                   )}
 
-                  {cameraActive && (
+                  {isFeedActive && (
                     <motion.button
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
