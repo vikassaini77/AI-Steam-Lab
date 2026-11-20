@@ -1,7 +1,7 @@
 {
   "slug": "neurolab-ai",
   "name": "NeuroLab AI",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "category": "education",
   "tagline": "Interactive STEM laboratory with real-time 60 FPS physics simulations, computer vision webcam tracking, and multi-agent AI tutor.",
   "logo_file": "bundle/logo.png",
