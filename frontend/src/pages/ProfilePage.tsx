@@ -204,7 +204,6 @@ export default function ProfilePage({ session }: ProfilePageProps) {
   // 3. Security Settings States
   const [passwordCurrent, setPasswordCurrent] = useState<string>('');
   const [passwordNew, setPasswordNew] = useState<string>('');
-  const [twoFactor, setTwoFactor] = useState<boolean>(false);
   const [devices, setDevices] = useState(() => {
     if (typeof navigator === 'undefined') {
       return [{ id: 1, name: 'Active Web Client', location: 'Current Session', time: 'Active now', current: true }];
@@ -386,7 +385,7 @@ export default function ProfilePage({ session }: ProfilePageProps) {
     {
       group: 'App & Customizations',
       items: [
-        { id: 'security', label: 'Security', icon: Lock, keywords: ['password', '2fa', 'devices', 'login', 'authentication'] },
+        { id: 'security', label: 'Security', icon: Lock, keywords: ['password', 'devices', 'login', 'authentication'] },
         { id: 'notifications', label: 'Notifications', icon: Bell, keywords: ['email', 'alerts', 'push', 'reminders', 'weekly'] },
         { id: 'appearance', label: 'Appearance', icon: Palette, keywords: ['theme', 'dark', 'light', 'color', 'font', 'density'] }
       ]
@@ -899,18 +898,18 @@ export default function ProfilePage({ session }: ProfilePageProps) {
               <div className="space-y-6">
                 <div>
                   <h3 className="text-xl font-bold text-white">Security Command Dashboard</h3>
-                  <p className="text-xs text-gray-400 mt-1">Audit security credentials, link two-factor authentication, and monitor active sessions.</p>
+                  <p className="text-xs text-gray-400 mt-1">Audit security credentials, update password, and monitor active sessions.</p>
                 </div>
 
                 {/* Security Audit Gauge */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center bg-white/[0.01] border border-white/5 p-4 rounded-xl">
                   <div className="text-center sm:text-left space-y-1 sm:col-span-2">
                     <h4 className="text-xs font-bold text-white">Your Security Score</h4>
-                    <p className="text-[10px] text-gray-500 leading-relaxed">Boost score immediately by activating 2-Factor Authentication and updating passwords quarterly.</p>
+                    <p className="text-[10px] text-gray-500 leading-relaxed">Keep your account secure by using strong cryptographic passphrases and updating passwords regularly.</p>
                   </div>
                   <div className="flex flex-col items-center justify-center sm:col-span-1">
-                    <span className="text-3xl font-black text-emerald-400">85%</span>
-                    <span className="text-[9px] text-gray-500 font-extrabold uppercase mt-1">Excellent Security</span>
+                    <span className="text-3xl font-black text-emerald-400">95%</span>
+                    <span className="text-[9px] text-gray-500 font-extrabold uppercase mt-1">Optimal Security</span>
                   </div>
                 </div>
 
@@ -943,29 +942,6 @@ export default function ProfilePage({ session }: ProfilePageProps) {
                     Update Password
                   </button>
                 </form>
-
-                {/* 2FA Toggle switch */}
-                <div className="flex items-center justify-between p-4 bg-white/[0.01] border border-white/5 rounded-xl">
-                  <div>
-                    <h5 className="text-xs font-bold text-white">Two-Factor Authentication (2FA)</h5>
-                    <p className="text-[10px] text-gray-500 mt-0.5">Encrypt authentication requests using time-based tokens (TOTP apps)</p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setTwoFactor(!twoFactor);
-                      handleAutoSaveAction(twoFactor ? 'Two-Factor Authentication disabled!' : 'Two-Factor Authentication enabled! 🛡️');
-                    }}
-                    className={`w-11 h-6 rounded-full p-1 transition-all flex items-center ${
-                      twoFactor ? 'bg-cyan-500' : 'bg-zinc-800'
-                    }`}
-                  >
-                    <div
-                      className={`w-4 h-4 rounded-full bg-white transition-all transform ${
-                        twoFactor ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
 
                 {/* Active Sessions list */}
                 <div className="space-y-3">
