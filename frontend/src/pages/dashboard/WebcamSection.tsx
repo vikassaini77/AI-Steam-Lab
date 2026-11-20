@@ -912,8 +912,8 @@ export default function WebcamSection() {
 
     const now = Date.now();
 
-    // Require a significant blob to avoid noise (at least 100 pixels)
-    const blobFound = blobPixels > 100;
+    // Require a significant blob to avoid noise (at least 20 sampled pixels)
+    const blobFound = blobPixels > 20;
     if (blobFound) {
       const cx = sumX / blobPixels;
       const cy = sumY / blobPixels;
@@ -1552,26 +1552,26 @@ export default function WebcamSection() {
       ctx.lineTo(bobX, bobY);
       ctx.stroke();
 
-      const grad = ctx.createRadialGradient(bobX - 4, bobY - 4, 2, bobX, bobY, 18);
+      const grad = ctx.createRadialGradient(bobX - 4, bobY - 4, 2, bobX, bobY, 22);
       if (colorTarget === 'red') {
         grad.addColorStop(0, '#f87171');
         grad.addColorStop(0.7, '#dc2626');
-        grad.addColorStop(1, '#7f1d1d');
+        grad.addColorStop(1, '#991b1b');
       } else if (colorTarget === 'blue') {
         grad.addColorStop(0, '#60a5fa');
         grad.addColorStop(0.7, '#2563eb');
-        grad.addColorStop(1, '#1e3a8a');
+        grad.addColorStop(1, '#1e40af');
       } else {
         grad.addColorStop(0, '#4ade80');
-        grad.addColorStop(0.7, '#16a34a');
-        grad.addColorStop(1, '#14532d');
+        grad.addColorStop(0.7, '#22c55e');
+        grad.addColorStop(1, '#16a34a');
       }
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(bobX, bobY, 18, 0, Math.PI * 2);
+      ctx.arc(bobX, bobY, 22, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 2;
       ctx.stroke();
     }, 33);
   };
@@ -2367,7 +2367,15 @@ export default function WebcamSection() {
                     {backendMode === 'client' && (
                       <div className="absolute bottom-3 left-3 z-20 px-2.5 py-1.5 bg-black/70 backdrop-blur-sm rounded-xl border border-white/10">
                         <p className="text-[9px] text-gray-300 font-medium">
-                          Point a <span className={`font-black ${colorTarget === 'red' ? 'text-red-400' : colorTarget === 'green' ? 'text-green-400' : 'text-blue-400'}`}>{colorTarget.toUpperCase()}</span> object at the camera to track it
+                          {activeFeedType === 'sample' ? (
+                            <>
+                              🧪 Tracking synthetic physics bob (<span className="font-black text-cyan-400">{colorTarget.toUpperCase()}</span>) at 30 FPS
+                            </>
+                          ) : (
+                            <>
+                              Point a <span className={`font-black ${colorTarget === 'red' ? 'text-red-400' : colorTarget === 'green' ? 'text-green-400' : 'text-blue-400'}`}>{colorTarget.toUpperCase()}</span> object at the camera to track it
+                            </>
+                          )}
                         </p>
                       </div>
                     )}
